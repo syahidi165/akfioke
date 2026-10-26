@@ -2580,9 +2580,7 @@ UNLOCK TABLES;
 /*!50001 SET character_set_client      = utf8mb4 */;
 /*!50001 SET character_set_results     = utf8mb4 */;
 /*!50001 SET collation_connection      = utf8mb4_unicode_ci */;
-/*!50001 CREATE ALGORITHM=UNDEFINED */
-/*!50013 DEFINER=`root`@`localhost` SQL SECURITY DEFINER */
-/*!50001 VIEW `employee_turnovers` AS select `employee_turnover_logs`.`id` AS `id`,`employee_turnover_logs`.`employee_id` AS `employee_id`,`employee_turnover_logs`.`action_type` AS `action_type`,`employee_turnover_logs`.`from_unit_id` AS `from_unit_id`,`employee_turnover_logs`.`to_unit_id` AS `to_unit_id`,`employee_turnover_logs`.`effective_date` AS `effective_date`,`employee_turnover_logs`.`reason` AS `reason`,`employee_turnover_logs`.`created_by_user_id` AS `created_by_user_id`,`employee_turnover_logs`.`created_at` AS `created_at` from `employee_turnover_logs` */;
+CREATE OR REPLACE VIEW `employee_turnovers` AS select `employee_turnover_logs`.`id` AS `id`,`employee_turnover_logs`.`employee_id` AS `employee_id`,`employee_turnover_logs`.`action_type` AS `action_type`,`employee_turnover_logs`.`from_unit_id` AS `from_unit_id`,`employee_turnover_logs`.`to_unit_id` AS `to_unit_id`,`employee_turnover_logs`.`effective_date` AS `effective_date`,`employee_turnover_logs`.`reason` AS `reason`,`employee_turnover_logs`.`created_by_user_id` AS `created_by_user_id`,`employee_turnover_logs`.`created_at` AS `created_at` from `employee_turnover_logs`;
 /*!50001 SET character_set_client      = @saved_cs_client */;
 /*!50001 SET character_set_results     = @saved_cs_results */;
 /*!50001 SET collation_connection      = @saved_col_connection */;
