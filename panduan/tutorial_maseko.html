@@ -1,0 +1,1876 @@
+﻿<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Buku Panduan Sistem MASEKO - Yayasan Islam Al Kahfi Batam</title>
+<style>
+/* ===== RESET & BASE ===== */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; font-size: 12pt; line-height: 1.7; color: #333; background: #fff; }
+
+/* ===== PRINT SETTINGS ===== */
+@page { size: A4; margin: 2cm 2.5cm; }
+@media print {
+  .no-print { display: none !important; }
+  .page-break { page-break-before: always; }
+  body { font-size: 11pt; }
+  .cover-page { page-break-after: always; }
+  .toc-page { page-break-after: always; }
+}
+
+/* ===== COLORS ===== */
+:root {
+  --primary: #1b5e20;
+  --primary-light: #2e7d32;
+  --primary-lighter: #e8f5e9;
+  --accent: #c8a415;
+  --accent-light: #fdf6e3;
+  --dark: #1a1a1a;
+  --gray: #666;
+  --light-gray: #f5f5f5;
+  --border: #ddd;
+  --white: #fff;
+}
+
+/* ===== COVER PAGE ===== */
+.cover-page {
+  display: flex; flex-direction: column; justify-content: center; align-items: center;
+  min-height: 100vh; text-align: center; background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+  color: var(--white); padding: 3cm;
+}
+.cover-page .logo-circle {
+  width: 120px; height: 120px; border-radius: 50%; background: var(--white);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 2.5rem; font-weight: bold; color: var(--primary); margin-bottom: 2rem;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+}
+.cover-page h1 { font-size: 2.2rem; margin-bottom: 0.5rem; letter-spacing: 2px; }
+.cover-page h2 { font-size: 1.3rem; font-weight: 400; margin-bottom: 1rem; opacity: 0.9; }
+.cover-page .subtitle { font-size: 1.1rem; opacity: 0.85; margin-bottom: 2rem; }
+.cover-page .divider { width: 80px; height: 3px; background: var(--accent); margin: 1.5rem auto; }
+.cover-page .version { font-size: 0.9rem; opacity: 0.7; margin-top: 2rem; }
+
+/* ===== TABLE OF CONTENTS ===== */
+.toc-page { padding: 2rem 0; }
+.toc-page h2 { color: var(--primary); font-size: 1.5rem; border-bottom: 3px solid var(--accent); padding-bottom: 0.5rem; margin-bottom: 1.5rem; }
+.toc-list { list-style: none; }
+.toc-list li { padding: 0.3rem 0; border-bottom: 1px dotted var(--border); }
+.toc-list li a { text-decoration: none; color: var(--dark); display: flex; justify-content: space-between; }
+.toc-list li a:hover { color: var(--primary); }
+.toc-list .toc-chapter { font-weight: 600; font-size: 1.05rem; padding-top: 0.6rem; }
+.toc-list .toc-section { padding-left: 1.5rem; font-size: 0.95rem; color: var(--gray); }
+
+/* ===== CHAPTER HEADINGS ===== */
+.chapter { padding: 1rem 0; }
+.chapter-header {
+  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+  color: var(--white); padding: 1.5rem 2rem; border-radius: 8px; margin-bottom: 2rem;
+}
+.chapter-header h1 { font-size: 1.6rem; margin-bottom: 0.3rem; }
+.chapter-header p { opacity: 0.85; font-size: 0.95rem; }
+
+h2 { color: var(--primary); font-size: 1.3rem; border-left: 4px solid var(--accent); padding-left: 1rem; margin: 2rem 0 1rem; }
+h3 { color: var(--primary-light); font-size: 1.1rem; margin: 1.5rem 0 0.8rem; }
+
+/* ===== CONTENT ELEMENTS ===== */
+p { margin-bottom: 0.8rem; text-align: justify; }
+ol, ul { margin: 0.5rem 0 1rem 2rem; }
+li { margin-bottom: 0.4rem; }
+
+.info-box {
+  background: var(--primary-lighter); border-left: 4px solid var(--primary);
+  padding: 1rem 1.2rem; border-radius: 0 6px 6px 0; margin: 1rem 0;
+}
+.info-box.warning {
+  background: #fff3e0; border-left-color: #ef6c00;
+}
+.info-box.tip {
+  background: var(--accent-light); border-left-color: var(--accent);
+}
+.info-box strong { display: block; margin-bottom: 0.3rem; }
+
+table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.95rem; }
+table th { background: var(--primary); color: var(--white); padding: 0.7rem 1rem; text-align: left; }
+table td { padding: 0.6rem 1rem; border-bottom: 1px solid var(--border); }
+table tr:nth-child(even) { background: var(--light-gray); }
+
+.steps { counter-reset: step-counter; list-style: none; margin-left: 0; }
+.steps li { counter-increment: step-counter; padding: 0.6rem 0 0.6rem 3rem; position: relative; border-left: 2px solid var(--border); margin-left: 1rem; }
+.steps li::before {
+  content: counter(step-counter); position: absolute; left: -15px; top: 0.5rem;
+  width: 28px; height: 28px; border-radius: 50%; background: var(--primary);
+  color: var(--white); text-align: center; line-height: 28px; font-size: 0.85rem; font-weight: 600;
+}
+.steps li:last-child { border-left: 2px solid transparent; }
+
+.feature-card {
+  border: 1px solid var(--border); border-radius: 8px; padding: 1.2rem;
+  margin: 1rem 0; background: var(--white); box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+.feature-card h4 { color: var(--primary); margin-bottom: 0.5rem; font-size: 1rem; }
+
+/* ===== WORKFLOW DIAGRAMS ===== */
+.workflow { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 0.3rem; margin: 1.5rem 0; padding: 1.5rem; background: var(--light-gray); border-radius: 8px; }
+.wf-node {
+  background: var(--primary); color: var(--white); padding: 0.5rem 1rem;
+  border-radius: 6px; font-size: 0.85rem; text-align: center; min-width: 100px;
+}
+.wf-node.actor { background: var(--accent); color: var(--dark); font-weight: 600; }
+.wf-node.decision { background: #ef6c00; color: var(--white); border-radius: 50%; width: 80px; height: 80px; display:flex; align-items:center; justify-content:center; }
+.wf-node.output { background: #1565c0; }
+.wf-arrow { font-size: 1.3rem; color: var(--gray); }
+
+.workflow-vertical { display: flex; flex-direction: column; align-items: center; gap: 0.5rem; margin: 1.5rem auto; padding: 1.5rem; background: var(--light-gray); border-radius: 8px; max-width: 600px; }
+.workflow-vertical .wf-arrow { transform: rotate(90deg); }
+
+.role-badge {
+  display: inline-block; background: var(--primary); color: var(--white);
+  padding: 0.2rem 0.8rem; border-radius: 20px; font-size: 0.8rem; margin: 0.1rem;
+}
+
+/* ===== FOOTER ===== */
+.doc-footer { text-align: center; padding: 2rem; color: var(--gray); font-size: 0.85rem; border-top: 2px solid var(--border); margin-top: 3rem; }
+</style>
+</head>
+<body>
+
+<div class="cover-page">
+  <div class="logo-circle">AK</div>
+  <h1>BUKU PANDUAN</h1>
+  <h1>SISTEM MASEKO</h1>
+  <div class="divider"></div>
+  <h2>Sistem Informasi Manajemen Sekolah</h2>
+  <p class="subtitle">Yayasan Islam Al Kahfi Batam</p>
+  <p class="subtitle">Mencakup 21 Role Pengguna &bull; 5 Unit Sekolah (KB, TK, SD, SMP, SMA)</p>
+  <p class="version">Versi 1.0 &mdash; September 2026</p>
+</div>
+
+<div class="page-break"></div>
+
+<div class="toc-page">
+  <h2>Daftar Isi</h2>
+  <ul class="toc-list">
+    <li class="toc-chapter"><a href="#bab1">BAB 1: Pendahuluan</a></li>
+    <li class="toc-section"><a href="#bab1-1">1.1 Tentang Sistem MASEKO</a></li>
+    <li class="toc-section"><a href="#bab1-2">1.2 Cara Login</a></li>
+    <li class="toc-section"><a href="#bab1-3">1.3 Navigasi Utama</a></li>
+    <li class="toc-section"><a href="#bab1-4">1.4 Ganti Password</a></li>
+    <li class="toc-section"><a href="#bab1-5">1.5 Daftar Role Pengguna</a></li>
+
+    <li class="toc-chapter"><a href="#bab2">BAB 2: Operator Yayasan</a></li>
+    <li class="toc-section"><a href="#bab2-1">2.1 Dashboard</a></li>
+    <li class="toc-section"><a href="#bab2-2">2.2 Sekolah & Unit (/master/units)</a></li>
+    <li class="toc-section"><a href="#bab2-3">2.3 Tahun Ajaran (/master/academic-years)</a></li>
+    <li class="toc-section"><a href="#bab2-4">2.4 Guru & Karyawan (/master/employees)</a></li>
+    <li class="toc-section"><a href="#bab2-5">2.5 Akun Operator Sekolah (/users/school-accounts)</a></li>
+    <li class="toc-section"><a href="#bab2-6">2.6 Mutasi & Turnover (/master/turnover)</a></li>
+    <li class="toc-section"><a href="#bab2-7">2.7 Master Template AKFI (/master/akfi-templates)</a></li>
+    <li class="toc-section"><a href="#bab2-8">2.8 Mushaf Madinah (/master/mushaf)</a></li>
+    <li class="toc-section"><a href="#bab2-9">2.9 Rekap AKFI Yayasan (/akfi/rekap-yayasan)</a></li>
+    <li class="toc-section"><a href="#bab2-10">2.10 Identitas & Logo Aplikasi (/settings/app)</a></li>
+    <li class="toc-section"><a href="#bab2-11">2.11 Audit Log (/audit/logs)</a></li>
+    <li class="toc-section"><a href="#bab2-12">2.12 Backup & Restore Database (/backup)</a></li>
+
+    <li class="toc-chapter"><a href="#bab3">BAB 3: Direktur Pendidikan</a></li>
+    <li class="toc-section"><a href="#bab3-1">3.1 Dashboard Analitik</a></li>
+    <li class="toc-section"><a href="#bab3-2">3.2 Rekap Nilai AKFI (/akfi/rekap-yayasan)</a></li>
+    <li class="toc-section"><a href="#bab3-3">3.3 Approval AKFI HR (/akfi/approval-hr)</a></li>
+
+    <li class="toc-chapter"><a href="#bab4">BAB 4: Deputi Direktur Pendidikan</a></li>
+    <li class="toc-section"><a href="#bab4-1">4.1 Approval Administrasi KS (/administrasi/review-ks)</a></li>
+    <li class="toc-section"><a href="#bab4-2">4.2 Target & Realisasi SPMB (/spmb/target)</a></li>
+    <li class="toc-section"><a href="#bab4-3">4.3 Target Hari Kerja & Kajian (/deputi/target-kerja)</a></li>
+    <li class="toc-section"><a href="#bab4-4">4.4 Pratinjau AKFI KS (/akfi/kanit-preview)</a></li>
+    <li class="toc-section"><a href="#bab4-5">4.5 Penilaian Sikap KS (/akfi/penilaian-sikap-ks)</a></li>
+    <li class="toc-section"><a href="#bab4-6">4.6 Rekap Indikator Unit (/rekap/deputi)</a></li>
+
+    <li class="toc-chapter"><a href="#bab5">BAB 5: Operator Sekolah</a></li>
+    <li class="toc-section"><a href="#bab5-1">5.1 Dashboard</a></li>
+    <li class="toc-section"><a href="#bab5-2">5.2 Data Siswa & Ortu (/students)</a></li>
+    <li class="toc-section"><a href="#bab5-3">5.3 Data Kelas & Wali Kelas (/classes)</a></li>
+    <li class="toc-section"><a href="#bab5-4">5.4 Penempatan Siswa Kelas (/classes/placement)</a></li>
+    <li class="toc-section"><a href="#bab5-5">5.5 Mata Pelajaran (/subjects)</a></li>
+    <li class="toc-section"><a href="#bab5-6">5.6 Akun Guru & Kepsek (/users/school-accounts)</a></li>
+    <li class="toc-section"><a href="#bab5-7">5.7 Pelacakan Alumni (/alumni)</a></li>
+    <li class="toc-section"><a href="#bab5-8">5.8 Input SPMB Siswa Baru (/spmb/operator)</a></li>
+    <li class="toc-section"><a href="#bab5-9">5.9 Persetujuan Tahun Ajaran (/master/academic-years)</a></li>
+    <li class="toc-section"><a href="#bab5-10">5.10 Setting SMTP & Surat (/settings/smtp)</a></li>
+
+    <li class="toc-chapter"><a href="#bab6">BAB 6: Kepala Sekolah</a></li>
+    <li class="toc-section"><a href="#bab6-1">6.1 Dashboard</a></li>
+    <li class="toc-section"><a href="#bab6-2">6.2 Approval Admin Guru & TU (/administrasi/review-guru)</a></li>
+    <li class="toc-section"><a href="#bab6-3">6.3 Dokumen Administrasi KS (/administrasi/ks)</a></li>
+    <li class="toc-section"><a href="#bab6-4">6.4 Penagihan SPP (/tagihan/approval)</a></li>
+    <li class="toc-section"><a href="#bab6-5">6.5 Absensi Staf (/attendance/staff)</a></li>
+    <li class="toc-section"><a href="#bab6-6">6.6 Kegiatan di Luar KBM (/kegiatan/luar-kbm)</a></li>
+    <li class="toc-section"><a href="#bab6-7">6.7 Penugasan Panitia Lomba (/panitia/penugasan)</a></li>
+    <li class="toc-section"><a href="#bab6-8">6.8 Guru Berprestasi (/guru/prestasi-tetapkan)</a></li>
+    <li class="toc-section"><a href="#bab6-9">6.9 Nilai Sikap & AKFI Guru/Staf (/akfi/penilaian-bawahan)</a></li>
+    <li class="toc-section"><a href="#bab6-10">6.10 Rapor AKFI Saya (/akfi/pribadi)</a></li>
+
+    <li class="toc-chapter"><a href="#bab7">BAB 7: Wakil Kurikulum</a></li>
+    <li class="toc-section"><a href="#bab7-1">7.1 Kehadiran & Kajian Guru (/attendance/teachers)</a></li>
+    <li class="toc-section"><a href="#bab7-2">7.2 Jadwal Supervisi Guru (/supervisi/jadwal)</a></li>
+    <li class="toc-section"><a href="#bab7-3">7.3 Deadline Administrasi (/administrasi/deadlines)</a></li>
+
+    <li class="toc-chapter"><a href="#bab8">BAB 8: Guru Supervisor</a></li>
+    <li class="toc-chapter"><a href="#bab9">BAB 9: Wakil Kesiswaan</a></li>
+    <li class="toc-chapter"><a href="#bab10">BAB 10: Guru Wali Kelas</a></li>
+    <li class="toc-chapter"><a href="#bab11">BAB 11: Guru Mata Pelajaran & Diniyah</a></li>
+    <li class="toc-chapter"><a href="#bab12">BAB 12: Guru Tahfidz</a></li>
+    <li class="toc-chapter"><a href="#bab13">BAB 13: Koordinator Tahfidz</a></li>
+    <li class="toc-chapter"><a href="#bab14">BAB 14: Tutor Siswa</a></li>
+    <li class="toc-chapter"><a href="#bab15">BAB 15: Tutor Sebaya Guru</a></li>
+    <li class="toc-chapter"><a href="#bab16">BAB 16: Tata Usaha Keuangan</a></li>
+    <li class="toc-chapter"><a href="#bab17">BAB 17: Cleaning Service</a></li>
+    <li class="toc-chapter"><a href="#bab18">BAB 18: Petugas Keamanan</a></li>
+    <li class="toc-chapter"><a href="#bab19">BAB 19: Panitia Lomba</a></li>
+    <li class="toc-chapter"><a href="#bab20">BAB 20: Siswa</a></li>
+    <li class="toc-chapter"><a href="#bab21">BAB 21: Orang Tua / Wali Santri</a></li>
+    <li class="toc-chapter"><a href="#lampiran">Lampiran: Alur Kerja Sistem</a></li>
+  </ul>
+</div>
+
+<div class="page-break"></div>
+
+<div class="chapter" id="bab1">
+  <div class="chapter-header">
+    <h1>BAB 1 &mdash; Pendahuluan</h1>
+    <p>Pengenalan Sistem MASEKO & Navigasi Dasar</p>
+  </div>
+
+  <h3 id="bab1-1">1.1 Tentang Sistem MASEKO</h3>
+  <p>Sistem MASEKO adalah Sistem Informasi Manajemen Sekolah yang dirancang khusus untuk Yayasan Islam Al Kahfi Batam. Sistem ini mengelola seluruh kegiatan operasional dan administratif pada 5 unit sekolah, yakni KB, TK, SD, SMP, dan SMA.</p>
+  <p>MASEKO menggunakan metode <strong>Role-Based Access Control (RBAC)</strong> dengan 21 role yang berbeda. Modul-modul utama yang terdapat pada MASEKO meliputi:</p>
+  <ul>
+    <li>Kepegawaian</li>
+    <li>Kesiswaan</li>
+    <li>Akademik</li>
+    <li>Tahfidz Al-Qur'an</li>
+    <li>Administrasi</li>
+    <li>AKFI (Assessment Kinerja Fungsional Individual)</li>
+    <li>Keuangan / SPP</li>
+    <li>Supervisi</li>
+    <li>Survey</li>
+    <li>SPMB</li>
+  </ul>
+
+  <h3 id="bab1-2">1.2 Cara Login</h3>
+  <p>Untuk mengakses Sistem MASEKO, Anda harus melakukan login terlebih dahulu. Tersedia 3 (tiga) metode login:</p>
+  <ol>
+    <li><strong>Username atau NIPY:</strong> Untuk karyawan dan guru.</li>
+    <li><strong>No. Kartu Keluarga:</strong> Untuk Orang Tua atau Wali Santri.</li>
+    <li><strong>Email:</strong> Alternatif login untuk pengguna yang telah mendaftarkan email.</li>
+  </ol>
+  
+  <div class="info-box tip">
+    <strong>Langkah-langkah Login:</strong>
+    <ol class="steps">
+      <li>Buka aplikasi browser (Chrome, Firefox, Safari) di perangkat Anda.</li>
+      <li>Masukkan URL Sistem MASEKO pada address bar.</li>
+      <li>Masukkan Username / NIPY / No. KK / Email Anda di kolom yang tersedia.</li>
+      <li>Masukkan Password.</li>
+      <li>Klik tombol <strong>Login</strong>.</li>
+    </ol>
+  </div>
+  
+  <div class="info-box warning">
+    <strong>Penting:</strong> Keamanan sistem MASEKO dilengkapi dengan perlindungan brute force. Apabila Anda gagal login sebanyak 5 kali berturut-turut, akun Anda akan dikunci selama 15 menit. Pada saat login untuk pertama kali, Anda diwajibkan untuk segera mengganti password bawaan.
+  </div>
+
+  <h3 id="bab1-3">1.3 Navigasi Utama</h3>
+  <p>Antarmuka Sistem MASEKO dirancang agar intuitif dan mudah digunakan. Bagian-bagian utama navigasi meliputi:</p>
+  <ul>
+    <li><strong>Sidebar Menu (Kiri):</strong> Menu akan beradaptasi secara otomatis sesuai dengan role aktif Anda.</li>
+    <li><strong>Top Navbar (Atas):</strong> Terdapat fitur untuk berganti role (jika memiliki lebih dari satu role), berganti Tahun Ajaran, melihat Notifikasi, dan tombol Logout.</li>
+  </ul>
+  
+  <p><strong>Langkah Mengganti Role & Tahun Ajaran:</strong></p>
+  <ol class="steps">
+    <li>Klik pada <strong>Dropdown Role</strong> atau <strong>Tahun Ajaran</strong> di bagian kanan atas navbar.</li>
+    <li>Pilih Role atau Tahun Ajaran yang ingin diaktifkan.</li>
+    <li>Sistem akan memuat ulang halaman dengan akses dan data yang sesuai.</li>
+  </ol>
+
+  <h3 id="bab1-4">1.4 Ganti Password</h3>
+  <p>Demi menjaga keamanan data Anda, disarankan untuk mengganti password secara berkala.</p>
+  <ol class="steps">
+    <li>Klik ikon profil di sudut kanan atas pada Top Navbar.</li>
+    <li>Pilih menu <strong>Ganti Password</strong> atau <strong>Pengaturan Akun</strong>.</li>
+    <li>Masukkan password lama Anda.</li>
+    <li>Masukkan password baru dan konfirmasi password baru.</li>
+    <li>Klik <strong>Simpan Perubahan</strong>.</li>
+  </ol>
+
+  <h3 id="bab1-5">1.5 Daftar Role Pengguna</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>No</th>
+        <th>Role Pengguna</th>
+        <th>Deskripsi Singkat</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>1</td><td>Operator Yayasan</td><td>Administrator tertinggi pengelola master data yayasan.</td></tr>
+      <tr><td>2</td><td>Direktur Pendidikan</td><td>Pimpinan eksekutif yayasan & pengesahan akhir AKFI.</td></tr>
+      <tr><td>3</td><td>Deputi Direktur Pendidikan</td><td>Penilai manajerial & supervisi kepala sekolah.</td></tr>
+      <tr><td>4</td><td>Operator Sekolah</td><td>Administrator teknis di tingkat satuan pendidikan.</td></tr>
+      <tr><td>5</td><td>Kepala Sekolah</td><td>Pimpinan satuan pendidikan (Unit).</td></tr>
+      <tr><td>6</td><td>Wakil Kurikulum</td><td>Pimpinan bidang akademik unit.</td></tr>
+      <tr><td>7</td><td>Guru Supervisor</td><td>Melakukan pengawasan dan supervisi pengajaran guru.</td></tr>
+      <tr><td>8</td><td>Wakil Kesiswaan</td><td>Menangani segala urusan yang berkaitan dengan kesiswaan.</td></tr>
+      <tr><td>9</td><td>Guru Wali Kelas</td><td>Pengelola kelas, pemantau perkembangan siswa, dan pembagi rapor.</td></tr>
+      <tr><td>10</td><td>Guru Mata Pelajaran & Diniyah</td><td>Pengampu mata pelajaran umum maupun diniyah.</td></tr>
+      <tr><td>11</td><td>Guru Tahfidz</td><td>Membimbing halaqah dan memantau capaian hafalan siswa.</td></tr>
+      <tr><td>12</td><td>Koordinator Tahfidz</td><td>Koordinator dan pengawas program tahfidz per unit.</td></tr>
+      <tr><td>13</td><td>Tutor Siswa</td><td>Siswa berprestasi yang membantu teman dalam belajar.</td></tr>
+      <tr><td>14</td><td>Tutor Sebaya Guru</td><td>Guru yang membimbing guru lain untuk peningkatan kompetensi.</td></tr>
+      <tr><td>15</td><td>Tata Usaha Keuangan</td><td>Menangani administrasi pembayaran SPP dan keuangan sekolah.</td></tr>
+      <tr><td>16</td><td>Cleaning Service</td><td>Bertanggung jawab pada kebersihan fasilitas sekolah.</td></tr>
+      <tr><td>17</td><td>Petugas Keamanan</td><td>Menjaga keamanan dan ketertiban lingkungan sekolah.</td></tr>
+      <tr><td>18</td><td>Panitia Lomba</td><td>Mempersiapkan dan mengelola partisipasi siswa dalam lomba.</td></tr>
+      <tr><td>19</td><td>Siswa</td><td>Peserta didik yang terdaftar di sekolah.</td></tr>
+      <tr><td>20</td><td>Orang Tua / Wali Santri</td><td>Melihat perkembangan, tagihan, dan rapor anak/siswa.</td></tr>
+      <tr><td>21</td><td>Alumni</td><td>Lulusan dari satuan pendidikan Yayasan Islam Al Kahfi.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="page-break"></div>
+
+<div class="chapter" id="bab2">
+  <div class="chapter-header">
+    <h1>BAB 2 &mdash; Operator Yayasan</h1>
+    <p>Administrator Tertinggi Pengelola Master Data Yayasan</p>
+  </div>
+
+  <h3 id="bab2-1">2.1 Dashboard</h3>
+  <p>Halaman Dashboard memberikan rangkuman data secara makro mengenai statistik yayasan. Anda dapat melihat total guru, total siswa, dan daftar unit yang terdaftar. Pada halaman ini, terdapat pula tombol pintasan untuk mengunduh buku panduan sistem MASEKO.</p>
+
+  <h3 id="bab2-2">2.2 Sekolah & Unit (/master/units)</h3>
+  <p>Menu ini digunakan untuk mengelola kelima unit sekolah yang ada di yayasan (KB, TK, SD, SMP, SMA).</p>
+  <ol class="steps">
+    <li>Masuk ke menu <strong>Master Data > Unit Sekolah</strong>.</li>
+    <li>Klik tombol <strong>Tambah Unit Baru</strong>.</li>
+    <li>Lengkapi form yang disediakan: Nama Unit, Alamat, Kontak, unggah Logo, dan masukkan nomor Rekening Bank BSI.</li>
+    <li>Klik <strong>Simpan</strong>. Anda juga dapat menggunakan tombol <strong>Edit</strong> pada data yang sudah ada untuk mengubah informasi.</li>
+  </ol>
+
+  <h3 id="bab2-3">2.3 Tahun Ajaran (/master/academic-years)</h3>
+  <p>Menu ini mengatur periode akademik yayasan secara terpusat.</p>
+  <div class="info-box">
+    <strong>Sistem Konsensus:</strong> Untuk mengaktifkan sebuah tahun ajaran baru, semua Operator Sekolah dari setiap unit harus memberikan persetujuan (approve) terlebih dahulu. Sistem akan menampilkan notifikasi dinamis mengenai jumlah unit yang sudah menyetujui.
+  </div>
+  <ol class="steps">
+    <li>Masuk ke menu <strong>Master Data > Tahun Ajaran</strong>.</li>
+    <li>Klik <strong>Tambah Tahun Ajaran</strong>.</li>
+    <li>Isikan nama tahun ajaran (misal: 2026/2027 Ganjil).</li>
+    <li>Klik <strong>Simpan</strong>. Pantau status persetujuan dari masing-masing unit.</li>
+  </ol>
+
+  <h3 id="bab2-4">2.4 Guru & Karyawan (/master/employees)</h3>
+  <p>Ini adalah direktori lengkap seluruh pegawai yayasan. Status pegawai dapat berupa: Aktif, Nonaktif, Resign, Mutasi Keluar, atau Pensiun.</p>
+  <ol class="steps">
+    <li>Pilih <strong>Master Data > Pegawai</strong>.</li>
+    <li>Klik <strong>Tambah Pegawai</strong>.</li>
+    <li>Isi data lengkap: NIK, NIPY, Nama Lengkap, Jenis Kelamin, Unit, Level Posisi, dan TMT (Terhitung Mulai Tanggal).</li>
+    <li>Klik <strong>Simpan</strong>. (Username otomatis akan tergenerate menggunakan NIPY dalam huruf kecil).</li>
+  </ol>
+
+  <h3 id="bab2-5">2.5 Akun Operator Sekolah (/users/school-accounts)</h3>
+  <p>Operator Yayasan adalah satu-satunya pihak yang dapat membuat atau mengedit profil penuh untuk Operator Sekolah.</p>
+  <ol class="steps">
+    <li>Buka <strong>Pengguna > Akun Operator</strong>.</li>
+    <li>Pilih pegawai yang akan dijadikan Operator Sekolah dari unit yang bersangkutan.</li>
+    <li>Tentukan password default.</li>
+    <li>Klik <strong>Buat Akun</strong>.</li>
+  </ol>
+
+  <h3 id="bab2-6">2.6 Mutasi & Turnover (/master/turnover)</h3>
+  <p>Fitur ini digunakan saat ada pegawai yang dipindah-tugaskan antar unit atau mengundurkan diri (resign).</p>
+  <div class="info-box tip">
+    <strong>Auto-Cleanup:</strong> Ketika seorang pegawai dimutasi atau resign, sistem akan secara otomatis menghapus berbagai tugas lama di unit sebelumnya (seperti tugas wali kelas, jadwal supervisi, daftar mata pelajaran, dan tahfidz halaqah).
+  </div>
+  <ol class="steps">
+    <li>Buka <strong>Master Data > Mutasi & Turnover</strong>.</li>
+    <li>Pilih pegawai yang bersangkutan.</li>
+    <li>Pilih opsi: <strong>Mutasi Unit</strong> atau <strong>Resign/Pensiun</strong>.</li>
+    <li>Jika mutasi, pilih unit tujuan. Jika resign, isikan tanggal efektif dan alasan.</li>
+    <li>Klik <strong>Proses Turnover</strong>.</li>
+  </ol>
+
+  <h3 id="bab2-7">2.7 Master Template AKFI (/master/akfi-templates)</h3>
+  <p>AKFI (Assessment Kinerja Fungsional Individual) terdiri dari 65% Kinerja dan 35% Sikap.</p>
+  <ol class="steps">
+    <li>Buka menu <strong>Master AKFI > Template</strong>.</li>
+    <li>Tambah atau edit komponen indikator. Bobot setiap komponen akan dihitung secara otomatis berdasarkan bobot indikator yang dimasukkan.</li>
+    <li>Simpan perubahan.</li>
+  </ol>
+
+  <h3 id="bab2-8">2.8 Mushaf Madinah (/master/mushaf)</h3>
+  <p>Modul untuk master indeks 604 halaman Mushaf Madinah (halaman, surah, ayat, baris).</p>
+  <ol class="steps">
+    <li>Buka menu <strong>Master Data > Mushaf</strong>.</li>
+    <li>Pilih opsi <strong>Import CSV</strong>.</li>
+    <li>Pilih file CSV yang berisi data indeks mushaf.</li>
+    <li>Klik <strong>Import</strong>.</li>
+  </ol>
+
+  <h3 id="bab2-9">2.9 Rekap AKFI Yayasan (/akfi/rekap-yayasan)</h3>
+  <p>Menampilkan agregasi skor AKFI secara menyeluruh dari semua unit. Tersedia tombol untuk melakukan ekspor (Export to Excel) guna keperluan pelaporan.</p>
+
+  <h3 id="bab2-10">2.10 Identitas & Logo Aplikasi (/settings/app)</h3>
+  <p>Mengatur branding dari Sistem MASEKO.</p>
+  <ol class="steps">
+    <li>Pilih menu <strong>Pengaturan > Identitas Sistem</strong>.</li>
+    <li>Ubah Nama Instansi, favicon, atau logo aplikasi.</li>
+    <li>Klik <strong>Simpan Pengaturan</strong>.</li>
+  </ol>
+
+  <h3 id="bab2-11">2.11 Audit Log (/audit/logs)</h3>
+  <p>Fitur keamanan yang mencatat 100 aktivitas terbaru (action, user, IP, timestamp). Log ini bersifat append-only sehingga tidak dapat dihapus, memastikan jejak audit yang valid.</p>
+
+  <h3 id="bab2-12">2.12 Backup & Restore Database (/backup)</h3>
+  <ol class="steps">
+    <li>Pilih menu <strong>Pengaturan > Backup DB</strong>.</li>
+    <li>Untuk backup: Klik tombol <strong>Create Backup</strong>, sistem akan membuat snapshot SQL dan dapat langsung diunduh.</li>
+    <li>Untuk restore: Unggah file SQL backup yang valid lalu klik <strong>Restore Database</strong>.</li>
+  </ol>
+</div>
+
+<div class="page-break"></div>
+
+<div class="chapter" id="bab3">
+  <div class="chapter-header">
+    <h1>BAB 3 &mdash; Direktur Pendidikan</h1>
+    <p>Pimpinan Eksekutif Yayasan & Pengesahan AKFI</p>
+  </div>
+
+  <h3 id="bab3-1">3.1 Dashboard Analitik</h3>
+  <p>Dashboard Direktur Pendidikan menampilkan tampilan makro atas semua performa unit sekolah. Analitik ini membantu dalam pengambilan keputusan strategis tingkat yayasan.</p>
+
+  <h3 id="bab3-2">3.2 Rekap Nilai AKFI (/akfi/rekap-yayasan)</h3>
+  <p>Direktur dapat memantau secara komprehensif skor AKFI seluruh pegawai dari semua unit. Tersedia fitur filter berdasarkan unit maupun kategori, serta dapat diekspor ke Excel (.xlsx).</p>
+
+  <h3 id="bab3-3">3.3 Approval AKFI HR (/akfi/approval-hr)</h3>
+  <p>Merupakan tahap pengesahan digital akhir untuk laporan AKFI.</p>
+  <ol class="steps">
+    <li>Masuk ke menu <strong>Approval AKFI HR</strong>.</li>
+    <li>Pilih laporan pegawai yang telah dinilai.</li>
+    <li>Lakukan review atas nilai yang diberikan.</li>
+    <li>Klik <strong>Tanda Tangan / Approve</strong> untuk mengesahkan laporan.</li>
+  </ol>
+</div>
+
+<div class="page-break"></div>
+
+<div class="chapter" id="bab4">
+  <div class="chapter-header">
+    <h1>BAB 4 &mdash; Deputi Direktur Pendidikan</h1>
+    <p>Penilai Manajerial & Supervisi Kepala Sekolah</p>
+  </div>
+
+  <h3 id="bab4-1">4.1 Approval Administrasi KS (/administrasi/review-ks)</h3>
+  <p>Deputi bertugas meninjau dan menyetujui (approve/reject) 18 dokumen manajerial yang diunggah oleh Kepala Sekolah.</p>
+  <ol class="steps">
+    <li>Buka <strong>Administrasi > Review KS</strong>.</li>
+    <li>Pilih dokumen yang belum direview.</li>
+    <li>Tambahkan komentar revisi jika dokumen belum sesuai, lalu klik <strong>Tolak</strong>.</li>
+    <li>Jika dokumen sudah benar, klik <strong>Approve</strong>.</li>
+  </ol>
+
+  <h3 id="bab4-2">4.2 Target & Realisasi SPMB (/spmb/target)</h3>
+  <p>Menu ini digunakan untuk menetapkan target penerimaan peserta didik baru (SPMB) untuk masing-masing unit per tahun ajaran. Deputi dapat memantau grafik realisasi dibandingkan dengan target yang ditetapkan.</p>
+
+  <h3 id="bab4-3">4.3 Target Hari Kerja & Kajian (/deputi/target-kerja)</h3>
+  <p>Menentukan baseline (standar dasar) hari kerja efektif serta target minimal kehadiran kajian pekanan untuk masing-masing unit sekolah.</p>
+
+  <h3 id="bab4-4">4.4 Pratinjau AKFI KS (/akfi/kanit-preview)</h3>
+  <p>Melihat pratinjau performa AKFI dari setiap kepala sekolah untuk dilakukan perbandingan antar unit, sebelum penilaian final dilakukan.</p>
+
+  <h3 id="bab4-5">4.5 Penilaian Sikap KS (/akfi/penilaian-sikap-ks)</h3>
+  <p>Mengevaluasi 35% instrumen sikap / kepemimpinan bagi kepala sekolah.</p>
+  <ol class="steps">
+    <li>Pilih <strong>AKFI > Penilaian Sikap KS</strong>.</li>
+    <li>Pilih nama Kepala Sekolah.</li>
+    <li>Isi form instrumen penilaian sikap dengan memberikan skor sesuai observasi.</li>
+    <li>Klik <strong>Simpan Penilaian</strong>.</li>
+  </ol>
+
+  <h3 id="bab4-6">4.6 Rekap Indikator Unit (/rekap/deputi)</h3>
+  <p>Sebuah executive dashboard yang membandingkan kelima unit dari berbagai aspek seperti jumlah siswa, staf, pendaftaran SPMB, tunggakan SPP, nilai rata-rata AKFI, prestasi, hingga statistik pencapaian tahfidz.</p>
+</div>
+
+<div class="page-break"></div>
+
+<div class="chapter" id="bab5">
+  <div class="chapter-header">
+    <h1>BAB 5 &mdash; Operator Sekolah</h1>
+    <p>Administrator Teknis di Tingkat Satuan Pendidikan</p>
+  </div>
+
+  <h3 id="bab5-1">5.1 Dashboard</h3>
+  <p>Dashboard Operator Sekolah memuat statistik khusus untuk unit yang bersangkutan, seperti jumlah siswa aktif, guru, serta tugas-tugas yang belum diselesaikan (pending tasks).</p>
+
+  <h3 id="bab5-2">5.2 Data Siswa & Ortu (/students)</h3>
+  <p>Mengelola data identitas lengkap siswa beserta data orang tuanya.</p>
+  <div class="info-box tip">
+    <strong>Fitur Pencarian:</strong> Anda dapat dengan mudah mencari siswa berdasarkan kelas atau dengan mengetikkan No. Kartu Keluarga (KK).
+  </div>
+  <ol class="steps">
+    <li>Masuk ke menu <strong>Kesiswaan > Data Siswa</strong>.</li>
+    <li>Klik <strong>Tambah Siswa</strong>.</li>
+    <li>Lengkapi form: NIS, NISN, Nama, Gender, Tempat/Tanggal Lahir, Nama Ayah, Nama Ibu, No. KK, dan Status Siswa.</li>
+    <li>Klik <strong>Simpan Data</strong>.</li>
+  </ol>
+
+  <h3 id="bab5-3">5.3 Data Kelas & Wali Kelas (/classes)</h3>
+  <p>Menyiapkan rombongan belajar (rombel) dan menentukan wali kelas untuk masing-masing kelas.</p>
+  <ol class="steps">
+    <li>Masuk ke <strong>Akademik > Data Kelas</strong>.</li>
+    <li>Klik <strong>Buat Kelas Baru</strong>, masukkan nama kelas.</li>
+    <li>Pilih guru yang akan ditugaskan sebagai Wali Kelas.</li>
+    <li>Klik <strong>Simpan</strong>.</li>
+  </ol>
+  <div class="info-box warning">
+    Jika seorang wali kelas telah dimutasi atau resign, kartu kelas tersebut akan menampilkan <em>warning badge</em> merah bertuliskan <strong>"Wali kelas belum dipilih"</strong>.
+  </div>
+
+  <h3 id="bab5-4">5.4 Penempatan Siswa Kelas (/classes/placement)</h3>
+  <p>Mendistribusikan siswa ke dalam kelompok kelas per tahun ajaran.</p>
+  <ol class="steps">
+    <li>Pilih kelas yang diinginkan pada menu <strong>Penempatan Kelas</strong>.</li>
+    <li>Pilih daftar siswa yang akan dimasukkan ke kelas tersebut.</li>
+    <li>Klik <strong>Tugaskan ke Kelas</strong>.</li>
+    <li>Untuk mengeluarkan siswa dari kelas, klik tombol silang (Hapus) di samping nama siswa yang bersangkutan.</li>
+  </ol>
+
+  <h3 id="bab5-5">5.5 Mata Pelajaran (/subjects)</h3>
+  <p>Mengelola kurikulum per unit.</p>
+  <ol class="steps">
+    <li>Buka <strong>Akademik > Mata Pelajaran</strong>.</li>
+    <li>Klik <strong>Tambah Mapel</strong>.</li>
+    <li>Isi nama pelajaran dan assign (tugaskan) guru pengampu untuk mapel tersebut.</li>
+  </ol>
+
+  <h3 id="bab5-6">5.6 Akun Guru & Kepsek (/users/school-accounts)</h3>
+  <p>Operator Sekolah dapat membuat akun login untuk guru. Data seperti username, nama lengkap, email, dan telepon tidak dapat diubah secara manual di sini (LOCKED) karena diambil langsung dari master data pegawai Yayasan.</p>
+  <ol class="steps">
+    <li>Buka menu <strong>Pengguna > Akun Guru</strong>.</li>
+    <li>Pilih pegawai dari daftar yang ada di unit Anda.</li>
+    <li>Pilih <strong>Role</strong> yang sesuai (misal: Guru Mata Pelajaran).</li>
+    <li>Tentukan password awal dan klik <strong>Buat Akun</strong>.</li>
+  </ol>
+
+  <h3 id="bab5-7">5.7 Pelacakan Alumni (/alumni)</h3>
+  <p>Melacak ke mana lulusan sekolah melanjutkan pendidikannya.</p>
+  <ol class="steps">
+    <li>Buka <strong>Kesiswaan > Pelacakan Alumni</strong>.</li>
+    <li>Klik <strong>Tambah Rekam Alumni</strong>.</li>
+    <li>Pilih nama siswa yang telah lulus, lalu isikan data institusi atau universitas tujuannya.</li>
+  </ol>
+
+  <h3 id="bab5-8">5.8 Input SPMB Siswa Baru (/spmb/operator)</h3>
+  <p>Mendaftarkan pendaftar atau calon siswa baru.</p>
+  <ol class="steps">
+    <li>Buka <strong>SPMB > Input Calon Siswa</strong>.</li>
+    <li>Isi data pendaftar.</li>
+    <li>Setelah proses seleksi selesai dan siswa diterima, klik tombol <strong>Konversi Menjadi Siswa Aktif</strong> agar data masuk otomatis ke Data Siswa.</li>
+  </ol>
+
+  <h3 id="bab5-9">5.9 Persetujuan Tahun Ajaran (/master/academic-years)</h3>
+  <p>Saat Operator Yayasan membuat Tahun Ajaran baru, Anda harus memberikan persetujuan (approve) untuk mengaktifkan tahun ajaran tersebut di unit Anda.</p>
+
+  <h3 id="bab5-10">5.10 Setting SMTP & Surat (/settings/smtp)</h3>
+  <p>Mengonfigurasi gateway email untuk pengiriman otomatis tagihan SPP.</p>
+  <ol class="steps">
+    <li>Buka menu <strong>Pengaturan > SMTP Email</strong>.</li>
+    <li>Masukkan SMTP host, port, username, password, dan sender name.</li>
+    <li>Gunakan fitur <strong>Test Send</strong> untuk memastikan konfigurasi berjalan dengan baik.</li>
+  </ol>
+</div>
+
+<div class="page-break"></div>
+
+<div class="chapter" id="bab6">
+  <div class="chapter-header">
+    <h1>BAB 6 &mdash; Kepala Sekolah</h1>
+    <p>Pimpinan Satuan Pendidikan</p>
+  </div>
+
+  <h3 id="bab6-1">6.1 Dashboard</h3>
+  <p>Menampilkan tinjauan lengkap operasional harian sekolah, rekap akademik, tugas-tugas approval, dan peringatan kinerja staf unit.</p>
+
+  <h3 id="bab6-2">6.2 Approval Admin Guru & TU (/administrasi/review-guru)</h3>
+  <p>Memeriksa dokumen yang diunggah oleh guru dan TU, yang dikelompokkan berdasarkan periode pengumpulan (harian, bulanan, tahunan).</p>
+  <ol class="steps">
+    <li>Buka <strong>Administrasi > Review Guru</strong>.</li>
+    <li>Klik kartu dokumen yang ingin direview. Sistem memperlihatkan status penyerahan bulan ini dan sebelumnya.</li>
+    <li>Berikan komentar jika ada catatan revisi.</li>
+    <li>Klik <strong>Approve</strong> atau gunakan fitur <strong>Batch Approval</strong> untuk menyetujui banyak dokumen sekaligus.</li>
+  </ol>
+
+  <h3 id="bab6-3">6.3 Dokumen Administrasi KS (/administrasi/ks)</h3>
+  <p>Kepala sekolah wajib mengunggah 18 dokumen manajerial (seperti RKJM, RKT, RKAS, KOSP, dll) agar dapat direview oleh Deputi Direktur.</p>
+  <ol class="steps">
+    <li>Buka <strong>Administrasi > Dokumen KS</strong>.</li>
+    <li>Pilih jenis dokumen.</li>
+    <li>Unggah file dokumen (PDF/Word).</li>
+    <li>Klik <strong>Simpan & Ajukan</strong>.</li>
+  </ol>
+
+  <h3 id="bab6-4">6.4 Penagihan SPP (/tagihan/approval)</h3>
+  <p>Menyetujui rekomendasi tagihan SPP dari bagian Tata Usaha (TU).</p>
+  <ol class="steps">
+    <li>Masuk ke <strong>Keuangan > Approval Tagihan</strong>.</li>
+    <li>Periksa draft tagihan.</li>
+    <li>Jika disetujui, klik <strong>Kirim Tagihan</strong>. Sistem akan mengirim email tagihan otomatis via PHPMailer. Anda juga dapat mencetak surat tagihan fisik berlambang sekolah.</li>
+  </ol>
+
+  <h3 id="bab6-5">6.5 Absensi Staf (/attendance/staff)</h3>
+  <p>Menginput rekapitulasi absensi bulanan untuk tenaga kependidikan (TU, CS, dan Security).</p>
+  <ol class="steps">
+    <li>Buka <strong>Kehadiran > Staf</strong>.</li>
+    <li>Pilih bulan.</li>
+    <li>Masukkan jumlah hari hadir, izin, sakit, alpa untuk masing-masing staf.</li>
+    <li>Simpan.</li>
+  </ol>
+
+  <h3 id="bab6-6">6.6 Kegiatan di Luar KBM (/kegiatan/luar-kbm)</h3>
+  <p>Mencatat berbagai kegiatan selain belajar mengajar seperti upacara, study tour, atau perayaan hari besar.</p>
+
+  <h3 id="bab6-7">6.7 Penugasan Panitia Lomba (/panitia/penugasan)</h3>
+  <p>Menerbitkan Surat Keputusan (SK) penugasan untuk panitia perlombaan (misal: OSN, O2SN).</p>
+  <ol class="steps">
+    <li>Masuk ke <strong>Kesiswaan > Penugasan Lomba</strong>.</li>
+    <li>Buat penugasan baru, masukkan nama lomba dan tanggal pelaksanaan.</li>
+    <li>Tambahkan guru sebagai panitia/pembimbing dan siswa sebagai delegasi.</li>
+    <li>Simpan dan cetak SK resmi.</li>
+  </ol>
+
+  <h3 id="bab6-8">6.8 Guru Berprestasi (/guru/prestasi-tetapkan)</h3>
+  <p>Digunakan untuk mencatat dan menetapkan penghargaan bagi guru-guru berprestasi di unit tersebut.</p>
+
+  <h3 id="bab6-9">6.9 Nilai Sikap & AKFI Guru/Staf (/akfi/penilaian-bawahan)</h3>
+  <p>Menilai aspek sikap sebesar 35% bagi seluruh bawahan (guru dan staf) yang berstatus aktif di unit.</p>
+  <ol class="steps">
+    <li>Buka menu <strong>AKFI > Penilaian Bawahan</strong>.</li>
+    <li>Pilih nama guru/staf dari daftar.</li>
+    <li>Isi nilai pada instrumen observasi.</li>
+    <li>Simpan penilaian.</li>
+  </ol>
+
+  <h3 id="bab6-10">6.10 Rapor AKFI Saya (/akfi/pribadi)</h3>
+  <p>Melihat hasil penilaian kinerja (AKFI) pribadi yang telah dinilai oleh manajemen yayasan (Deputi & Direktur).</p>
+</div>
+
+<div class="page-break"></div>
+
+<div class="chapter" id="bab7">
+  <div class="chapter-header">
+    <h1>BAB 7 &mdash; Wakil Kurikulum</h1>
+    <p>Pimpinan Bidang Akademik Unit</p>
+  </div>
+
+  <h3 id="bab7-1">7.1 Kehadiran & Kajian Guru (/attendance/teachers)</h3>
+  <p>Mengisi dan memantau rekap absensi mengajar serta kehadiran pada kajian mingguan bagi seluruh guru di unit tersebut.</p>
+  <ol class="steps">
+    <li>Buka <strong>Kehadiran > Guru</strong>.</li>
+    <li>Pilih tanggal/periode yang ingin diisi.</li>
+    <li>Masukkan status kehadiran mengajar dan kajian.</li>
+    <li>Klik <strong>Simpan</strong>.</li>
+  </ol>
+
+  <h3 id="bab7-2">7.2 Jadwal Supervisi Guru (/supervisi/jadwal)</h3>
+  <p>Menjadwalkan observasi pengajaran. Waka Kurikulum menugaskan Guru Supervisor untuk mengobservasi Guru di kelas tertentu.</p>
+  <ol class="steps">
+    <li>Buka menu <strong>Supervisi > Jadwal</strong>.</li>
+    <li>Klik <strong>Buat Jadwal</strong>.</li>
+    <li>Pilih Guru yang akan dinilai, pilih Guru Supervisor yang akan menilai, serta tentukan Tanggal, Jam, dan Kelas. (Hanya menampilkan pegawai berstatus aktif).</li>
+    <li>Simpan jadwal supervisi.</li>
+  </ol>
+
+  <h3 id="bab7-3">7.3 Deadline Administrasi (/administrasi/deadlines)</h3>
+  <p>Mengatur batas waktu pengumpulan dokumen administratif bagi guru (seperti RPP, Silabus, dsb).</p>
+  <ol class="steps">
+    <li>Buka <strong>Administrasi > Setting Deadline</strong>.</li>
+    <li>Tentukan tanggal dan waktu maksimal pengumpulan untuk setiap kategori dokumen.</li>
+    <li>Klik <strong>Simpan Pengaturan</strong> untuk memberlakukan deadline ke seluruh guru.</li>
+  </ol>
+</div>
+<div class="page-break"></div>
+<div class="chapter">
+    <div class="chapter-header">
+        <h1>BAB 8 — Guru Supervisor</h1>
+        <p>Penilai Pelaksanaan Pembelajaran di Kelas</p>
+    </div>
+
+    <h2>8.1 Instrumen Supervisi Kelas (/supervisi/penilaian)</h2>
+    <p>Fitur ini digunakan oleh Guru Supervisor untuk menilai jalannya proses belajar mengajar di kelas. Daftar jadwal supervisi dan guru yang akan dinilai telah ditetapkan sebelumnya oleh Wakil Kepala Sekolah Bidang Kurikulum (Waka Kurikulum). Melalui fitur ini, Supervisor dapat mengisi instrumen penilaian atau observasi kelas secara digital.</p>
+    
+    <div class="info-box">
+        <strong>Informasi AKFI (Asesmen Kinerja Formatif Integratif):</strong> Nilai supervisi yang dimasukkan melalui form ini akan secara otomatis terintegrasi sebagai komponen Kinerja dengan bobot 65% pada penilaian akhir AKFI guru yang bersangkutan.
+    </div>
+
+    <div class="feature-card">
+        <h4>Apa saja yang dinilai?</h4>
+        <p>Instrumen penilaian mencakup skor kompetensi pedagogik guru, meliputi aspek kegiatan pembukaan, kegiatan inti (penguasaan materi, penerapan model pembelajaran, penggunaan media), hingga kegiatan penutup (evaluasi dan refleksi).</p>
+    </div>
+
+    <h3>Langkah-langkah Penilaian Supervisi Kelas:</h3>
+    <ol class="steps">
+        <li>Login ke sistem MASEKO dan buka menu <strong>Supervisi</strong> > <strong>Instrumen Supervisi</strong>.</li>
+        <li>Pada halaman tersebut, Anda akan melihat daftar jadwal supervisi yang berstatus <em>Pending</em> (Menunggu Penilaian).</li>
+        <li>Klik tombol <strong>Nilai</strong> atau <strong>Buka Instrumen</strong> pada nama guru yang jadwalnya akan Anda supervisi.</li>
+        <li>Formulir observasi instrumen supervisi akan terbuka. Silakan amati proses pembelajaran dan berikan skor pada setiap indikator yang tersedia.</li>
+        <li>Isi setiap aspek dari pembukaan, inti, dan penutup dengan nilai (rentang sesuai panduan yang tertera di form).</li>
+        <li>Tuliskan juga catatan tambahan, masukan, atau <em>feedback</em> pada kolom deskripsi jika diperlukan.</li>
+        <li>Setelah semua indikator terisi, periksa kembali kelengkapan data.</li>
+        <li>Klik tombol <strong>Simpan & Submit Penilaian</strong>. Status jadwal akan berubah menjadi <em>Selesai</em>.</li>
+    </ol>
+    <div class="info-box warning">
+        <strong>Perhatian:</strong> Pastikan seluruh indikator penilaian terisi dengan teliti. Nilai yang sudah di-submit akan langsung mempengaruhi rapor AKFI guru yang bersangkutan dan tidak dapat diubah tanpa persetujuan admin atau Waka Kurikulum.
+    </div>
+</div>
+
+<div class="page-break"></div>
+<div class="chapter">
+    <div class="chapter-header">
+        <h1>BAB 9 — Wakil Kesiswaan</h1>
+        <p>Pimpinan Bidang Kesiswaan Unit</p>
+    </div>
+
+    <h2>9.1 Prestasi Lomba Siswa (/prestasi/verifikasi)</h2>
+    <p>Sebagai Waka Kesiswaan, salah satu tugas penting adalah memvalidasi dan memverifikasi data prestasi siswa dalam berbagai perlombaan. Data ini biasanya diinput oleh Panitia Lomba Sekolah atau Guru Wali Kelas. Verifikasi dilakukan agar rekam jejak prestasi siswa di sistem tervalidasi dan dapat digunakan untuk keperluan beasiswa maupun rekomendasi.</p>
+
+    <h3>Langkah-langkah Verifikasi Prestasi:</h3>
+    <ol class="steps">
+        <li>Akses menu <strong>Kesiswaan</strong> > <strong>Verifikasi Prestasi</strong>.</li>
+        <li>Halaman akan menampilkan daftar pengajuan prestasi yang masuk dengan status <em>Menunggu Verifikasi</em>.</li>
+        <li>Klik tombol <strong>Detail</strong> pada salah satu data pengajuan untuk meninjau informasi lengkap.</li>
+        <li>Periksa kesesuaian data: Nama siswa, nama lomba, tingkat lomba (sekolah, kabupaten, provinsi, nasional, internasional), juara ke-berapa, dan dokumen bukti (sertifikat/foto).</li>
+        <li>Jika data sesuai dan valid, klik tombol <strong>Setujui (Approve)</strong>.</li>
+        <li>Jika terdapat ketidaksesuaian atau bukti tidak valid, Anda dapat mengisi alasan penolakan dan mengklik tombol <strong>Tolak (Reject)</strong>.</li>
+    </ol>
+    <div class="info-box tip">
+        <strong>Tips:</strong> Lakukan verifikasi secara berkala agar pengajuan prestasi dari wali kelas atau panitia tidak menumpuk.
+    </div>
+
+    <h2>9.2 Absensi Guru (/attendance/teachers)</h2>
+    <p>Fitur ini memberikan wewenang kepada Waka Kesiswaan untuk memantau rekap data kedisiplinan dan kehadiran mengajar guru di unit sekolahnya. Data ini sangat penting untuk menjaga standar mutu pelayanan akademik di sekolah.</p>
+
+    <h3>Langkah-langkah Memantau Absensi Guru:</h3>
+    <ol class="steps">
+        <li>Masuk ke menu <strong>Kehadiran</strong> > <strong>Absensi Guru</strong>.</li>
+        <li>Gunakan filter bulan dan tahun untuk melihat rekap kehadiran pada periode tertentu.</li>
+        <li>Anda akan melihat tabel rekapitulasi kehadiran (Hadir, Sakit, Izin, Alpha) untuk setiap guru.</li>
+        <li>Klik pada nama guru untuk melihat detail riwayat presensi harian beserta jam masuk/keluar.</li>
+        <li>Gunakan fitur <em>Export to Excel</em> jika membutuhkan laporan cetak untuk bahan evaluasi rapat manajemen.</li>
+    </ol>
+</div>
+
+<div class="page-break"></div>
+<div class="chapter">
+    <div class="chapter-header">
+        <h1>BAB 10 — Guru Wali Kelas</h1>
+        <p>Pengelola Akademik & Pembinaan Siswa Kelas</p>
+    </div>
+
+    <h2>10.1 Ledger & Rapor Kelas (/nilai/ledger)</h2>
+    <p>Wali Kelas memiliki tanggung jawab untuk mengawasi progres akademik seluruh siswa di kelas perwaliannya. Fitur Ledger berfungsi sebagai buku nilai gabungan (rekapitulasi semua mata pelajaran). Wali Kelas juga dapat mencetak Rapor Bulanan dan Rapor Gabungan melalui halaman ini.</p>
+
+    <h3>Langkah-langkah Melihat Ledger dan Mencetak Rapor:</h3>
+    <ol class="steps">
+        <li>Buka menu <strong>Akademik Walas</strong> > <strong>Ledger Kelas</strong>.</li>
+        <li>Pilih bulan yang ingin ditinjau pada filter periode yang disediakan.</li>
+        <li>Sistem akan menampilkan tabel Ledger (rekap seluruh nilai mata pelajaran siswa di kelas).</li>
+        <li>Untuk mengunduh data Ledger, klik tombol <strong>Download Excel</strong> atau <strong>Download PDF</strong>.</li>
+        <li>Untuk mencetak rapor individu per siswa, cari nama siswa pada tabel, lalu klik tombol <strong>Cetak Rapor Bulanan</strong> di kolom Aksi.</li>
+        <li>Untuk mencetak rapor yang menggabungkan nilai akademik dan capaian tahfidz, pilih <strong>Cetak Rapor Gabungan</strong>. Rapor akan di-generate dalam format PDF siap cetak.</li>
+    </ol>
+
+    <h2>10.2 Absensi Siswa Bulanan (/attendance/students)</h2>
+    <p>Wali Kelas wajib melakukan rekapitulasi kehadiran bulanan siswanya. Sistem menggunakan format standar kehadiran: Hadir (H), Sakit (S), Izin (I), dan Alpha (A).</p>
+
+    <h3>Langkah-langkah Input Absensi:</h3>
+    <ol class="steps">
+        <li>Pilih menu <strong>Kehadiran</strong> > <strong>Absensi Siswa (Walas)</strong>.</li>
+        <li>Pastikan kelas yang aktif adalah kelas perwalian Anda.</li>
+        <li>Pilih bulan rekapitulasi yang akan diinput.</li>
+        <li>Sistem akan memunculkan daftar seluruh siswa di kelas Anda.</li>
+        <li>Isikan jumlah hari Sakit (S), Izin (I), dan Alpha (A) untuk setiap siswa. Kolom Hadir (H) akan otomatis terhitung atau bisa disesuaikan dengan total hari efektif.</li>
+        <li>Klik <strong>Simpan Absensi</strong>. Data absensi ini akan otomatis masuk ke Rapor Bulanan siswa.</li>
+    </ol>
+    <div class="info-box warning">
+        <strong>Penting:</strong> Input absensi dilakukan paling lambat sebelum periode pencetakan rapor tiap akhir bulan.
+    </div>
+
+    <h2>10.3 Administrasi Walas (/administrasi/walas)</h2>
+    <p>Setiap awal semester, Wali Kelas wajib melengkapi dan mengunggah dokumen kelengkapan administrasi kelas yang nantinya akan direviu dan disetujui oleh Kepala Sekolah (KS).</p>
+
+    <div class="feature-card">
+        <h4>Dokumen yang Wajib Diunggah (6 Dokumen Utama):</h4>
+        <ul>
+            <li>Buku Mutasi Siswa</li>
+            <li>Buku Pembinaan Santri</li>
+            <li>Buku Penghubung Orang Tua</li>
+            <li>Daftar Nilai Siswa</li>
+            <li>Absensi Siswa</li>
+            <li>Buku Catatan Kelas</li>
+        </ul>
+    </div>
+
+    <h3>Langkah-langkah Unggah Dokumen:</h3>
+    <ol class="steps">
+        <li>Akses menu <strong>Administrasi</strong> > <strong>Dokumen Walas</strong>.</li>
+        <li>Pada halaman akan tampil enam (6) slot untuk masing-masing dokumen beserta status persetujuannya.</li>
+        <li>Pilih dokumen yang ingin diunggah, klik <strong>Upload/Update File</strong>.</li>
+        <li>Pilih file berformat PDF dari perangkat Anda, kemudian klik <strong>Submit</strong>.</li>
+        <li>Status dokumen akan berubah menjadi <em>Menunggu Persetujuan KS</em>. Lakukan hal yang sama untuk ke-lima dokumen lainnya.</li>
+    </ol>
+
+    <h2>10.4 Upload Laporan PTK (/walas/ptk)</h2>
+    <p>Wali Kelas diwajibkan menyusun Penelitian Tindakan Kelas (PTK) sebagai bagian dari pengembangan profesi. Laporan akhir dari PTK diunggah melalui sistem dan dinilai oleh Kepala Sekolah.</p>
+
+    <h3>Langkah-langkah Unggah Laporan PTK:</h3>
+    <ol class="steps">
+        <li>Masuk ke menu <strong>Administrasi</strong> > <strong>Laporan PTK</strong>.</li>
+        <li>Klik tombol <strong>Unggah Laporan Baru</strong>.</li>
+        <li>Isi judul PTK dan keterangan singkat terkait laporan Anda.</li>
+        <li>Pilih dokumen (PDF) laporan PTK Anda.</li>
+        <li>Klik <strong>Kirim untuk Direviu</strong>. Anda dapat melihat status reviu pada halaman ini di kemudian hari.</li>
+    </ol>
+
+    <h2>10.5 Rekomendasi Studi Lanjut (/walas/rekomendasi)</h2>
+    <p>Fitur ini hanya dapat diakses oleh Wali Kelas di tingkat akhir (TK B, Kelas 6 SD, Kelas 9 SMP, dan Kelas 12 SMA). Wali Kelas membantu mengarahkan dan merekomendasikan tujuan pendidikan lanjutan siswa.</p>
+
+    <h3>Langkah-langkah Mengisi Rekomendasi:</h3>
+    <ol class="steps">
+        <li>Buka menu <strong>Bimbingan Lanjut</strong> > <strong>Rekomendasi Studi</strong>.</li>
+        <li>Klik pada nama siswa yang ingin diberikan rekomendasi.</li>
+        <li>Pilih atau ketik nama institusi pendidikan (sekolah/universitas) yang direkomendasikan beserta jurusan/peminatan (bila ada).</li>
+        <li>Tambahkan catatan saran dari Wali Kelas untuk membantu orang tua dalam mengambil keputusan.</li>
+        <li>Klik <strong>Simpan Rekomendasi</strong>.</li>
+    </ol>
+
+    <h2>10.6 Prestasi Lomba Siswa (/prestasi/walas)</h2>
+    <p>Wali Kelas bertugas mendata dan menginput setiap pencapaian prestasi lomba dari anak didiknya. Data ini kemudian diverifikasi oleh Waka Kesiswaan.</p>
+
+    <h3>Langkah-langkah Input Prestasi:</h3>
+    <ol class="steps">
+        <li>Akses menu <strong>Kesiswaan</strong> > <strong>Input Prestasi Siswa</strong>.</li>
+        <li>Klik <strong>Tambah Prestasi</strong>.</li>
+        <li>Pilih nama siswa dari kelas Anda.</li>
+        <li>Masukkan nama perlombaan, tanggal pelaksanaan, tingkat perlombaan, dan predikat (Juara 1, 2, dsb).</li>
+        <li>Unggah file bukti berupa scan piagam/sertifikat atau foto piala.</li>
+        <li>Klik <strong>Submit</strong>. Data akan masuk ke antrean verifikasi Waka Kesiswaan.</li>
+    </ol>
+
+    <h2>10.7 Rapor AKFI Saya (/akfi/pribadi)</h2>
+    <p>Wali Kelas dapat melihat hasil evaluasi kinerja secara personal pada halaman ini. Anda juga diwajibkan untuk mengisi form asesmen mandiri (self-assessment) secara berkala.</p>
+
+    <h3>Langkah-langkah Melihat Rapor & Self-Assessment:</h3>
+    <ol class="steps">
+        <li>Buka menu <strong>AKFI</strong> > <strong>Rapor Saya</strong>.</li>
+        <li>Jika periode asesmen sedang berlangsung, akan muncul notifikasi untuk mengisi <strong>Self-Assessment</strong>.</li>
+        <li>Klik notifikasi tersebut dan jawab butir-butir evaluasi diri dengan jujur.</li>
+        <li>Setelah submit, Anda dapat melihat pratinjau rapor AKFI Anda pada halaman utama.</li>
+    </ol>
+
+    <h2>10.8 Survei Kepala Sekolah (/survey/guru-kepsek)</h2>
+    <p>Sebagai bentuk evaluasi dua arah (360-degree feedback), semua guru wajib mengisi survei penilaian kepemimpinan Kepala Sekolah.</p>
+
+    <h3>Langkah-langkah Mengisi Survei:</h3>
+    <ol class="steps">
+        <li>Pilih menu <strong>Survei & Evaluasi</strong> > <strong>Survei Kepala Sekolah</strong>.</li>
+        <li>Baca panduan dan indikator pengisian dengan saksama.</li>
+        <li>Beri penilaian pada skala 1-5 untuk setiap butir pertanyaan yang mengukur kepemimpinan, komunikasi, dan pengelolaan sekolah.</li>
+        <li>Berikan saran tertulis secara konstruktif jika diperlukan.</li>
+        <li>Klik <strong>Kirim Survei</strong>. Identitas pengisi survei dijaga kerahasiaannya oleh sistem.</li>
+    </ol>
+</div>
+
+<div class="page-break"></div>
+<div class="chapter">
+    <div class="chapter-header">
+        <h1>BAB 11 — Guru Mata Pelajaran & Guru Diniyah</h1>
+        <p>Pengampu Mata Pelajaran Umum & Keagamaan</p>
+    </div>
+
+    <div class="info-box">
+        <strong>Informasi Peran:</strong> Di sistem MASEKO, akun <em>Guru Mata Pelajaran (Mapel)</em> bertugas mengampu pelajaran umum (Matematika, IPA, Bahasa, dll), sedangkan akun <em>Guru Diniyah</em> mengampu pelajaran keagamaan Islam (Fiqih, Aqidah, SKI, dll). <strong>Kedua peran ini menggunakan fitur-fitur dan tampilan antarmuka yang identik.</strong>
+    </div>
+
+    <h2>11.1 Nilai & KKM Bulanan (/nilai/bulanan)</h2>
+    <p>Sebagai guru pengampu, tanggung jawab utama adalah melakukan asesmen rutin, baik nilai formatif (harian) maupun nilai sumatif, serta menetapkan Kriteria Ketuntasan Minimal (KKM) untuk mata pelajaran yang diampu di setiap kelas.</p>
+
+    <h3>Langkah-langkah Input Nilai:</h3>
+    <ol class="steps">
+        <li>Masuk ke menu <strong>Penilaian</strong> > <strong>Input Nilai Bulanan</strong>.</li>
+        <li>Pilih Kelas yang ingin diinput nilainya.</li>
+        <li>Pilih Bulan asesmen.</li>
+        <li>Pada form bagian atas, <strong>tentukan nilai KKM</strong> untuk Kompetensi Dasar (KD) atau materi pada periode tersebut.</li>
+        <li>Selanjutnya, tabel daftar siswa akan muncul. Masukkan skor nilai siswa (0-100) ke dalam kolom yang tersedia.</li>
+        <li>Jika ada catatan perbaikan untuk siswa tertentu, Anda dapat mengetiknya di kolom keterangan/deskripsi nilai.</li>
+        <li>Setelah dipastikan tidak ada yang terlewat, klik tombol <strong>Simpan Nilai</strong>.</li>
+    </ol>
+    <div class="info-box tip">
+        <strong>Tips:</strong> Anda bisa melakukan <em>Save Draft</em> secara berkala (menyimpan data sementara) untuk mencegah hilangnya data akibat terputusnya koneksi internet saat proses input berlangsung.
+    </div>
+
+    <h2>11.2 Perangkat Mengajar (/administrasi/mapel)</h2>
+    <p>Setiap guru diwajibkan menyiapkan perangkat mengajar administrasi pada awal tahun ajaran/semester yang terdiri atas 8 dokumen utama.</p>
+
+    <div class="feature-card">
+        <h4>8 Kelengkapan Perangkat Mengajar yang Wajib Diunggah:</h4>
+        <ol>
+            <li>Kalender Pendidikan</li>
+            <li>Program Tahunan (Prota)</li>
+            <li>Program Semester (Promes)</li>
+            <li>Silabus</li>
+            <li>RPP (Rencana Pelaksanaan Pembelajaran) / Modul Ajar</li>
+            <li>Penetapan KKM</li>
+            <li>Jadwal Mengajar</li>
+            <li>Bahan Ajar / Materi Pendukung</li>
+        </ol>
+    </div>
+
+    <h3>Langkah-langkah Unggah Perangkat Mengajar:</h3>
+    <ol class="steps">
+        <li>Buka menu <strong>Administrasi Guru</strong> > <strong>Perangkat Mengajar</strong>.</li>
+        <li>Anda akan melihat list dari 8 jenis dokumen di atas.</li>
+        <li>Klik tombol <strong>Upload</strong> pada dokumen yang bersangkutan (misal: RPP).</li>
+        <li>Pilih dokumen dengan ekstensi .pdf, .doc, atau .docx. Pastikan ukuran file tidak melebihi batas maksimal (10MB).</li>
+        <li>Klik <strong>Simpan Dokumen</strong>.</li>
+        <li>Ulangi langkah ini hingga seluruh 8 dokumen berstatus <em>Menunggu Pengecekan</em> oleh Kepala Sekolah.</li>
+    </ol>
+    <div class="info-box warning">
+        <strong>Peringatan Tenggat Waktu:</strong> Fitur unggah akan secara otomatis terkunci pada tanggal batas akhir (deadline) yang telah ditetapkan sistem oleh kurikulum. Pastikan Anda mengunggah tepat waktu sebelum tombol upload dinonaktifkan.
+    </div>
+
+    <h2>11.3 Upload Best Practice (/guru/best-practice)</h2>
+    <p>Laporan Inovasi Pengajaran atau <em>Best Practice</em> adalah laporan tentang metode sukses dan inovatif yang diterapkan guru di dalam kelas. Dokumen ini bernilai poin pada komponen Karya Ilmiah di rapor kinerja AKFI.</p>
+
+    <h3>Langkah-langkah Unggah Best Practice:</h3>
+    <ol class="steps">
+        <li>Buka menu <strong>Pengembangan Diri</strong> > <strong>Best Practice</strong>.</li>
+        <li>Klik <strong>Tambah Best Practice Baru</strong>.</li>
+        <li>Isi judul metode/inovasi dan ringkasan eksekutif secara singkat di form.</li>
+        <li>Lampirkan dokumen laporan lengkap berformat PDF.</li>
+        <li>Klik <strong>Submit Laporan</strong> untuk mengirimkannya ke bagian penilai.</li>
+    </ol>
+
+    <h2>11.4 Hasil Supervisi Saya (/supervisi/riwayat)</h2>
+    <p>Setelah kelas Anda disupervisi oleh Guru Supervisor, Anda dapat meninjau langsung hasil penilaian dan umpan baliknya melalui fitur ini.</p>
+
+    <h3>Langkah-langkah Melihat Hasil Supervisi:</h3>
+    <ol class="steps">
+        <li>Pilih menu <strong>Supervisi</strong> > <strong>Riwayat Supervisi Saya</strong>.</li>
+        <li>Anda akan melihat daftar jadwal supervisi yang telah selesai dinilai.</li>
+        <li>Klik <strong>Lihat Hasil Penilaian</strong>.</li>
+        <li>Halaman ini bersifat <em>Read-Only</em> (hanya-baca), menampilkan skor pada setiap indikator pedagogik (Pembukaan, Inti, Penutup) beserta komentar/saran perbaikan dari supervisor.</li>
+    </ol>
+
+    <h2>11.5 Rapor AKFI Saya (/akfi/pribadi)</h2>
+    <p>Lihat rapor keseluruhan terkait asesmen formatif kinerja yang Anda peroleh.</p>
+    
+    <div class="info-box">
+        <strong>Struktur AKFI:</strong> Penilaian total AKFI Anda bersumber dari dua pilar utama:
+        <ul>
+            <li><strong>65% Komponen Kinerja:</strong> Dinilai secara objektif dan sistematis yang meliputi nilai Supervisi Kelas, kedisiplinan (Kehadiran), penyelesaian administrasi kelas, dan keterlibatan karya ilmiah (Best Practice).</li>
+            <li><strong>35% Komponen Sikap:</strong> Asesmen sikap kerja dan <em>soft skills</em> yang dinilai secara kualitatif oleh atasan langsung Anda.</li>
+        </ul>
+    </div>
+    <p>Langkah pengisian Self-Assessment AKFI sama dengan panduan pada BAB 10.7.</p>
+
+    <h2>11.6 Survei Kepala Sekolah (/survey/guru-kepsek)</h2>
+    <p>Lakukan evaluasi dua arah untuk menilai kinerja kepemimpinan kepala sekolah. (Langkah-langkah sama dengan panduan pada BAB 10.8).</p>
+</div>
+
+<div class="page-break"></div>
+<div class="chapter">
+    <div class="chapter-header">
+        <h1>BAB 12 — Guru Tahfidz</h1>
+        <p>Pembimbing Hafalan Al-Qur'an Santri</p>
+    </div>
+
+    <h2>12.1 Absensi Santri Halaqah (/attendance/students)</h2>
+    <p>Guru Tahfidz berkewajiban membimbing sebuah kelompok (Halaqah) dan mengambil presensi harian pada setiap sesi pertemuan halaqah Al-Qur'an.</p>
+
+    <h3>Langkah-langkah Input Absensi Halaqah:</h3>
+    <ol class="steps">
+        <li>Buka menu <strong>Tahfidz</strong> > <strong>Absensi Halaqah</strong>.</li>
+        <li>Pilih tanggal pertemuan pada hari itu.</li>
+        <li>Sistem akan menampilkan nama-nama santri yang tergabung dalam kelompok halaqah Anda.</li>
+        <li>Tandai kehadiran setiap santri: Hadir (H), Sakit (S), Izin (I), atau Alpha (A).</li>
+        <li>Klik <strong>Simpan Absensi Hari Ini</strong>.</li>
+    </ol>
+
+    <h2>12.2 Setoran Hafalan Siswa (/tahfidz/setoran-siswa)</h2>
+    <p>Fitur Mutaba'ah digunakan untuk merekam progres setoran hafalan baru (Ziyadah) dan muraja'ah santri setiap harinya secara otomatis.</p>
+
+    <div class="feature-card">
+        <h4>Otomasi Perhitungan Baris Mushaf</h4>
+        <p>Sistem ini telah terintegrasi dengan indeks Mushaf Standar Madinah (604 Halaman, 15 baris per halaman). Saat Anda menginput ayat awal dan akhir setoran, sistem akan otomatis mengkalkulasi jumlah baris yang berhasil dihafalkan oleh santri. Penghitungan ini akan sangat presisi dan terhindar dari bias manual.</p>
+    </div>
+
+    <h3>Langkah-langkah Input Setoran:</h3>
+    <ol class="steps">
+        <li>Akses menu <strong>Tahfidz</strong> > <strong>Input Setoran (Mutaba'ah)</strong>.</li>
+        <li>Pilih nama santri dari kelompok halaqah Anda yang maju menyetorkan hafalan.</li>
+        <li>Pilih jenis setoran (Ziyadah/Hafalan Baru atau Muraja'ah/Pengulangan).</li>
+        <li>Pilih nama <strong>Surah</strong>, <strong>Ayat Awal</strong>, dan <strong>Ayat Akhir</strong> yang disetorkan.</li>
+        <li>Pilih posisi <strong>Juz</strong> saat ini.</li>
+        <li>Sistem akan memuat jumlah kalkulasi baris di bagian bawah form secara <em>real-time</em>.</li>
+        <li>Berikan catatan tajwid/kelancaran pada kolom catatan (opsional namun disarankan).</li>
+        <li>Klik <strong>Simpan Setoran</strong>. Data ini akan otomatis masuk ke capaian kumulatif santri.</li>
+    </ol>
+
+    <h2>12.3 Pengajuan Ujian ke Tutor (/tahfidz/ajukan-ujian)</h2>
+    <p>Ketika santri telah menyelesaikan target hafalan minimal 1 Juz (telah selesai menyetorkan seluruh ayat dalam satu juz di sesi harian), maka santri berhak didaftarkan untuk mengikuti ujian komprehensif (Tasmi') yang dinilai oleh Tutor.</p>
+
+    <h3>Langkah-langkah Mendaftarkan Ujian:</h3>
+    <ol class="steps">
+        <li>Buka menu <strong>Tahfidz</strong> > <strong>Ajukan Ujian Tasmi'</strong>.</li>
+        <li>Sistem akan menampilkan daftar santri yang indikator progres Ziyadah-nya di satu juz tertentu sudah mencapai 100%.</li>
+        <li>Klik tombol <strong>Ajukan Ujian</strong> pada santri tersebut.</li>
+        <li>Pilih Juz mana yang akan diujikan.</li>
+        <li>Klik <strong>Kirim Pengajuan</strong>. Santri ini akan langsung masuk ke dalam antrean (queue) penilaian Tutor Siswa.</li>
+    </ol>
+
+    <h2>12.4 Perangkat Mengajar & Best Practice</h2>
+    <p>Layaknya Guru Mapel, Guru Tahfidz diwajibkan mengunggah kelengkapan 8 instrumen administrasi mengajar dan dokumen <em>Best Practice</em> secara berkala. (Instruksi penggunaan sistem persis seperti yang dijelaskan pada BAB 11.2 dan 11.3).</p>
+
+    <h2>12.5 Rapor AKFI & Survei</h2>
+    <p>Penilaian kinerja AKFI Guru Tahfidz dan pengisian Survei Kepala Sekolah dapat diakses melalui portal masing-masing dengan antarmuka yang sama seperti pada BAB 11.5 dan 11.6.</p>
+</div>
+
+<div class="page-break"></div>
+<div class="chapter">
+    <div class="chapter-header">
+        <h1>BAB 13 — Koordinator Tahfidz</h1>
+        <p>Pengelola Program Al-Qur'an Unit Sekolah</p>
+    </div>
+
+    <h2>13.1 Halaqah Siswa (/tahfidz/halaqah-siswa)</h2>
+    <p>Koordinator Tahfidz bertugas untuk mendistribusikan seluruh santri ke dalam kelompok-kelompok halaqah dan memploting guru pembimbing untuk setiap kelompok tersebut.</p>
+
+    <h3>Langkah-langkah Membentuk Halaqah:</h3>
+    <ol class="steps">
+        <li>Buka menu <strong>Manajemen Tahfidz</strong> > <strong>Data Halaqah</strong>.</li>
+        <li>Klik tombol <strong>Buat Halaqah Baru</strong>.</li>
+        <li>Beri nama halaqah (misal: Halaqah Abu Bakar, atau Kelas 7A-1).</li>
+        <li>Pilih satu nama <strong>Guru Tahfidz</strong> yang akan menjadi penanggung jawab.</li>
+        <li>Simpan data halaqah.</li>
+        <li>Selanjutnya, buka detail Halaqah tersebut dan klik <strong>Tambah Santri</strong>.</li>
+        <li>Pilih siswa-siswa dari daftar siswa unit (bisa menggunakan fitur bulk-select / checklist ganda).</li>
+        <li>Klik <strong>Masukkan ke Halaqah</strong>. Siswa otomatis berada dalam pengawasan absensi dan mutaba'ah guru yang bersangkutan.</li>
+    </ol>
+
+    <h2>13.2 Target Capaian Tahfidz (/tahfidz/target-siswa)</h2>
+    <p>Untuk menstandarkan kurikulum Al-Qur'an di sekolah, Koordinator wajib mengatur target hafalan per jenjang dan per semester dalam satuan halaman, baris, maupun juz.</p>
+
+    <h3>Langkah-langkah Setting Target:</h3>
+    <ol class="steps">
+        <li>Masuk ke menu <strong>Manajemen Tahfidz</strong> > <strong>Target Semester</strong>.</li>
+        <li>Pilih Jenjang/Kelas (Misal: Kelas 7).</li>
+        <li>Pilih Semester (Ganjil/Genap).</li>
+        <li>Masukkan target kuantitatif (contoh: 30 halaman atau setara 1,5 Juz).</li>
+        <li>Klik <strong>Simpan Target</strong>. Data ini akan menjadi acuan bagi <em>progress bar</em> pada dashboard rapor capaian santri (berapa persen persentase capaian mereka terhadap target ini).</li>
+    </ol>
+
+    <h2>13.3 Capaian & Rapor Tahfidz (/tahfidz/rekap-siswa)</h2>
+    <p>Fitur monitoring komprehensif bagi koordinator untuk mengevaluasi keberhasilan program tahfidz di semua halaqah.</p>
+
+    <h3>Langkah-langkah Melihat Rekap dan Mencetak Rapor Tahfidz:</h3>
+    <ol class="steps">
+        <li>Akses menu <strong>Laporan Tahfidz</strong> > <strong>Rekap Capaian</strong>.</li>
+        <li>Gunakan filter <strong>Kelas</strong> atau <strong>Halaqah</strong> untuk mempersempit jangkauan data.</li>
+        <li>Tabel akan menampilkan status akumulatif setiap siswa yang dikategorikan ke dalam 3 warna status:
+            <ul>
+                <li><span style="color: green; font-weight: bold;">Selesai (Hijau)</span>: Santri telah memenuhi target hafalan 100%.</li>
+                <li><span style="color: orange; font-weight: bold;">Dalam Proses (Kuning)</span>: Santri telah mulai setor namun belum mencapai target minimal.</li>
+                <li><span style="color: red; font-weight: bold;">Belum Mulai (Merah)</span>: Belum ada data Ziyadah yang disetorkan sama sekali pada semester tersebut.</li>
+            </ul>
+        </li>
+        <li>Untuk mencetak, cari nama siswa lalu klik tombol <strong>Cetak Rapor Tahfidz (PDF)</strong> pada kolom aksi di sebelah kanan tabel.</li>
+    </ol>
+
+    <h2>13.4 Baseline Tahfidz 3x (/tahfidz/baseline)</h2>
+    <p>Pada awal penerimaan murid atau awal tahun ajaran baru, Koordinator dapat melakukan tes kompetensi dasar hafalan Al-Qur'an santri yang dilakukan dalam 3 sesi pengujian untuk menghasilkan rata-rata yang objektif.</p>
+
+    <h3>Langkah-langkah Mengisi Baseline:</h3>
+    <ol class="steps">
+        <li>Buka menu <strong>Asesmen Awal</strong> > <strong>Baseline 3x</strong>.</li>
+        <li>Pilih nama siswa yang akan diuji.</li>
+        <li>Masukkan nilai pengujian untuk <strong>Uji 1</strong> (Tes Hari 1: Kualitas Bacaan).</li>
+        <li>Masukkan nilai pengujian untuk <strong>Uji 2</strong> (Tes Hari 2: Jumlah Halaman Hafalan Kuat).</li>
+        <li>Masukkan nilai pengujian untuk <strong>Uji 3</strong> (Tes Hari 3: Kekuatan Tajwid).</li>
+        <li>Sistem akan memproses rata-rata nilai baseline secara otomatis dan mencatatnya sebagai 'titik mula' (<em>starting point</em>) hafalan santri di sistem MASEKO.</li>
+    </ol>
+</div>
+
+<div class="page-break"></div>
+<div class="chapter">
+    <div class="chapter-header">
+        <h1>BAB 14 — Tutor Siswa</h1>
+        <p>Penguji Hafalan Al-Qur'an Santri & Guru</p>
+    </div>
+
+    <h2>14.1 Ujian Tahfidz Siswa (/tahfidz/ujian-antrean)</h2>
+    <p>Tutor Siswa (biasanya guru tahfidz senior bersertifikasi) memiliki kewenangan khusus untuk menguji kelulusan santri dalam ujian kenaikan Juz (Tasmi').</p>
+
+    <h3>Langkah-langkah Menilai Ujian Tasmi':</h3>
+    <ol class="steps">
+        <li>Akses menu <strong>Ujian Tahfidz</strong> > <strong>Antrean Ujian (Queue)</strong>.</li>
+        <li>Pada halaman ini, terlihat daftar santri yang sebelumnya telah diajukan ujiannya oleh guru tahfidz halaqah masing-masing.</li>
+        <li>Klik tombol <strong>Mulai Ujian</strong> pada salah satu santri.</li>
+        <li>Santri melantunkan bacaan hafalannya (sekali duduk 1 Juz). Di saat bersamaan, Tutor mengisi skor rubrik penilaian pada aplikasi. Komponen yang dinilai meliputi:
+            <ul>
+                <li><strong>Kelancaran (Hifzh)</strong></li>
+                <li><strong>Hukum Tajwid</strong></li>
+                <li><strong>Fashahah & Makharijul Huruf</strong></li>
+            </ul>
+        </li>
+        <li>Berdasarkan akumulasi skor, tentukan status kelulusan: Pilih <strong>LULUS</strong> jika memenuhi standar, atau <strong>REMEDIAL</strong> jika banyak kesalahan.</li>
+        <li>Jika status LULUS diberikan, sistem akan memunculkan tombol <strong>Cetak Syahadah</strong>. Klik tombol ini untuk langsung mencetak e-sertifikat (Syahadah) tahfidz yang resmi atas nama siswa.</li>
+    </ol>
+    <div class="info-box tip">
+        <strong>Tips Penilaian:</strong> Catat letak-letak kesalahan ayat (jalli maupun khafi) pada kolom <em>catatan penguji</em> agar siswa bisa memperbaikinya walau telah dinyatakan lulus.
+    </div>
+
+    <h2>14.2 Nilai Hafalan Guru (/tahfidz/guru-nilai)</h2>
+    <p>Di lingkungan Yayasan, para guru (baik guru mapel maupun walas) juga diwajibkan memiliki program hafalan khusus yang diuji oleh Tutor. Fitur ini memfasilitasi penilaian tahfidz antar-guru.</p>
+
+    <h3>Langkah-langkah Menilai Hafalan Guru:</h3>
+    <ol class="steps">
+        <li>Buka menu <strong>Ujian Tahfidz</strong> > <strong>Penilaian Hafalan Guru</strong>.</li>
+        <li>Pilih nama Guru sejawat yang mendaftar untuk ujian hafalan.</li>
+        <li>Isi form ujian yang memuat formasi nilai Ziyadah dan Muraja'ah layaknya rubrik ujian santri.</li>
+        <li>Klik <strong>Simpan Nilai Guru</strong>. Nilai ini menjadi salah satu komponen pembina keislaman dalam rapor evaluasi HRD/Yayasan bagi guru tersebut.</li>
+    </ol>
+</div>
+<div class="page-break"></div>
+<div class="chapter">
+  <div class="chapter-header">
+    <h1>BAB 15 — Tutor Sebaya Guru</h1>
+    <p>Pembimbing Hafalan Al-Qur'an Sesama Guru</p>
+  </div>
+
+  <h2>15.1 Halaqah Guru (/tahfidz/halaqah-guru)</h2>
+  <p>Fitur ini digunakan untuk mengelola kelompok (halaqah) hafalan Al-Qur'an khusus bagi para guru, dimana pembimbingnya adalah sesama rekan guru (tutor sebaya). Sistem pencatatan ini membantu memonitor hafalan secara berkelompok.</p>
+  <ol class="steps">
+    <li>Buka menu <strong>Tahfidz</strong>, lalu pilih <strong>Halaqah Guru</strong>.</li>
+    <li>Klik tombol <strong>Tambah Halaqah</strong>.</li>
+    <li>Isi nama kelompok halaqah (misal: "Halaqah Asy-Syafi'i"), lalu pilih nama <strong>Tutor</strong> dari daftar guru yang tersedia.</li>
+    <li>Simpan data halaqah tersebut.</li>
+    <li>Klik pada halaqah yang baru dibuat, lalu pilih <strong>Tambah Anggota</strong> untuk memasukkan guru-guru yang akan dibimbing oleh tutor tersebut.</li>
+  </ol>
+  <div class="info-box tip">
+    <strong>Tips:</strong> Pastikan pemilihan anggota halaqah sesuai dengan kesepakatan jadwal pembinaan agar proses setoran hafalan dapat berjalan lancar.
+  </div>
+
+  <h2>15.2 Target Hafalan Guru (/tahfidz/guru-target)</h2>
+  <p>Setiap guru diwajibkan memiliki target hafalan Al-Qur'an per semester yang harus dicapai. Tutor bertugas untuk melakukan penyetelan target ini pada anggota halaqahnya.</p>
+  <ol class="steps">
+    <li>Masuk ke menu <strong>Tahfidz</strong> &gt; <strong>Target Hafalan Guru</strong>.</li>
+    <li>Pilih nama guru (anggota halaqah) yang ingin diset targetnya.</li>
+    <li>Tentukan rentang Juz yang menjadi target hafalan pada semester berjalan (misalnya Juz 30 dan 29).</li>
+    <li>Klik <strong>Simpan Target</strong>.</li>
+  </ol>
+  <div class="info-box warning">
+    <strong>Perhatian:</strong> Target hafalan ini akan menjadi indikator capaian kinerja guru yang bersangkutan pada penilaian AKFI.
+  </div>
+
+  <h2>15.3 Input Nilai Guru (/tahfidz/guru-nilai)</h2>
+  <p>Tutor sebaya akan melakukan evaluasi berkala terhadap setoran hafalan dari guru-guru bimbingannya dan memasukkan nilai secara berkala ke dalam sistem.</p>
+  <ol class="steps">
+    <li>Akses menu <strong>Tahfidz</strong>, kemudian pilih <strong>Input Nilai Guru</strong>.</li>
+    <li>Pilih anggota halaqah yang akan dievaluasi.</li>
+    <li>Masukkan catatan surat/juz yang disetorkan, jumlah halaman, serta nilai kualitas bacaan (Tajwid, Kelancaran, dan Makhraj).</li>
+    <li>Tambahkan catatan khusus atau motivasi pada kolom keterangan jika diperlukan.</li>
+    <li>Klik <strong>Simpan Penilaian</strong>. Evaluasi ini akan terekap secara otomatis ke dalam profil pegawai.</li>
+  </ol>
+</div>
+
+<div class="page-break"></div>
+<div class="chapter">
+  <div class="chapter-header">
+    <h1>BAB 16 — Tata Usaha Keuangan</h1>
+    <p>Administrasi Keuangan &amp; Sarana Prasarana Sekolah</p>
+  </div>
+
+  <h2>16.1 Input Tagihan &amp; SPP (/tagihan/manage)</h2>
+  <p>Bagian Tata Usaha (TU) Keuangan bertanggung jawab mengelola kewajiban pembayaran siswa, meliputi SPP, uang gedung, kegiatan, dan biaya lainnya. Sistem mengakomodasi input manual maupun secara massal.</p>
+  <ol class="steps">
+    <li>Untuk input satuan: Buka menu <strong>Tagihan &amp; Pembayaran</strong>, klik <strong>Input Tagihan</strong>. Cari nama siswa, masukkan jenis tagihan, nominal, dan bulan jatuh tempo. Klik <strong>Simpan</strong>.</li>
+    <li>Untuk import massal: Pada halaman daftar tagihan, klik tombol <strong>Download Template Excel</strong>.</li>
+    <li>Isi template Excel tersebut sesuai format dengan data kewajiban seluruh siswa yang bersangkutan.</li>
+    <li>Kembali ke sistem, klik <strong>Import Excel</strong>, unggah file yang telah diisi, lalu sistem akan memproses seluruh tagihan secara otomatis.</li>
+    <li>Status tagihan (Lunas/Belum Lunas) dapat dipantau langsung pada dashboard TU.</li>
+  </ol>
+
+  <h2>16.2 Ajukan Penagihan (/tagihan/rekomendasi)</h2>
+  <p>Jika terdapat siswa yang menunggak, TU perlu mengajukan rekomendasi penagihan kepada Kepala Sekolah (KS) untuk mendapatkan persetujuan sebelum surat tagihan resmi diterbitkan.</p>
+  <ol class="steps">
+    <li>Akses menu <strong>Tagihan</strong> &gt; <strong>Ajukan Penagihan</strong>.</li>
+    <li>Sistem akan menampilkan daftar siswa yang memiliki tunggakan beserta rincian jumlahnya.</li>
+    <li>Centang (checklist) nama-nama siswa yang akan direkomendasikan untuk ditagih, atau klik tombol <em>Pilih Semua</em> untuk mengajukan penagihan massal.</li>
+    <li>Klik tombol <strong>Ajukan Rekomendasi ke KS</strong>. Data akan masuk ke inbox persetujuan Kepala Sekolah.</li>
+  </ol>
+
+  <h2>16.3 Upload Dokumen TU (/administrasi/tu)</h2>
+  <p>Petugas Tata Usaha wajib mengunggah 10 dokumen administrasi rutin yang nantinya akan direview oleh Kepala Sekolah sebagai bagian dari penilaian kinerja.</p>
+  <p>Daftar dokumen yang harus diunggah:</p>
+  <ul>
+    <li>(1) Buku Agenda/Surat Masuk</li>
+    <li>(2) Buku Agenda/Surat Keluar</li>
+    <li>(3) Buku Inventaris Barang</li>
+    <li>(4) Buku Kas Umum</li>
+    <li>(5) Buku Tabungan Siswa</li>
+    <li>(6) Daftar Gaji Pegawai</li>
+    <li>(7) Laporan Keuangan Bulanan</li>
+    <li>(8) Buku Ekspedisi</li>
+    <li>(9) Arsip SK &amp; Surat Penting</li>
+    <li>(10) Laporan Sarana Prasarana</li>
+  </ul>
+  <ol class="steps">
+    <li>Masuk ke menu <strong>Administrasi</strong> &gt; <strong>Dokumen TU</strong>.</li>
+    <li>Pilih jenis dokumen yang ingin diunggah dari daftar.</li>
+    <li>Pilih file berformat PDF/Excel/Word dari komputer, berikan keterangan bila perlu, lalu klik <strong>Upload</strong>.</li>
+    <li>Tunggu notifikasi approval atau revisi dari Kepala Sekolah terkait dokumen yang sudah diunggah.</li>
+  </ol>
+
+  <h2>16.4 Checklist Braja (/checklist/braja)</h2>
+  <p>TU juga bertugas memeriksa sarana, prasarana, dan layanan barang/jasa (braja) secara berkala menggunakan instrumen checklist digital.</p>
+  <ol class="steps">
+    <li>Buka menu <strong>Checklist &amp; Inspeksi</strong>, pilih <strong>Checklist Braja</strong>.</li>
+    <li>Pilih lokasi/ruangan atau fasilitas yang akan diinspeksi.</li>
+    <li>Isi borang penilaian kondisi (Baik, Rusak Ringan, Rusak Berat) beserta bukti foto jika ditemukan masalah.</li>
+    <li>Simpan hasil checklist. Laporan akan otomatis terarsip dan dapat ditindaklanjuti untuk perbaikan.</li>
+  </ol>
+
+  <h2>16.5 Rapor AKFI Saya (/akfi/pribadi)</h2>
+  <p>Laporan pencapaian kinerja individu sebagai pegawai Tata Usaha.</p>
+  <ol class="steps">
+    <li>Akses <strong>Menu Profil</strong> &gt; <strong>Rapor AKFI Saya</strong>.</li>
+    <li>Lakukan self-assessment atau penilaian mandiri pada periode yang ditentukan.</li>
+    <li>Setelah diverifikasi atasan, Anda dapat melihat hasil akhir rapor AKFI Anda secara utuh.</li>
+  </ol>
+</div>
+
+<div class="page-break"></div>
+<div class="chapter">
+  <div class="chapter-header">
+    <h1>BAB 17 — Cleaning Service</h1>
+    <p>Petugas Kebersihan Lingkungan Sekolah</p>
+  </div>
+
+  <h2>17.1 Checklist Kebersihan (/checklist/cs)</h2>
+  <p>Sistem inspeksi kebersihan terbagi berdasarkan zona wilayah sekolah dengan frekuensi laporan harian, mingguan, dan bulanan.</p>
+  <ol class="steps">
+    <li>Masuk ke menu <strong>Checklist</strong> &gt; <strong>Kebersihan Lingkungan (CS)</strong>.</li>
+    <li>Pilih <strong>Checklist Harian</strong> untuk laporan tugas rutin (misal: menyapu, mengepel, membuang sampah). Centang indikator yang sudah diselesaikan.</li>
+    <li>Untuk akhir pekan, pilih <strong>Checklist Mingguan</strong> yang berfokus pada deep cleaning (seperti: membersihkan kaca jendala luar, menyikat kamar mandi).</li>
+    <li>Untuk evaluasi zona area yang menjadi tanggung jawab Anda, pilih <strong>Inspeksi Bulanan</strong> dan lampirkan foto area.</li>
+    <li>Klik <strong>Kirim Laporan</strong> setelah semua borang terisi.</li>
+  </ol>
+  <div class="info-box tip">
+    <strong>Tips:</strong> Pembagian zona ini memudahkan pelacakan tanggung jawab kebersihan antar petugas.
+  </div>
+
+  <h2>17.2 Rapor AKFI Saya (/akfi/pribadi)</h2>
+  <p>Memantau hasil kinerja kedisiplinan dan kelengkapan checklist harian.</p>
+  <ol class="steps">
+    <li>Buka menu <strong>Rapor AKFI Saya</strong> dari panel dashboard.</li>
+    <li>Lihat rangkuman poin dedikasi, kehadiran, dan penilaian sikap yang telah diberikan atasan/manajemen.</li>
+  </ol>
+</div>
+
+<div class="page-break"></div>
+<div class="chapter">
+  <div class="chapter-header">
+    <h1>BAB 18 — Petugas Keamanan (Security)</h1>
+    <p>Pengamanan &amp; Ketertiban Lingkungan Sekolah</p>
+  </div>
+
+  <h2>18.1 Checklist Harian (/checklist/security)</h2>
+  <p>Pemeriksaan rutin setiap awal dan akhir shift pengamanan.</p>
+  <ol class="steps">
+    <li>Buka menu <strong>Checklist Keamanan</strong>.</li>
+    <li>Pilih instrumen <strong>Harian</strong>.</li>
+    <li>Periksa dan catat kondisi gerbang, pos satpam, pagar keliling, CCTV, dan fasilitas keamanan lainnya. Posisikan status pada "Aman" atau "Perlu Perbaikan".</li>
+    <li>Simpan checklist yang telah diisi.</li>
+  </ol>
+
+  <h2>18.2 Log Patroli (/security/patrol)</h2>
+  <p>Digunakan untuk merekam aktivitas keliling (patroli) pada jam-jam tertentu dengan catatan waktu yang akurat.</p>
+  <ol class="steps">
+    <li>Akses <strong>Buku Patroli</strong> di menu Security.</li>
+    <li>Klik <strong>Tambah Log Patroli</strong>.</li>
+    <li>Catat lokasi titik patroli (misal: "Area Asrama Putra"), jam patroli, dan laporan situasi di area tersebut.</li>
+    <li>Lampirkan foto situasi bila diperlukan, lalu klik <strong>Simpan Log</strong>. Timestamp akan otomatis terekam oleh sistem.</li>
+  </ol>
+
+  <h2>18.3 Buku Insiden / Kejadian (/security/incidents)</h2>
+  <p>Pencatatan laporan keadaan darurat, kehilangan, atau pelanggaran disiplin berat yang ditemukan oleh petugas keamanan.</p>
+  <ol class="steps">
+    <li>Buka <strong>Buku Insiden</strong>, klik <strong>Laporkan Kejadian Baru</strong>.</li>
+    <li>Tuliskan judul/jenis insiden, waktu kejadian, serta kronologi lengkap kejadian tersebut.</li>
+    <li>Masukkan nama-nama pihak yang terlibat (jika ada).</li>
+    <li>Unggah foto bukti atau dokumen pendukung, lalu klik <strong>Kirim Laporan Insiden</strong> agar dapat segera direspons oleh pihak manajemen atau Kepala Sekolah.</li>
+  </ol>
+  <div class="info-box warning">
+    <strong>Penting:</strong> Laporan insiden ini bersifat konfidensial dan hanya dapat diakses oleh Security, Kepala Sekolah, serta Direktur/Yayasan.
+  </div>
+
+  <h2>18.4 Rapor AKFI Saya (/akfi/pribadi)</h2>
+  <p>Laporan penilaian kedisiplinan dan kesigapan petugas keamanan.</p>
+  <ol class="steps">
+    <li>Masuk ke <strong>Menu Profil</strong> &gt; <strong>Rapor AKFI</strong>.</li>
+    <li>Lihat statistik kinerja selama satu semester berdasarkan laporan dari Kepala Sekolah dan instrumen yang ada.</li>
+  </ol>
+</div>
+
+<div class="page-break"></div>
+<div class="chapter">
+  <div class="chapter-header">
+    <h1>BAB 19 — Panitia Lomba</h1>
+    <p>Pencatat Prestasi Kompetisi Siswa</p>
+  </div>
+
+  <h2>19.1 Input Juara Lomba (/prestasi/panitia)</h2>
+  <p>Fitur untuk mencatat dan mengarsipkan prestasi siswa pada kompetisi resmi seperti OSN, O2SN, FLS2N, MTQ, dan lain-lain.</p>
+  <ol class="steps">
+    <li>Akses menu <strong>Prestasi &amp; Penghargaan</strong>, pilih <strong>Input Juara Lomba</strong>.</li>
+    <li>Klik tombol <strong>Tambah Prestasi</strong>.</li>
+    <li>Isi nama kompetisi secara lengkap pada kolom "Nama Kompetisi".</li>
+    <li>Pilih tingkat perlombaan pada dropdown: Kabupaten/Kota, Provinsi, Nasional, atau Internasional.</li>
+    <li>Cari dan pilih nama siswa yang memperoleh penghargaan.</li>
+    <li>Masukkan capaian/peringkat juara (Juara 1, Medali Emas, Harapan 2, dll).</li>
+    <li>Unggah scan atau foto Piagam/Sertifikat pada kolom yang disediakan (format PDF/JPG).</li>
+    <li>Klik <strong>Simpan Prestasi</strong>. Data ini akan masuk ke dalam Rapor Siswa sebagai nilai tambah akademik.</li>
+  </ol>
+</div>
+
+<div class="page-break"></div>
+<div class="chapter">
+  <div class="chapter-header">
+    <h1>BAB 20 — Siswa (Santri SMP/SMA)</h1>
+    <p>Evaluasi Pembelajaran oleh Peserta Didik</p>
+  </div>
+
+  <h2>20.1 Survei Pembelajaran (/survey/siswa)</h2>
+  <p>Siswa dilibatkan untuk memberikan penilaian (feedback) terhadap proses belajar mengajar di kelas secara objektif. Survei ini bersifat anonim guna menjaga kenyamanan siswa.</p>
+  <ol class="steps">
+    <li>Siswa login menggunakan NISN/Username siswa.</li>
+    <li>Buka menu <strong>Survei &amp; Evaluasi</strong> &gt; <strong>Survei Pembelajaran</strong>.</li>
+    <li>Pilih guru mata pelajaran yang akan dievaluasi (sistem akan menampilkan daftar guru yang mengajar di kelas siswa tersebut).</li>
+    <li>Isi instrumen kuesioner dengan jujur dengan memberikan rating dan komentar jika perlu.</li>
+    <li>Klik <strong>Kirim Survei</strong>. Hasil kuesioner ini akan diolah oleh Waka Kurikulum sebagai bahan evaluasi guru.</li>
+  </ol>
+</div>
+
+<div class="page-break"></div>
+<div class="chapter">
+  <div class="chapter-header">
+    <h1>BAB 21 — Orang Tua / Wali Santri</h1>
+    <p>Portal Informasi Akademik &amp; Keuangan Ananda</p>
+  </div>
+
+  <h2>21.1 Login dengan Nomor KK</h2>
+  <p>Sistem MASEKO mempermudah orang tua yang memiliki beberapa anak di unit sekolah Yayasan Islam Al Kahfi yang berbeda (misal: anak pertama di SMA, anak kedua di SMP). Orang tua cukup login menggunakan <strong>Nomor Kartu Keluarga (No. KK)</strong> sehingga semua data anak otomatis terhubung dalam satu dasbor.</p>
+  <ol class="steps">
+    <li>Buka portal MASEKO untuk Orang Tua.</li>
+    <li>Pada halaman login, masukkan <strong>Nomor KK</strong> (16 digit) sebagai username dan kata sandi yang telah didaftarkan.</li>
+    <li>Setelah login berhasil, Anda akan melihat beranda yang menampilkan daftar nama seluruh anak Anda yang bersekolah di Yayasan Islam Al Kahfi.</li>
+  </ol>
+
+  <h2>21.2 Unduh Rapor Anak (/parent/rapor)</h2>
+  <p>Orang tua dapat memantau perkembangan akademik dan hapalan Al-Qur'an (Tahfidz) anak secara berkala dengan mengunduh rapor secara mandiri.</p>
+  <ol class="steps">
+    <li>Pada halaman beranda, pilih profil salah satu anak.</li>
+    <li>Klik tab/menu <strong>Rapor Akademik</strong>.</li>
+    <li>Sistem akan menyajikan opsi dokumen:
+      <ul>
+        <li><strong>Rapor Bulanan:</strong> Menampilkan hasil evaluasi per bulan dari guru mapel.</li>
+        <li><strong>Rapor Tahfidz:</strong> Menampilkan perkembangan hafalan dan lembar sertifikat Al-Qur'an (Syahadah).</li>
+        <li><strong>Rapor Gabungan:</strong> Menggabungkan nilai akademik dan tahfidz dalam satu dokumen cetak.</li>
+      </ul>
+    </li>
+    <li>Klik tombol <strong>Download PDF</strong> pada dokumen yang diinginkan.</li>
+  </ol>
+
+  <h2>21.3 Tagihan &amp; Rekening SPP (/parent/bills)</h2>
+  <p>Fitur ini mempermudah orang tua mengecek kewajiban pembayaran secara transparan dan real-time.</p>
+  <ol class="steps">
+    <li>Pilih anak dari dasbor, lalu masuk ke menu <strong>Info Tagihan</strong>.</li>
+    <li>Anda dapat melihat daftar rincian tagihan (lunas maupun menunggak).</li>
+    <li>Cek nomor rekening resmi sekolah (biasanya Bank Syariah Indonesia / BSI) yang tertera pada halaman tersebut.</li>
+    <li>Jika terdapat surat peringatan tagihan resmi dari Tata Usaha/Kepala Sekolah, Anda dapat mengunduh dokumen surat tersebut langsung dari halaman ini.</li>
+  </ol>
+  <div class="info-box tip">
+    <strong>Perhatian:</strong> Lakukan transfer hanya ke rekening resmi unit yang tercantum di aplikasi. Simpan bukti transfer bila diperlukan oleh pihak Tata Usaha.
+  </div>
+
+  <h2>21.4 Survei Kepuasan (/survey/ortu)</h2>
+  <p>Yayasan mengadakan survei kepuasan pelanggan secara berkala untuk mengevaluasi mutu pendidikan dan kualitas layanan administrasi.</p>
+  <ol class="steps">
+    <li>Buka menu <strong>Survei Orang Tua</strong>.</li>
+    <li>Sistem akan menampilkan 53 butir instrumen kuesioner terkait kualitas layanan pendidikan, sarana, dan keamanan.</li>
+    <li>Isi setiap poin pertanyaan (biasanya dengan skala nilai 1 s.d. 4 atau 1 s.d. 5).</li>
+    <li>Tinggalkan kritik, saran, atau masukan pada kolom isian bebas di bagian akhir kuesioner.</li>
+    <li>Klik <strong>Kirim Survei</strong>. Masukan Anda sangat berarti bagi pengembangan sekolah ke depannya.</li>
+  </ol>
+</div>
+
+<div class="page-break"></div>
+<div class="chapter">
+  <div class="chapter-header">
+    <h1>Lampiran — Alur Kerja Sistem MASEKO</h1>
+    <p>10 Diagram Alur Proses Utama</p>
+  </div>
+
+  <h2>Alur 1: Penilaian AKFI (Assessment Kinerja Fungsional Individual)</h2>
+  <p>Proses siklus penilaian indikator capaian kinerja secara sistematis mulai dari konfigurasi bobot oleh Yayasan hingga pengesahan dan penerbitan rapor AKFI pegawai.</p>
+  
+  <table border="1" cellpadding="5" cellspacing="0" style="width:100%; margin-bottom: 20px;">
+    <tr>
+      <th style="width:30%;">Aktor</th>
+      <th>Peran</th>
+    </tr>
+    <tr>
+      <td>Operator Yayasan</td>
+      <td>Mengatur Template Bobot (65% Kinerja + 35% Sikap)</td>
+    </tr>
+    <tr>
+      <td>Guru/Staf</td>
+      <td>Mengisi Self Assessment</td>
+    </tr>
+    <tr>
+      <td>Kepala Sekolah</td>
+      <td>Menilai Sikap bawahan 35%</td>
+    </tr>
+    <tr>
+      <td>Deputi / Direktur Pendidikan</td>
+      <td>Menilai Sikap KS dan Final Approval</td>
+    </tr>
+  </table>
+
+  <div class="workflow-vertical">
+    <div class="wf-node actor">Operator Yayasan</div>
+    <div class="wf-arrow">▼</div>
+    <div class="wf-node">Setup Template (65% Kinerja + 35% Sikap)</div>
+    <div class="wf-arrow">▼</div>
+    <div class="wf-node">Data Kinerja otomatis terkumpul (supervisi, kehadiran, administrasi, tahfidz)</div>
+    <div class="wf-arrow">▼</div>
+    <div class="wf-node actor">Guru/Staf</div>
+    <div class="wf-arrow">▼</div>
+    <div class="wf-node">Mengisi Self Assessment (Penilaian Mandiri)</div>
+    <div class="wf-arrow">▼</div>
+    <div class="wf-node actor">Kepala Sekolah (atau Deputi untuk KS)</div>
+    <div class="wf-arrow">▼</div>
+    <div class="wf-node">Menilai 35% Komponen Sikap Bawahan</div>
+    <div class="wf-arrow">▼</div>
+    <div class="wf-node">Nilai AKFI Terhitung Otomatis</div>
+    <div class="wf-arrow">▼</div>
+    <div class="wf-node actor">Direktur Pendidikan</div>
+    <div class="wf-arrow">▼</div>
+    <div class="wf-node">Approval HR</div>
+    <div class="wf-arrow">▼</div>
+    <div class="wf-node output">Rapor AKFI Terbit</div>
+  </div>
+  <p><strong>Penjelasan:</strong> Bobot utama berasal dari rekaman sistem secara real-time. Bagian manajerial melakukan evaluasi subjektif (sikap), setelah disetujui direktur maka rapor AKFI akan dirilis untuk pegawai bersangkutan.</p>
+
+  <hr style="margin: 40px 0;">
+
+  <h2>Alur 2: Program Tahfidz Al-Qur'an Santri</h2>
+  <p>Alur pembinaan hafalan Al-Qur'an yang dikelola oleh Koordinator dan Guru, berujung pada ujian tasmi' untuk mendapatkan syahadah.</p>
+  
+  <table border="1" cellpadding="5" cellspacing="0" style="width:100%; margin-bottom: 20px;">
+    <tr>
+      <th style="width:30%;">Aktor</th>
+      <th>Peran</th>
+    </tr>
+    <tr>
+      <td>Koordinator Tahfidz</td>
+      <td>Membentuk Halaqah, mengatur Target &amp; Baseline</td>
+    </tr>
+    <tr>
+      <td>Guru Tahfidz</td>
+      <td>Menerima setoran, mengajukan Ujian Tasmi'</td>
+    </tr>
+    <tr>
+      <td>Tutor Siswa (Penguji)</td>
+      <td>Menguji hafalan Santri pada fase Tasmi'</td>
+    </tr>
+    <tr>
+      <td>Santri</td>
+      <td>Menghafal dan menyetorkan target Juz</td>
+    </tr>
+  </table>
+
+  <div class="workflow-vertical">
+    <div class="wf-node actor">Koordinator Tahfidz</div>
+    <div class="wf-arrow">▼</div>
+    <div class="wf-node">Plot Halaqah Siswa &amp; Set Target Capaian</div>
+    <div class="wf-arrow">▼</div>
+    <div class="wf-node">Lakukan Baseline Hafalan Awal 3x</div>
+    <div class="wf-arrow">▼</div>
+    <div class="wf-node actor">Guru Tahfidz</div>
+    <div class="wf-arrow">▼</div>
+    <div class="wf-node">Input Setoran Harian Santri</div>
+    <div class="wf-arrow">▼</div>
+    <div class="wf-node actor">Santri</div>
+    <div class="wf-arrow">▼</div>
+    <div class="wf-node">Capai Target Hafalan (Juz)</div>
+    <div class="wf-arrow">▼</div>
+    <div class="wf-node actor">Guru Tahfidz</div>
+    <div class="wf-arrow">▼</div>
+    <div class="wf-node">Ajukan Ujian ke Tutor (Tasmi')</div>
+    <div class="wf-arrow">▼</div>
+    <div class="wf-node actor">Tutor Siswa</div>
+    <div class="wf-arrow">▼</div>
+    <div class="wf-node">Menguji Tasmi' (Lulus?)</div>
+    <div class="wf-arrow">▼</div>
+    <div class="wf-node output">Ya: Sertifikat Syahadah &amp; Rapor Tahfidz Terbit</div>
+  </div>
+  <p><strong>Penjelasan:</strong> Dimulai dari penentuan baseline kemampuan menghafal siswa, kemudian setoran berjalan secara reguler. Jika telah mengkhatamkan target, akan ada ujian kualifikasi silang (Tasmi') untuk memastikan kelancaran.</p>
+
+  <hr style="margin: 40px 0;">
+
+  <h2>Alur 3: Administrasi Guru &amp; Tenaga Kependidikan</h2>
+  <p>Mekanisme kelengkapan dokumen pendukung profesi pendidikan sebagai wujud pertanggungjawaban administratif pegawai dan guru terhadap institusi sekolah.</p>
+
+  <table border="1" cellpadding="5" cellspacing="0" style="width:100%; margin-bottom: 20px;">
+    <tr>
+      <th style="width:30%;">Aktor</th>
+      <th>Peran</th>
+    </tr>
+    <tr>
+      <td>Waka Kurikulum</td>
+      <td>Mengatur jadwal/deadline pengumpulan Dokumen</td>
+    </tr>
+    <tr>
+      <td>Guru / Tata Usaha</td>
+      <td>Menyiapkan dan Mengunggah Dokumen</td>
+    </tr>
+    <tr>
+      <td>Kepala Sekolah</td>
+      <td>Memeriksa, Revisi, dan Menyetujui Dokumen</td>
+    </tr>
+  </table>
+
+  <div class="workflow-vertical">
+    <div class="wf-node actor">Waka Kurikulum</div>
+    <div class="wf-arrow">▼</div>
+    <div class="wf-node">Set Deadline Pengumpulan Berkas</div>
+    <div class="wf-arrow">▼</div>
+    <div class="wf-node actor">Guru/TU</div>
+    <div class="wf-arrow">▼</div>
+    <div class="wf-node">Upload Perangkat (8 Dok. Mengajar / 10 Dok. TU / 6 Dok. Walas)</div>
+    <div class="wf-arrow">▼</div>
+    <div class="wf-node actor">Kepala Sekolah</div>
+    <div class="wf-arrow">▼</div>
+    <div class="wf-node">Review Per Kartu Guru: Approve atau Tolak (Revisi)</div>
+    <div class="wf-arrow">▼</div>
+    <div class="wf-node actor">Guru/TU</div>
+    <div class="wf-arrow">▼</div>
+    <div class="wf-node">Melakukan Revisi (Jika Ditolak) dan Upload Ulang</div>
+    <div class="wf-arrow">▼</div>
+    <div class="wf-node output">Administrasi Lengkap (Masuk Komponen Kinerja AKFI)</div>
+  </div>
+  <p><strong>Penjelasan:</strong> Proses verifikasi berjenjang memastikan bahwa setiap pegawai memiliki administrasi pendidikan/pekerjaan yang baik dan tertib.</p>
+
+  <hr style="margin: 40px 0;">
+
+  <h2>Alur 4: Administrasi Kepala Sekolah</h2>
+  <p>Laporan manajerial unit yang diwajibkan oleh Yayasan kepada para Kepala Sekolah.</p>
+
+  <table border="1" cellpadding="5" cellspacing="0" style="width:100%; margin-bottom: 20px;">
+    <tr>
+      <th style="width:30%;">Aktor</th>
+      <th>Peran</th>
+    </tr>
+    <tr>
+      <td>Kepala Sekolah</td>
+      <td>Menyiapkan Laporan RKAS, RKT, RKJM, dsb.</td>
+    </tr>
+    <tr>
+      <td>Deputi Pendidikan</td>
+      <td>Memeriksa kelayakan dan keabsahan dokumen</td>
+    </tr>
+  </table>
+
+  <div class="workflow-vertical">
+    <div class="wf-node actor">Kepala Sekolah</div>
+    <div class="wf-arrow">▼</div>
+    <div class="wf-node">Upload 18 Dokumen Manajerial (RKJM, RKT, RKAS, dsb.)</div>
+    <div class="wf-arrow">▼</div>
+    <div class="wf-node actor">Deputi Pendidikan</div>
+    <div class="wf-arrow">▼</div>
+    <div class="wf-node">Mereview Dokumen: Approve atau Tolak (Revisi)</div>
+    <div class="wf-arrow">▼</div>
+    <div class="wf-node actor">Kepala Sekolah</div>
+    <div class="wf-arrow">▼</div>
+    <div class="wf-node">Revisi jika ditolak</div>
+    <div class="wf-arrow">▼</div>
+    <div class="wf-node output">Administrasi KS Lengkap (Masuk Penilaian AKFI KS)</div>
+  </div>
+  <p><strong>Penjelasan:</strong> Sama seperti guru, Kepala Sekolah diaudit oleh tingkat manajerial Yayasan (Deputi Pendidikan) terhadap dokumen perencanaan sekolah.</p>
+
+  <hr style="margin: 40px 0;">
+
+  <h2>Alur 5: Penagihan SPP &amp; Keuangan Santri</h2>
+  <p>Sistem automasi penagihan dan surat-menyurat secara digital terkait kewajiban iuran bulanan / tahunan santri.</p>
+
+  <table border="1" cellpadding="5" cellspacing="0" style="width:100%; margin-bottom: 20px;">
+    <tr>
+      <th style="width:30%;">Aktor</th>
+      <th>Peran</th>
+    </tr>
+    <tr>
+      <td>Tata Usaha</td>
+      <td>Manajemen Data Tagihan, Import, dan Identifikasi Tunggakan</td>
+    </tr>
+    <tr>
+      <td>Kepala Sekolah</td>
+      <td>Menyetujui rekomendasi pengiriman surat tagihan</td>
+    </tr>
+    <tr>
+      <td>Orang Tua</td>
+      <td>Menerima informasi tagihan (via Email & Portal)</td>
+    </tr>
+  </table>
+
+  <div class="workflow-vertical">
+    <div class="wf-node actor">Tata Usaha</div>
+    <div class="wf-arrow">▼</div>
+    <div class="wf-node">Input Tagihan (Manual / Import Excel)</div>
+    <div class="wf-arrow">▼</div>
+    <div class="wf-node">Identifikasi Santri Menunggak</div>
+    <div class="wf-arrow">▼</div>
+    <div class="wf-node">Ajukan Rekomendasi Penagihan ke KS</div>
+    <div class="wf-arrow">▼</div>
+    <div class="wf-node actor">Kepala Sekolah</div>
+    <div class="wf-arrow">▼</div>
+    <div class="wf-node">Review &amp; Approve Penagihan</div>
+    <div class="wf-arrow">▼</div>
+    <div class="wf-node">Sistem Kirim Email Otomatis (PHPMailer)</div>
+    <div class="wf-arrow">▼</div>
+    <div class="wf-node actor">Orang Tua / KS</div>
+    <div class="wf-arrow">▼</div>
+    <div class="wf-node output">Ortu Terima Notifikasi (Portal/Email), KS Cetak Surat Fisik bila perlu</div>
+  </div>
+  <p><strong>Penjelasan:</strong> Menjaga komunikasi yang baik dengan orang tua terkait kewajiban pembayaran melalui media digital (email/portal) namun juga mengakomodir penyediaan surat tagihan tercetak secara otomatis.</p>
+
+  <hr style="margin: 40px 0;">
+
+  <h2>Alur 6: Seleksi Penerimaan Murid Baru (SPMB)</h2>
+  <p>Siklus pengelolaan pendaftar siswa baru dari awal hingga dinyatakan menjadi siswa aktif dalam sistem database MASEKO.</p>
+
+  <table border="1" cellpadding="5" cellspacing="0" style="width:100%; margin-bottom: 20px;">
+    <tr>
+      <th style="width:30%;">Aktor</th>
+      <th>Peran</th>
+    </tr>
+    <tr>
+      <td>Deputi Pendidikan</td>
+      <td>Menetapkan Target Kuota per Unit</td>
+    </tr>
+    <tr>
+      <td>Operator Sekolah</td>
+      <td>Manajemen Pendaftar, Verifikasi, dan Konversi Siswa Aktif</td>
+    </tr>
+  </table>
+
+  <div class="workflow-vertical">
+    <div class="wf-node actor">Deputi Pendidikan</div>
+    <div class="wf-arrow">▼</div>
+    <div class="wf-node">Set Target Kuota Penerimaan per Unit per Tahun Ajaran</div>
+    <div class="wf-arrow">▼</div>
+    <div class="wf-node actor">Operator Sekolah</div>
+    <div class="wf-arrow">▼</div>
+    <div class="wf-node">Input/Kelola Data Pendaftar</div>
+    <div class="wf-arrow">▼</div>
+    <div class="wf-node">Verifikasi Berkas &amp; Administrasi Pendaftaran</div>
+    <div class="wf-arrow">▼</div>
+    <div class="wf-node">Pendaftar Diterima (Status: Lulus Seleksi)</div>
+    <div class="wf-arrow">▼</div>
+    <div class="wf-node">Konversi Data Pendaftar menjadi Santri Aktif</div>
+    <div class="wf-arrow">▼</div>
+    <div class="wf-node output">Monitoring Realisasi vs Target Kuota (Dashboard Yayasan)</div>
+  </div>
+  <p><strong>Penjelasan:</strong> Mengurangi redudansi input data siswa, fitur konversi langsung mengintegrasikan biodata pendaftar SPMB menjadi profil lengkap santri di dalam database unit terkait.</p>
+
+  <hr style="margin: 40px 0;">
+
+  <h2>Alur 7: Pergantian Tahun Ajaran</h2>
+  <p>Siklus kritikal dalam memastikan perpindahan database ke tahun ajaran/semester yang baru secara aman dan disinkronkan ke seluruh unit Yayasan.</p>
+
+  <table border="1" cellpadding="5" cellspacing="0" style="width:100%; margin-bottom: 20px;">
+    <tr>
+      <th style="width:30%;">Aktor</th>
+      <th>Peran</th>
+    </tr>
+    <tr>
+      <td>Operator Yayasan</td>
+      <td>Menginisiasi dan Mengeksekusi Migrasi Data Tahun Ajaran</td>
+    </tr>
+    <tr>
+      <td>Operator Sekolah (5 Unit)</td>
+      <td>Melakukan Approval kesiapan perpindahan data</td>
+    </tr>
+  </table>
+
+  <div class="workflow-vertical">
+    <div class="wf-node actor">Operator Yayasan</div>
+    <div class="wf-arrow">▼</div>
+    <div class="wf-node">Mengajukan Pembuatan Tahun Ajaran Baru di Server Utama</div>
+    <div class="wf-arrow">▼</div>
+    <div class="wf-node">Notifikasi Migrasi Dikirim ke Seluruh (5) Unit Sekolah</div>
+    <div class="wf-arrow">▼</div>
+    <div class="wf-node actor">Operator Sekolah (Tiap Unit)</div>
+    <div class="wf-arrow">▼</div>
+    <div class="wf-node">Memberikan Approval Kesiapan (Data lama sudah beres)</div>
+    <div class="wf-arrow">▼</div>
+    <div class="wf-node actor">Operator Yayasan</div>
+    <div class="wf-arrow">▼</div>
+    <div class="wf-node">Menunggu seluruh Unit menyetujui, lalu Mengaktifkan TA Baru</div>
+    <div class="wf-arrow">▼</div>
+    <div class="wf-node output">Sistem Beroperasi Penuh di Tahun Ajaran / Semester Baru</div>
+  </div>
+  <p><strong>Penjelasan:</strong> Dengan 5 unit terpisah yang terintegrasi, MASEKO memastikan tak ada unit yang tertinggal saat pergantian periode melalui mekanisme mutual approval.</p>
+
+  <hr style="margin: 40px 0;">
+
+  <h2>Alur 8: Supervisi Pembelajaran Guru</h2>
+  <p>Sistem memfasilitasi monitoring kualitas pengajaran oleh manajemen sekolah dan diintegrasikan langsung dengan Rapor Penilaian Pegawai.</p>
+
+  <table border="1" cellpadding="5" cellspacing="0" style="width:100%; margin-bottom: 20px;">
+    <tr>
+      <th style="width:30%;">Aktor</th>
+      <th>Peran</th>
+    </tr>
+    <tr>
+      <td>Waka Kurikulum</td>
+      <td>Menjadwalkan Supervisi</td>
+    </tr>
+    <tr>
+      <td>Guru Supervisor</td>
+      <td>Mengobservasi dan memberikan nilai pada instrumen</td>
+    </tr>
+    <tr>
+      <td>Guru (Disupervisi)</td>
+      <td>Menjalankan KBM dan menerima Umpan Balik</td>
+    </tr>
+  </table>
+
+  <div class="workflow-vertical">
+    <div class="wf-node actor">Waka Kurikulum</div>
+    <div class="wf-arrow">▼</div>
+    <div class="wf-node">Susun Jadwal Supervisi (Guru, Kelas, Tanggal, Supervisor)</div>
+    <div class="wf-arrow">▼</div>
+    <div class="wf-node actor">Guru Supervisor</div>
+    <div class="wf-arrow">▼</div>
+    <div class="wf-node">Hadir di Kelas, Melakukan Observasi</div>
+    <div class="wf-arrow">▼</div>
+    <div class="wf-node">Mengisi Instrumen Supervisi (Skor Kompetensi Pedagogik/Profesional)</div>
+    <div class="wf-arrow">▼</div>
+    <div class="wf-node">Nilai Disimpan ke Sistem</div>
+    <div class="wf-arrow">▼</div>
+    <div class="wf-node output">Skor Otomatis Masuk Komponen Kinerja (AKFI) + Umpan Balik Guru</div>
+  </div>
+  <p><strong>Penjelasan:</strong> Bukti observasi tidak hanya menjadi dokumentasi sekolah, tetapi berdampak konkret terhadap nilai capaian kinerja akhir sang guru melalui integrasi AKFI.</p>
+
+  <hr style="margin: 40px 0;">
+
+  <h2>Alur 9: Mutasi &amp; Turnover Pegawai</h2>
+  <p>Mekanisme mutasi dan terminasi pegawai yang terotomasi, menjaga sistem agar tidak kotor oleh data-data (residual) yang tertinggal oleh pegawai lama.</p>
+
+  <table border="1" cellpadding="5" cellspacing="0" style="width:100%; margin-bottom: 20px;">
+    <tr>
+      <th style="width:30%;">Aktor</th>
+      <th>Peran</th>
+    </tr>
+    <tr>
+      <td>Operator Yayasan</td>
+      <td>Mengesahkan status mutasi atau pengunduran diri</td>
+    </tr>
+    <tr>
+      <td>Sistem / Database</td>
+      <td>Melakukan Data Cleanup secara Otomatis</td>
+    </tr>
+  </table>
+
+  <div class="workflow-vertical">
+    <div class="wf-node actor">Operator Yayasan</div>
+    <div class="wf-arrow">▼</div>
+    <div class="wf-node">Memproses Mutasi (Pindah Unit) atau Resign</div>
+    <div class="wf-arrow">▼</div>
+    <div class="wf-node actor">Sistem Database (Auto Cleanup)</div>
+    <div class="wf-arrow">▼</div>
+    <div class="wf-node">Hapus Penugasan Walas (Ubah Kelas menjadi "Belum Dipilih")</div>
+    <div class="wf-arrow">▼</div>
+    <div class="wf-node">Hapus Jadwal Supervisi Tertunda</div>
+    <div class="wf-arrow">▼</div>
+    <div class="wf-node">Hapus Penugasan Guru Mata Pelajaran</div>
+    <div class="wf-arrow">▼</div>
+    <div class="wf-node">Hapus Penugasan Kelompok/Halaqah Tahfidz</div>
+    <div class="wf-arrow">▼</div>
+    <div class="wf-node output">Status Pegawai Berubah (Nonaktif), Audit Trail Terjaga</div>
+  </div>
+  <p><strong>Penjelasan:</strong> Proses pembersihan ini menghindari celah keamanan (seperti akses lama) dan menjamin agar data operasional tidak terganggu oleh kekosongan posisi guru.</p>
+
+  <hr style="margin: 40px 0;">
+
+  <h2>Alur 10: Nilai Akademik &amp; Rapor Bulanan</h2>
+  <p>Rantai pencatatan nilai yang bermuara pada dihasilkannya dokumen Rapor Bulanan yang dilaporkan kepada orang tua siswa.</p>
+
+  <table border="1" cellpadding="5" cellspacing="0" style="width:100%; margin-bottom: 20px;">
+    <tr>
+      <th style="width:30%;">Aktor</th>
+      <th>Peran</th>
+    </tr>
+    <tr>
+      <td>Guru Mata Pelajaran</td>
+      <td>Memasukkan Nilai per KD dan KKM</td>
+    </tr>
+    <tr>
+      <td>Wali Kelas</td>
+      <td>Mengelola Ledger Kelas, Input Presensi, Finalisasi Rapor</td>
+    </tr>
+    <tr>
+      <td>Orang Tua</td>
+      <td>Mengunduh Dokumen Laporan</td>
+    </tr>
+  </table>
+
+  <div class="workflow-vertical">
+    <div class="wf-node actor">Guru Mapel</div>
+    <div class="wf-arrow">▼</div>
+    <div class="wf-node">Set KKM dan Input Nilai Bulanan per Siswa (berdasarkan KD)</div>
+    <div class="wf-arrow">▼</div>
+    <div class="wf-node actor">Wali Kelas</div>
+    <div class="wf-arrow">▼</div>
+    <div class="wf-node">Melihat Ledger Gabungan Seluruh Mata Pelajaran</div>
+    <div class="wf-arrow">▼</div>
+    <div class="wf-node">Input Absensi / Presensi Bulanan Siswa</div>
+    <div class="wf-arrow">▼</div>
+    <div class="wf-node">Cetak &amp; Rilis Rapor Bulanan per Siswa</div>
+    <div class="wf-arrow">▼</div>
+    <div class="wf-node output">Rapor (Akademik + Tahfidz) Siap Diunduh oleh Orang Tua di Portal</div>
+  </div>
+  <p><strong>Penjelasan:</strong> Mengubah tata kelola nilai tradisional menjadi digital secara penuh, mempermudah komunikasi laporan capaian kompetensi kepada pihak keluarga tanpa keterlambatan.</p>
+</div>
+
+<div class="doc-footer">
+  <p><strong>Buku Panduan Sistem MASEKO</strong></p>
+  <p>Yayasan Islam Al Kahfi Batam &copy; 2026</p>
+  <p>Dokumen ini bersifat internal dan rahasia. Dilarang memperbanyak tanpa izin tertulis dari Yayasan.</p>
+</div>
+
+</body>
+</html>

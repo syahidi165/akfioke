@@ -1,0 +1,72 @@
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Otomatis alihkan ke HTTPS di server hosting (kecuali localhost)
+    RewriteCond %{HTTPS} off
+    RewriteCond %{HTTP_HOST} !^localhost [NC]
+    RewriteCond %{HTTP_HOST} !^127\.0\.0\.1 [NC]
+    RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+
+    # 1. KUNCI TOTAL AKSES HTTP LANGSUNG KE FOLDER INTERNAL & STORAGE
+    RewriteRule ^(storage|config|core|app|database|scratch|vendor|bin|panduan)(\/|$) - [F,L,NC]
+    
+    # 2. BLOKIR PROBE VERSION CONTROL & FOLDER SENSITIF (Git, SVN, Bazaar, Mercurial, CVS, Terraform, etc.)
+    RewriteRule (^|/)(\.(git|svn|bzr|hg|terraform|npmrc|ftpconfig|htpasswd|env)|CVS)(/|$) - [F,L,NC]
+
+    # 3. BLOKIR EXTENSI FILE SENSITIF, BACKUP, TEMP, DUMP DI SELURUH URL (BAIK ROOT MAUPUN SUBPATH)
+    RewriteCond %{REQUEST_URI} !manifest\.json$ [NC]
+    RewriteRule (\.(sql|env|ini|log|conf|bak|backup|old|orig|copy|save|swp|swo|dmp|tfstate|tfvars|lock|md|sh|bash|exe|bin|yml|yaml|dist|dump|csv)$|~$) - [F,L,NC]
+
+    # 4. BLOKIR PROBE ADMIN TOOLS & CMS CONFIG
+    RewriteRule (phpmyadmin|adminer|wp-config|configuration\.php|settings\.php|local\.xml|upload\.php) - [F,L,NC]
+
+    # Allow existing files/directories in public assets/uploads/docs, manifest.json, sw.js
+    RewriteCond %{REQUEST_URI} (/public/(assets|uploads|docs)/|manifest\.json|sw\.js) [NC]
+    RewriteRule ^ - [L]
+
+    # Map /uploads/* directly to public/uploads/*
+    RewriteRule ^uploads/(.*)$ public/uploads/$1 [L]
+
+    RewriteCond %{REQUEST_FILENAME} -f [OR]
+    RewriteCond %{REQUEST_FILENAME} -d
+    RewriteRule ^ - [L]
+
+    RewriteRule ^(.*)$ public/index.php [L,QSA]
+</IfModule>
+
+# Blokir file sensitif dan backup secara langsung
+<FilesMatch "(\.(bak|backup|old|orig|copy|save|swp|swo|dmp|sql|env|ini|log|conf|tfvars|tfstate|csv)|~)$">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order deny,allow
+        Deny from all
+    </IfModule>
+</FilesMatch>
+
+# Blokir file konfigurasi server
+<FilesMatch "^\.(htaccess|htpasswd|ini|env|git|svn)">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order deny,allow
+        Deny from all
+    </IfModule>
+</FilesMatch>
+
+# Konfigurasi Batasan PHP (php.ini)
+<IfModule mod_php.c>
+    php_value upload_max_filesize 5M
+    php_value post_max_size 8M
+    php_value max_execution_time 120
+    php_value memory_limit 256M
+</IfModule>
+<IfModule mod_php8.c>
+    php_value upload_max_filesize 5M
+    php_value post_max_size 8M
+    php_value max_execution_time 120
+    php_value memory_limit 256M
+</IfModule>
+
