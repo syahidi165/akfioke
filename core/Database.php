@@ -15,10 +15,12 @@ class Database {
             
             try {
                 self::$instance = new PDO($dsn, $config['username'], $config['password'], $config['options']);
+                // Nonaktifkan ONLY_FULL_GROUP_BY agar kompatibel penuh dengan MySQL 8.0 di Linux VPS
+                @self::$instance->exec("SET SESSION sql_mode = (SELECT REPLACE(REPLACE(@@sql_mode, 'ONLY_FULL_GROUP_BY,', ''), ',ONLY_FULL_GROUP_BY', ''))");
             } catch (PDOException $e) {
                 // Jangan ekspos kredensial database
                 error_log("Database connection error: " . $e->getMessage());
-                die("Koneksi ke database gagal. Pastikan MySQL di XAMPP telah berjalan dan database 'akfioke_db' tersedia.");
+                die("Koneksi ke database gagal. Pastikan MySQL telah berjalan dan database '{$config['database']}' tersedia.");
             }
         }
         return self::$instance;

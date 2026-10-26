@@ -2331,7 +2331,7 @@ class MasterController extends Controller {
             $query .= "AND r.name NOT IN ('operator_yayasan', 'direktur_pendidikan', 'deputi_pendidikan', 'pembina_yayasan') ";
         }
 
-        $query .= "GROUP BY u.id ORDER BY actual_unit_id ASC, u.full_name ASC";
+        $query .= "GROUP BY u.id, u.username, u.full_name, u.email, u.phone, u.unit_id, u.is_active, u.last_login_at, e.id, e.level_posisi, e.nipy, u_unit.name, e_unit.name, e.unit_id ORDER BY actual_unit_id ASC, u.full_name ASC";
         $users = Database::fetchAll($query, $params);
 
         // Ambil daftar peran (roles)
