@@ -6,3 +6,4 @@
 !/storage/cache/.gitkeep
 !/storage/sessions/.gitkeep
 !/storage/logs/.gitkeep
+/config/*.local.php

@@ -1,6 +1,11 @@
 <?php
 // config/database.php
 
+// Jika ada konfigurasi khusus server (VPS), prioritaskan file tersebut
+if (file_exists(__DIR__ . '/database.local.php')) {
+    return require __DIR__ . '/database.local.php';
+}
+
 return [
     'driver'    => 'mysql',
     'host'      => '127.0.0.1',

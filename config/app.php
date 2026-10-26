@@ -5,6 +5,10 @@
 @ini_set('memory_limit', '256M');
 @ini_set('max_execution_time', '120');
 
+if (file_exists(__DIR__ . '/app.local.php')) {
+    return require __DIR__ . '/app.local.php';
+}
+
 return [
     'name'           => 'Manajemen Sekolah Berbasis Komputer (MASEKO)',
     'short_name'     => 'MASEKO',
