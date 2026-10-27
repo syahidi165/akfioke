@@ -1,5 +1,6 @@
 /vendor/
-/scratch/
+/scratch/*
+!/scratch/.gitkeep
 /storage/cache/*
 /storage/sessions/*
 /storage/logs/*

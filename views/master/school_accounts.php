@@ -897,19 +897,23 @@ function closeImportStaffModal() {
         <form method="POST" action="<?= $baseUrl ?>/master/employees/import" enctype="multipart/form-data" style="padding: 20px;">
             <?= CSRF::inputField() ?>
             <div style="margin-bottom: 14px;">
-                <label style="display: block; font-weight: 600; font-size: 13px; margin-bottom: 4px;">Unit Satuan Pendidikan Penempatan <span style="color:red;">*</span></label>
+                <label style="display: block; font-weight: 600; font-size: 13px; margin-bottom: 4px;">Default Unit Satuan Penempatan</label>
                 <select name="unit_id" class="form-control" style="width: 100%; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px;">
+                    <option value="0">-- Ikuti Kolom Unit di Berkas Excel (Otomatis Multi-Unit) --</option>
+                    <option value="-1" <?= ($unitFilter === -1) ? 'selected' : '' ?>>Kantor Yayasan (Lintas Unit)</option>
                     <?php foreach ($allUnits as $u): ?>
                         <option value="<?= $u['id'] ?>" <?= ($unitFilter == $u['id']) ? 'selected' : '' ?>><?= SecurityHelper::escape($u['name']) ?></option>
                     <?php endforeach; ?>
                 </select>
+                <small style="color: var(--text-muted); font-size: 11px;">Jika memilih "Ikuti Kolom Unit di Berkas Excel", sistem otomatis mencocokkan nama/kode unit pada setiap baris data pegawai.</small>
             </div>
 
             <div style="margin-bottom: 16px; font-size: 12px; line-height: 1.5; background: #f0fdf4; border: 1px solid #bbf7d0; padding: 12px; border-radius: 6px; color: #166534;">
-                <i class="fa-solid fa-shield-halved"></i> <strong>Sistem Validasi Aman Terproteksi:</strong><br>
+                <i class="fa-solid fa-shield-halved"></i> <strong>Sistem Validasi Format Terintegrasi:</strong><br>
                 1. Unduh template resmi melalui tombol <strong>Unduh Template Excel</strong>.<br>
-                2. Kolom <strong>Peran Utama (Role)</strong> dan <strong>Jenis Kelamin (L/P)</strong> dilengkapi <em>fixed dropdown otomatis</em> untuk mencegah kesalahan input peran sistem.<br>
-                3. Akun pengguna dan baris biodata pegawai akan dibuat dan ditautkan secara otomatis (Password default: <code>password123</code>).
+                2. Template mendukung pengisian <strong>Unit Satuan Tugas</strong>, <strong>Tingkat Pendidikan</strong>, dan <strong>TMT (Tanggal Mulai Tugas)</strong>.<br>
+                3. Kolom <strong>Peran Sistem (Role)</strong>, <strong>Unit Satuan</strong>, <strong>Tingkat Pendidikan</strong>, dan <strong>Jenis Kelamin (L/P)</strong> dilengkapi dropdown otomatis.<br>
+                4. Username & akun login dibuat otomatis dari NIPY/Nama jika dikosongkan (Password default: <code>password123</code>).
             </div>
 
             <div style="margin-bottom: 16px;">

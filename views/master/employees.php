@@ -421,19 +421,23 @@ document.addEventListener('DOMContentLoaded', function() {
             </div>
             <div class="modal-body" style="padding: 20px;">
                 <div style="margin-bottom: 14px;">
-                    <label class="form-label" style="font-weight: 600;">Unit Satuan Pendidikan Penempatan <span style="color:red;">*</span></label>
+                    <label class="form-label" style="font-weight: 600;">Default Unit Satuan Penempatan</label>
                     <select name="unit_id" class="form-control" style="width: 100%;">
+                        <option value="0">-- Ikuti Kolom Unit di Berkas Excel (Otomatis Multi-Unit) --</option>
+                        <option value="-1" <?= ($unitFilter === -1) ? 'selected' : '' ?>>Kantor Yayasan (Lintas Unit)</option>
                         <?php foreach ($units as $u): ?>
                             <option value="<?= $u['id'] ?>" <?= ($unitFilter == $u['id']) ? 'selected' : '' ?>><?= SecurityHelper::escape($u['name']) ?></option>
                         <?php endforeach; ?>
                     </select>
+                    <small style="color: var(--text-muted); font-size: 11px;">Jika memilih "Ikuti Kolom Unit di Berkas Excel", sistem otomatis mencocokkan nama/kode unit pada setiap baris data pegawai.</small>
                 </div>
 
                 <div class="alert alert-info" style="margin-bottom: 16px; font-size: 12px; line-height: 1.5; background: #f0fdf4; border: 1px solid #bbf7d0; padding: 12px; border-radius: 6px; color: #166534;">
-                    <i class="fa-solid fa-shield-halved"></i> <strong>Sistem Validasi Aman Terproteksi:</strong><br>
-                    1. Unduh template resmi melalui tombol <strong>Unduh Template Excel</strong>.<br>
-                    2. Kolom <strong>Peran Utama (Role)</strong> dan <strong>Jenis Kelamin (L/P)</strong> dilengkapi <em>fixed dropdown otomatis</em> untuk mencegah kesalahan input peran sistem.<br>
-                    3. Akun pengguna dan baris data pegawai akan otomatis dibuat dan ditautkan (Password default: <code>password123</code>).
+                    <i class="fa-solid fa-shield-halved"></i> <strong>Sistem Validasi Format Terintegrasi:</strong><br>
+                    1. Unduh template resmi melalui tombol <strong>Unduh Template Excel</strong> di atas.<br>
+                    2. Template mendukung pengisian <strong>Unit Satuan Tugas</strong>, <strong>Tingkat Pendidikan</strong>, dan <strong>TMT (Tanggal Mulai Tugas)</strong>.<br>
+                    3. Kolom <strong>Peran Sistem (Role)</strong>, <strong>Unit Satuan</strong>, <strong>Tingkat Pendidikan</strong>, dan <strong>Jenis Kelamin (L/P)</strong> dilengkapi dropdown otomatis.<br>
+                    4. Username & akun login dibuat otomatis dari NIPY/Nama jika dikosongkan (Password default: <code>password123</code>).
                 </div>
 
                 <div class="form-group">

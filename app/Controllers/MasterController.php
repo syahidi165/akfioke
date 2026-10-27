@@ -700,15 +700,18 @@ class MasterController extends Controller {
         $headers = [
             'A1' => 'No',
             'B1' => 'Nama Lengkap *',
-            'C1' => 'NIPY (Opsional)',
-            'D1' => 'NIK (Opsional)',
+            'C1' => 'NIPY',
+            'D1' => 'NIK (KTP)',
             'E1' => 'Jenis Kelamin (L/P) *',
-            'F1' => 'Posisi / Jabatan',
-            'G1' => 'Peran Utama (Role) *',
-            'H1' => 'Username Login *',
-            'I1' => 'Password Awal (Default: password123)',
-            'J1' => 'No. WhatsApp / HP',
-            'K1' => 'Email'
+            'F1' => 'Unit Satuan Tugas',
+            'G1' => 'Jabatan / Posisi',
+            'H1' => 'Tingkat Pendidikan',
+            'I1' => 'TMT (YYYY-MM-DD)',
+            'J1' => 'Peran Sistem (Role) *',
+            'K1' => 'Username Login',
+            'L1' => 'Password Awal',
+            'M1' => 'No. WhatsApp / HP',
+            'N1' => 'Email'
         ];
 
         foreach ($headers as $cell => $text) {
@@ -716,59 +719,50 @@ class MasterController extends Controller {
         }
 
         // Style Headers
-        $sheet->getStyle('A1:K1')->applyFromArray([
-            'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
+        $sheet->getStyle('A1:N1')->applyFromArray([
+            'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF'], 'size' => 11],
             'fill' => ['fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, 'startColor' => ['rgb' => '1E3A8A']],
             'alignment' => ['horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER, 'vertical' => \PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER],
             'borders' => ['allBorders' => ['borderStyle' => \PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN]]
         ]);
-        $sheet->getRowDimension(1)->setRowHeight(28);
+        $sheet->getRowDimension(1)->setRowHeight(30);
 
         // Fetch valid roles
-        if ($isYayasan) {
-            $roles = Database::fetchAll("SELECT id, name, display_name FROM roles WHERE name NOT IN ('operator_yayasan', 'direktur_pendidikan', 'pembina_yayasan') ORDER BY display_name ASC");
+        $excludedRoles = ['direktur_pendidikan', 'pembina_yayasan', 'siswa', 'orang_tua', 'tutor_siswa', 'tutor_sebaya', 'panitia_lomba'];
+        if (!$isYayasan) {
+            $excludedRoles[] = 'operator_yayasan';
+            $excludedRoles[] = 'deputi_pendidikan';
+            $excludedRoles[] = 'operator_sekolah';
         } else {
-            $roles = Database::fetchAll("SELECT id, name, display_name FROM roles WHERE name NOT IN ('operator_yayasan', 'direktur_pendidikan', 'deputi_pendidikan', 'pembina_yayasan', 'operator_sekolah') ORDER BY display_name ASC");
+            $excludedRoles[] = 'operator_yayasan';
         }
 
-        // Create hidden reference sheet for roles to prevent typos
-        $refSheet = $spreadsheet->createSheet();
-        $refSheet->setTitle('_RefRoles');
+        $placeholders = implode(',', array_fill(0, count($excludedRoles), '?'));
+        $roles = Database::fetchAll("SELECT id, name, display_name FROM roles WHERE name NOT IN ($placeholders) ORDER BY display_name ASC", $excludedRoles);
+
+        // Hidden Reference Sheet for Roles
+        $refRoles = $spreadsheet->createSheet();
+        $refRoles->setTitle('_RefRoles');
         foreach ($roles as $idx => $r) {
             $rowNum = $idx + 1;
-            $refSheet->setCellValue("A{$rowNum}", $r['display_name']);
+            $refRoles->setCellValue("A{$rowNum}", $r['display_name']);
         }
-        $refSheet->setSheetState(\PhpOffice\PhpSpreadsheet\Worksheet\Worksheet::SHEETSTATE_HIDDEN);
+        $refRoles->setSheetState(\PhpOffice\PhpSpreadsheet\Worksheet\Worksheet::SHEETSTATE_HIDDEN);
 
-        // Sample rows
-        $sampleRole1 = $roles[0]['display_name'] ?? 'Guru Mapel';
-        $sampleRole2 = isset($roles[1]) ? $roles[1]['display_name'] : $sampleRole1;
-        $sheet->setCellValue('A2', 1);
-        $sheet->setCellValue('B2', 'Ahmad Fauzi, S.Pd');
-        $sheet->setCellValue('C2', '');
-        $sheet->setCellValue('D2', '');
-        $sheet->setCellValue('E2', 'L');
-        $sheet->setCellValue('F2', 'Guru Mapel');
-        $sheet->setCellValue('G2', $sampleRole1);
-        $sheet->setCellValue('H2', 'fauzi.guru');
-        $sheet->setCellValue('I2', 'password123');
-        $sheet->setCellValue('J2', '081234567890');
-        $sheet->setCellValue('K2', 'fauzi@alkahfi.sch.id');
+        // Fetch units for dropdown
+        $units = Database::fetchAll("SELECT id, name, code FROM units ORDER BY id ASC");
+        $refUnits = $spreadsheet->createSheet();
+        $refUnits->setTitle('_RefUnits');
+        $refUnits->setCellValue("A1", "Kantor Yayasan (Lintas Unit)");
+        $uRow = 2;
+        foreach ($units as $u) {
+            $refUnits->setCellValue("A{$uRow}", $u['name'] . ' (' . $u['code'] . ')');
+            $uRow++;
+        }
+        $refUnits->setSheetState(\PhpOffice\PhpSpreadsheet\Worksheet\Worksheet::SHEETSTATE_HIDDEN);
 
-        $sheet->setCellValue('A3', 2);
-        $sheet->setCellValue('B3', 'Siti Rahmah, S.Pd');
-        $sheet->setCellValue('C3', '');
-        $sheet->setCellValue('D3', '');
-        $sheet->setCellValue('E3', 'P');
-        $sheet->setCellValue('F3', 'Guru Wali Kelas');
-        $sheet->setCellValue('G3', $sampleRole2);
-        $sheet->setCellValue('H3', 'siti.guru');
-        $sheet->setCellValue('I3', 'password123');
-        $sheet->setCellValue('J3', '081298765432');
-        $sheet->setCellValue('K3', 'siti@alkahfi.sch.id');
-
-        // Setup Data Validation for Gender (Column E)
-        $valGender = $sheet->getDataValidation('E2:E200');
+        // Dropdown Validation: Gender (Column E)
+        $valGender = $sheet->getDataValidation('E2:E300');
         $valGender->setType(\PhpOffice\PhpSpreadsheet\Cell\DataValidation::TYPE_LIST);
         $valGender->setErrorStyle(\PhpOffice\PhpSpreadsheet\Cell\DataValidation::STYLE_STOP);
         $valGender->setAllowBlank(false);
@@ -778,10 +772,27 @@ class MasterController extends Controller {
         $valGender->setError('Pilih L (Laki-laki) atau P (Perempuan).');
         $valGender->setFormula1('"L,P"');
 
-        // Setup Data Validation for Role (Column G)
+        // Dropdown Validation: Unit Satuan Tugas (Column F)
+        $unitCount = max(1, count($units) + 1);
+        $valUnit = $sheet->getDataValidation('F2:F300');
+        $valUnit->setType(\PhpOffice\PhpSpreadsheet\Cell\DataValidation::TYPE_LIST);
+        $valUnit->setErrorStyle(\PhpOffice\PhpSpreadsheet\Cell\DataValidation::STYLE_INFORMATION);
+        $valUnit->setAllowBlank(true);
+        $valUnit->setShowDropDown(true);
+        $valUnit->setFormula1("_RefUnits!\$A\$1:\$A\${$unitCount}");
+
+        // Dropdown Validation: Tingkat Pendidikan (Column H)
+        $valEdu = $sheet->getDataValidation('H2:H300');
+        $valEdu->setType(\PhpOffice\PhpSpreadsheet\Cell\DataValidation::TYPE_LIST);
+        $valEdu->setErrorStyle(\PhpOffice\PhpSpreadsheet\Cell\DataValidation::STYLE_STOP);
+        $valEdu->setAllowBlank(true);
+        $valEdu->setShowDropDown(true);
+        $valEdu->setFormula1('"S1,S2,S3,D3,SMA/SMK"');
+
+        // Dropdown Validation: Role (Column J)
         $roleCount = count($roles);
         if ($roleCount > 0) {
-            $valRole = $sheet->getDataValidation('G2:G200');
+            $valRole = $sheet->getDataValidation('J2:J300');
             $valRole->setType(\PhpOffice\PhpSpreadsheet\Cell\DataValidation::TYPE_LIST);
             $valRole->setErrorStyle(\PhpOffice\PhpSpreadsheet\Cell\DataValidation::STYLE_STOP);
             $valRole->setAllowBlank(false);
@@ -792,7 +803,42 @@ class MasterController extends Controller {
             $valRole->setFormula1("_RefRoles!\$A\$1:\$A\${$roleCount}");
         }
 
-        foreach (range('A', 'K') as $col) {
+        // Sample Rows
+        $sampleUnit = !empty($units) ? ($units[0]['name'] . ' (' . $units[0]['code'] . ')') : 'Kantor Yayasan (Lintas Unit)';
+        $sampleRole1 = $roles[0]['display_name'] ?? 'Guru Mapel Umum';
+        $sampleRole2 = isset($roles[1]) ? $roles[1]['display_name'] : $sampleRole1;
+
+        $sheet->setCellValue('A2', 1);
+        $sheet->setCellValue('B2', 'Ahmad Fauzi, S.Pd');
+        $sheet->setCellValue('C2', 'YAY-2024001');
+        $sheet->setCellValue('D2', '2171010101010001');
+        $sheet->setCellValue('E2', 'L');
+        $sheet->setCellValue('F2', $sampleUnit);
+        $sheet->setCellValue('G2', 'Guru Mapel Umum');
+        $sheet->setCellValue('H2', 'S1');
+        $sheet->setCellValue('I2', '2022-07-01');
+        $sheet->setCellValue('J2', $sampleRole1);
+        $sheet->setCellValue('K2', 'ahmad.fauzi');
+        $sheet->setCellValue('L2', 'password123');
+        $sheet->setCellValue('M2', '081234567890');
+        $sheet->setCellValue('N2', 'fauzi@alkahfi.sch.id');
+
+        $sheet->setCellValue('A3', 2);
+        $sheet->setCellValue('B3', 'Siti Rahmah, S.Pd');
+        $sheet->setCellValue('C3', 'YAY-2024002');
+        $sheet->setCellValue('D3', '2171010101010002');
+        $sheet->setCellValue('E3', 'P');
+        $sheet->setCellValue('F3', $sampleUnit);
+        $sheet->setCellValue('G3', 'Guru Wali Kelas');
+        $sheet->setCellValue('H3', 'S1');
+        $sheet->setCellValue('I3', '2023-01-15');
+        $sheet->setCellValue('J3', $sampleRole2);
+        $sheet->setCellValue('K3', 'siti.rahmah');
+        $sheet->setCellValue('L3', 'password123');
+        $sheet->setCellValue('M3', '081298765432');
+        $sheet->setCellValue('N3', 'siti@alkahfi.sch.id');
+
+        foreach (range('A', 'N') as $col) {
             $sheet->getColumnDimension($col)->setAutoSize(true);
         }
 
@@ -810,9 +856,11 @@ class MasterController extends Controller {
         $this->requireRole(['operator_yayasan', 'operator_sekolah']);
         $isYayasan = Auth::hasRole('operator_yayasan');
 
+        $redirectUrl = Auth::baseUrl() . ($isYayasan ? '/master/employees' : '/users/school-accounts');
+
         if (!isset($_FILES['file']) || $_FILES['file']['error'] !== UPLOAD_ERR_OK) {
             $this->setFlash('danger', 'Berkas Excel tidak valid atau gagal diunggah.');
-            $this->redirect(Auth::baseUrl() . ($isYayasan ? '/master/employees' : '/users/school-accounts'));
+            $this->redirect($redirectUrl);
             return;
         }
 
@@ -820,125 +868,341 @@ class MasterController extends Controller {
         $ext = strtolower(pathinfo($_FILES['file']['name'], PATHINFO_EXTENSION));
         if (!in_array($ext, ['xlsx', 'xls'])) {
             $this->setFlash('danger', 'Hanya berkas Excel dengan ekstensi .xlsx atau .xls yang diperbolehkan.');
-            $this->redirect(Auth::baseUrl() . ($isYayasan ? '/master/employees' : '/users/school-accounts'));
+            $this->redirect($redirectUrl);
             return;
         }
 
+        // Default Unit dari Modal (jika dipilih)
+        $defaultModalUnitId = 0;
         if ($isYayasan) {
-            $targetUnitId = (int)($_POST['unit_id'] ?? 0);
-            if ($targetUnitId <= 0) {
-                $targetUnitId = 3; // Default SD
+            $defaultModalUnitId = (int)($_POST['unit_id'] ?? 0);
+            if ($defaultModalUnitId < 0) {
+                $defaultModalUnitId = null; // Kantor Yayasan
             }
         } else {
-            $targetUnitId = Auth::unitId();
+            $defaultModalUnitId = Auth::unitId();
         }
 
-        $unitRow = Database::fetch("SELECT code FROM units WHERE id = ?", [$targetUnitId]);
-        $uCode = $unitRow['code'] ?? 'SCH';
+        // Cache all active units for flexible matching
+        $allUnits = Database::fetchAll("SELECT id, name, code FROM units");
+        $unitById = [];
+        $unitByCode = [];
+        $unitByName = [];
+        foreach ($allUnits as $u) {
+            $uId = (int)$u['id'];
+            $unitById[$uId] = $u;
+            $unitByCode[strtolower(trim($u['code']))] = $u;
+            $unitByName[strtolower(trim($u['name']))] = $u;
+        }
 
+        // Cache all roles and prepare normalized mapping & aliases
         $rolesRaw = Database::fetchAll("SELECT id, name, display_name FROM roles");
         $roleMap = [];
-        $forbiddenRoles = $isYayasan 
-            ? ['operator_yayasan', 'direktur_pendidikan', 'pembina_yayasan'] 
-            : ['operator_yayasan', 'direktur_pendidikan', 'deputi_pendidikan', 'pembina_yayasan', 'operator_sekolah'];
-
+        $fallbackRoleId = null;
         foreach ($rolesRaw as $r) {
-            if (!in_array($r['name'], $forbiddenRoles)) {
-                $roleMap[strtolower(trim($r['display_name']))] = (int)$r['id'];
-                $roleMap[strtolower(trim($r['name']))] = (int)$r['id'];
+            $normName = strtolower(trim($r['name']));
+            $normDisp = strtolower(trim($r['display_name']));
+            $roleMap[$normName] = (int)$r['id'];
+            $roleMap[$normDisp] = (int)$r['id'];
+            if ($normName === 'guru_mapel') {
+                $fallbackRoleId = (int)$r['id'];
             }
         }
+        if (!$fallbackRoleId && !empty($rolesRaw)) {
+            $fallbackRoleId = (int)$rolesRaw[0]['id'];
+        }
+
+        $roleAliases = [
+            'guru' => $fallbackRoleId,
+            'guru mapel' => $fallbackRoleId,
+            'guru mapel umum' => $fallbackRoleId,
+            'guru mata pelajaran' => $fallbackRoleId,
+            'guru wali kelas' => $roleMap['walas'] ?? $fallbackRoleId,
+            'wali kelas' => $roleMap['walas'] ?? $fallbackRoleId,
+            'walas' => $roleMap['walas'] ?? $fallbackRoleId,
+            'guru tahfidz' => $roleMap['guru_tahfidz'] ?? $fallbackRoleId,
+            'tahfidz' => $roleMap['guru_tahfidz'] ?? $fallbackRoleId,
+            'guru diniyah' => $roleMap['guru_diniyah'] ?? $fallbackRoleId,
+            'diniyah' => $roleMap['guru_diniyah'] ?? $fallbackRoleId,
+            'kepala sekolah' => $roleMap['kepala_sekolah'] ?? $fallbackRoleId,
+            'kepsek' => $roleMap['kepala_sekolah'] ?? $fallbackRoleId,
+            'tata usaha' => $roleMap['tata_usaha'] ?? $fallbackRoleId,
+            'tu' => $roleMap['tata_usaha'] ?? $fallbackRoleId,
+            'staf tu' => $roleMap['tata_usaha'] ?? $fallbackRoleId,
+            'staff tu' => $roleMap['tata_usaha'] ?? $fallbackRoleId,
+            'operator sekolah' => $roleMap['operator_sekolah'] ?? $fallbackRoleId,
+            'operator' => $roleMap['operator_sekolah'] ?? $fallbackRoleId,
+            'ops' => $roleMap['operator_sekolah'] ?? $fallbackRoleId,
+            'security' => $roleMap['security'] ?? $fallbackRoleId,
+            'satpam' => $roleMap['security'] ?? $fallbackRoleId,
+            'cleaning service' => $roleMap['cleaning_service'] ?? $fallbackRoleId,
+            'cs' => $roleMap['cleaning_service'] ?? $fallbackRoleId,
+            'kebersihan' => $roleMap['cleaning_service'] ?? $fallbackRoleId,
+            'sarpras' => $roleMap['sarpras'] ?? $fallbackRoleId,
+        ];
 
         try {
             $spreadsheet = IOFactory::load($tmpFile);
             $sheet = $spreadsheet->getActiveSheet();
             $highestRow = $sheet->getHighestRow();
+            $highestColumn = $sheet->getHighestColumn();
+            $highestColIndex = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::columnIndexFromString($highestColumn);
         } catch (\Throwable $e) {
             $this->setFlash('danger', 'Gagal membaca berkas Excel: ' . $e->getMessage());
-            $this->redirect(Auth::baseUrl() . ($isYayasan ? '/master/employees' : '/users/school-accounts'));
+            $this->redirect($redirectUrl);
             return;
         }
+
+        if ($highestRow < 2) {
+            $this->setFlash('warning', 'Berkas Excel tidak memiliki baris data pegawai untuk diimpor.');
+            $this->redirect($redirectUrl);
+            return;
+        }
+
+        // Dynamic Header Mapping
+        $colMap = [];
+        for ($col = 1; $col <= $highestColIndex; $col++) {
+            $colLetter = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($col);
+            $headerText = strtolower(trim((string)$sheet->getCell("{$colLetter}1")->getValue()));
+            if (empty($headerText)) continue;
+
+            if (strpos($headerText, 'nama') !== false) {
+                $colMap['nama'] = $colLetter;
+            } elseif (strpos($headerText, 'nipy') !== false) {
+                $colMap['nipy'] = $colLetter;
+            } elseif (strpos($headerText, 'nik') !== false) {
+                $colMap['nik'] = $colLetter;
+            } elseif (strpos($headerText, 'kelamin') !== false || strpos($headerText, 'gender') !== false || $headerText === 'jk') {
+                $colMap['gender'] = $colLetter;
+            } elseif (strpos($headerText, 'unit') !== false || strpos($headerText, 'satuan') !== false || strpos($headerText, 'sekolah') !== false) {
+                $colMap['unit'] = $colLetter;
+            } elseif (strpos($headerText, 'posisi') !== false || strpos($headerText, 'jabatan') !== false) {
+                $colMap['posisi'] = $colLetter;
+            } elseif (strpos($headerText, 'pendidikan') !== false || strpos($headerText, 'tingkat') !== false) {
+                $colMap['pendidikan'] = $colLetter;
+            } elseif (strpos($headerText, 'tmt') !== false || strpos($headerText, 'mulai') !== false) {
+                $colMap['tmt'] = $colLetter;
+            } elseif (strpos($headerText, 'peran') !== false || strpos($headerText, 'role') !== false) {
+                $colMap['role'] = $colLetter;
+            } elseif (strpos($headerText, 'username') !== false || strpos($headerText, 'akun') !== false) {
+                $colMap['username'] = $colLetter;
+            } elseif (strpos($headerText, 'password') !== false || strpos($headerText, 'sandi') !== false) {
+                $colMap['password'] = $colLetter;
+            } elseif (strpos($headerText, 'wa') !== false || strpos($headerText, 'hp') !== false || strpos($headerText, 'telp') !== false || strpos($headerText, 'kontak') !== false) {
+                $colMap['phone'] = $colLetter;
+            } elseif (strpos($headerText, 'email') !== false || strpos($headerText, 'surel') !== false) {
+                $colMap['email'] = $colLetter;
+            }
+        }
+
+        // Fallbacks if not scanned:
+        $colNama       = $colMap['nama'] ?? 'B';
+        $colNipy       = $colMap['nipy'] ?? 'C';
+        $colNik        = $colMap['nik'] ?? 'D';
+        $colGender     = $colMap['gender'] ?? 'E';
+        $colUnit       = $colMap['unit'] ?? (isset($colMap['posisi']) ? ($colMap['unit'] ?? 'F') : null);
+        $colPosisi     = $colMap['posisi'] ?? (isset($colMap['unit']) ? 'G' : 'F');
+        $colPendidikan = $colMap['pendidikan'] ?? (isset($colMap['unit']) ? 'H' : null);
+        $colTmt        = $colMap['tmt'] ?? (isset($colMap['unit']) ? 'I' : null);
+        $colRole       = $colMap['role'] ?? (isset($colMap['unit']) ? 'J' : 'G');
+        $colUsername   = $colMap['username'] ?? (isset($colMap['unit']) ? 'K' : 'H');
+        $colPassword   = $colMap['password'] ?? (isset($colMap['unit']) ? 'L' : 'I');
+        $colPhone      = $colMap['phone'] ?? (isset($colMap['unit']) ? 'M' : 'J');
+        $colEmail      = $colMap['email'] ?? (isset($colMap['unit']) ? 'N' : 'K');
 
         $imported = 0;
         $skipped = 0;
         $errors = [];
 
         for ($row = 2; $row <= $highestRow; $row++) {
-            $nama = trim((string)$sheet->getCell("B{$row}")->getValue());
+            $namaCell = $sheet->getCell("{$colNama}{$row}");
+            $nama = trim((string)$namaCell->getValue());
             if (empty($nama)) continue;
 
-            $nipy = trim((string)$sheet->getCell("C{$row}")->getValue());
-            $nik = trim((string)$sheet->getCell("D{$row}")->getValue());
-            $gender = strtoupper(trim((string)$sheet->getCell("E{$row}")->getValue()));
-            if (!in_array($gender, ['L', 'P'])) $gender = 'L';
+            $nipy = $colNipy ? trim((string)$sheet->getCell("{$colNipy}{$row}")->getValue()) : '';
+            $nik  = $colNik ? trim((string)$sheet->getCell("{$colNik}{$row}")->getValue()) : '';
+            
+            // Gender
+            $genderRaw = $colGender ? strtoupper(trim((string)$sheet->getCell("{$colGender}{$row}")->getValue())) : 'L';
+            $gender = (str_starts_with($genderRaw, 'P') || str_starts_with($genderRaw, 'W')) ? 'P' : 'L';
 
-            $posisi = trim((string)$sheet->getCell("F{$row}")->getValue());
-            if (empty($posisi)) $posisi = 'Guru Mapel';
+            // Unit resolution
+            $targetUnitId = null;
+            $uCode = 'YAY';
 
-            $roleText = strtolower(trim((string)$sheet->getCell("G{$row}")->getValue()));
-            $username = trim((string)$sheet->getCell("H{$row}")->getValue());
-            $password = trim((string)$sheet->getCell("I{$row}")->getValue());
-            if (empty($password)) $password = 'password123';
-
-            $phone = trim((string)$sheet->getCell("J{$row}")->getValue());
-            $email = trim((string)$sheet->getCell("K{$row}")->getValue());
-
-            $roleId = $roleMap[$roleText] ?? null;
-            if (!$roleId) {
-                $roleId = $roleMap['guru mapel'] ?? ($roleMap['guru_mapel'] ?? 1);
+            if ($colUnit) {
+                $unitVal = trim((string)$sheet->getCell("{$colUnit}{$row}")->getValue());
+                $unitNorm = strtolower($unitVal);
+                
+                if (!empty($unitNorm) && !in_array($unitNorm, ['-', '0', 'yayasan', 'kantor yayasan', 'lintas unit', 'pusat'])) {
+                    // Check by code
+                    if (isset($unitByCode[$unitNorm])) {
+                        $targetUnitId = $unitByCode[$unitNorm]['id'];
+                        $uCode = $unitByCode[$unitNorm]['code'];
+                    } elseif (isset($unitByName[$unitNorm])) {
+                        $targetUnitId = $unitByName[$unitNorm]['id'];
+                        $uCode = $unitByName[$unitNorm]['code'];
+                    } elseif (is_numeric($unitVal) && isset($unitById[(int)$unitVal])) {
+                        $targetUnitId = (int)$unitVal;
+                        $uCode = $unitById[$targetUnitId]['code'];
+                    } else {
+                        // Partial search in unit names
+                        foreach ($allUnits as $u) {
+                            if (stripos($u['name'], $unitVal) !== false || stripos($unitVal, $u['name']) !== false || stripos($unitVal, $u['code']) !== false) {
+                                $targetUnitId = $u['id'];
+                                $uCode = $u['code'];
+                                break;
+                            }
+                        }
+                    }
+                }
             }
 
+            // Fallback to default modal unit if not resolved from Excel
+            if ($targetUnitId === null && $defaultModalUnitId && isset($unitById[$defaultModalUnitId])) {
+                $targetUnitId = $defaultModalUnitId;
+                $uCode = $unitById[$defaultModalUnitId]['code'];
+            }
+
+            // Posisi
+            $posisi = $colPosisi ? trim((string)$sheet->getCell("{$colPosisi}{$row}")->getValue()) : '';
+            if (empty($posisi)) $posisi = 'Guru Mapel Umum';
+
+            // Tingkat Pendidikan
+            $pendidikan = $colPendidikan ? strtoupper(trim((string)$sheet->getCell("{$colPendidikan}{$row}")->getValue())) : 'S1';
+            if (empty($pendidikan)) $pendidikan = 'S1';
+
+            // TMT (Tanggal Mulai Tugas)
+            $tmt = date('Y-m-d');
+            if ($colTmt) {
+                $tmtCell = $sheet->getCell("{$colTmt}{$row}");
+                $tmtVal = $tmtCell->getValue();
+                if (!empty($tmtVal)) {
+                    if (is_numeric($tmtVal) && $tmtVal > 25000 && $tmtVal < 60000) {
+                        try {
+                            $tmt = \PhpOffice\PhpSpreadsheet\Shared\Date::excelToDateTimeObject($tmtVal)->format('Y-m-d');
+                        } catch (\Throwable $e) {
+                            $tmt = date('Y-m-d');
+                        }
+                    } else {
+                        $tmtStr = trim((string)$tmtVal);
+                        if (preg_match('/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})$/', $tmtStr, $m)) {
+                            $tmt = sprintf('%04d-%02d-%02d', $m[1], $m[2], $m[3]);
+                        } elseif (preg_match('/^(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})$/', $tmtStr, $m)) {
+                            $tmt = sprintf('%04d-%02d-%02d', $m[3], $m[2], $m[1]);
+                        }
+                    }
+                }
+            }
+
+            // Role
+            $roleText = $colRole ? strtolower(trim((string)$sheet->getCell("{$colRole}{$row}")->getValue())) : '';
+            $roleId = $roleAliases[$roleText] ?? ($roleMap[$roleText] ?? $fallbackRoleId);
+
+            // NIPY Check / Generation
+            if (!empty($nipy)) {
+                $checkNipy = Database::fetch("SELECT id, nama FROM employees WHERE nipy = ? AND is_deleted = 0", [$nipy]);
+                if ($checkNipy) {
+                    $skipped++;
+                    $errors[] = "Baris {$row} ({$nama}): NIPY '{$nipy}' sudah terdaftar untuk {$checkNipy['nama']}.";
+                    continue;
+                }
+            } else {
+                // Generate Unique NIPY
+                do {
+                    $genNipy = $uCode . '-' . date('y') . rand(1000, 9999);
+                    $exists = Database::fetch("SELECT id FROM employees WHERE nipy = ?", [$genNipy]);
+                } while ($exists);
+                $nipy = $genNipy;
+            }
+
+            // Username Login
+            $username = $colUsername ? trim((string)$sheet->getCell("{$colUsername}{$row}")->getValue()) : '';
             if (empty($username)) {
-                $username = strtolower(preg_replace('/[^a-zA-Z0-9]/', '', substr($nama, 0, 8))) . '.' . strtolower($uCode);
+                // Auto create from clean NIPY or name
+                $cleanNipy = strtolower(preg_replace('/[^a-zA-Z0-9]/', '', $nipy));
+                if (!empty($cleanNipy)) {
+                    $username = $cleanNipy;
+                } else {
+                    $username = strtolower(preg_replace('/[^a-zA-Z0-9]/', '', substr($nama, 0, 8))) . '.' . strtolower($uCode);
+                }
+            } else {
+                $username = strtolower(preg_replace('/[^a-zA-Z0-9._-]/', '', $username));
             }
 
+            // Check username uniqueness
             $uCheck = Database::fetch("SELECT id FROM users WHERE username = ?", [$username]);
             if ($uCheck) {
+                // If auto-generated, try suffixing
+                $foundUnique = false;
+                for ($suffix = 2; $suffix <= 20; $suffix++) {
+                    $candidate = $username . $suffix;
+                    if (!Database::fetch("SELECT id FROM users WHERE username = ?", [$candidate])) {
+                        $username = $candidate;
+                        $foundUnique = true;
+                        break;
+                    }
+                }
+                if (!$foundUnique) {
+                    $skipped++;
+                    $errors[] = "Baris {$row} ({$nama}): Username '{$username}' sudah digunakan.";
+                    continue;
+                }
+            }
+
+            // Password
+            $password = $colPassword ? trim((string)$sheet->getCell("{$colPassword}{$row}")->getValue()) : '';
+            if (empty($password)) $password = 'password123';
+
+            // Phone & Email
+            $phone = $colPhone ? trim((string)$sheet->getCell("{$colPhone}{$row}")->getValue()) : '';
+            $email = $colEmail ? trim((string)$sheet->getCell("{$colEmail}{$row}")->getValue()) : '';
+
+            // Execute Transaction per row
+            Database::beginTransaction();
+            try {
+                $passHash = password_hash($password, PASSWORD_DEFAULT);
+                Database::execute(
+                    "INSERT INTO users (username, password_hash, full_name, email, phone, unit_id, is_active, force_change_password)
+                     VALUES (?, ?, ?, ?, ?, ?, 1, 0)",
+                    [$username, $passHash, $nama, $email ?: null, $phone ?: null, $targetUnitId]
+                );
+                $newUserId = (int)Database::lastInsertId();
+
+                Database::execute("INSERT IGNORE INTO user_roles (user_id, role_id, is_primary) VALUES (?, ?, 1)", [$newUserId, $roleId]);
+
+                Database::execute(
+                    "INSERT INTO employees (user_id, nipy, nik, nama, gender, tingkat_pendidikan, tmt, level_posisi, unit_id, contact_phone, email, status)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Aktif')",
+                    [$newUserId, $nipy, $nik ?: null, $nama, $gender, $pendidikan, $tmt, $posisi, $targetUnitId, $phone ?: null, $email ?: null]
+                );
+                $newEmpId = Database::lastInsertId();
+
+                AuditLog::log('IMPORT_EMPLOYEE', 'employees', $newEmpId, null, [
+                    'username' => $username, 'unit_id' => $targetUnitId, 'role_id' => $roleId, 'nipy' => $nipy
+                ]);
+
+                Database::commit();
+                $imported++;
+            } catch (\Throwable $e) {
+                Database::rollBack();
                 $skipped++;
-                $errors[] = "Baris {$row} ({$nama}): Username '{$username}' sudah digunakan.";
-                continue;
+                $errors[] = "Baris {$row} ({$nama}): " . $e->getMessage();
             }
-
-            $passHash = password_hash($password, PASSWORD_DEFAULT);
-            Database::execute(
-                "INSERT INTO users (username, password_hash, full_name, email, phone, unit_id, is_active, force_change_password)
-                 VALUES (?, ?, ?, ?, ?, ?, 1, 0)",
-                [$username, $passHash, $nama, $email ?: null, $phone ?: null, $targetUnitId]
-            );
-            $newUserId = (int)Database::lastInsertId();
-
-            Database::execute("INSERT IGNORE INTO user_roles (user_id, role_id, is_primary) VALUES (?, ?, 1)", [$newUserId, $roleId]);
-
-            if (empty($nipy)) {
-                $cleanUser = strtoupper(preg_replace('/[^a-zA-Z]/', '', $username));
-                $nipy = $uCode . '-' . substr($cleanUser, 0, 4) . '-' . rand(100, 999);
-            }
-
-            Database::execute(
-                "INSERT INTO employees (user_id, nipy, nik, nama, gender, tmt, level_posisi, unit_id, contact_phone, email, status)
-                 VALUES (?, ?, ?, ?, ?, CURDATE(), ?, ?, ?, ?, 'Aktif')",
-                [$newUserId, $nipy, $nik ?: null, $nama, $gender, $posisi, $targetUnitId, $phone ?: null, $email ?: null]
-            );
-            $newEmpId = Database::lastInsertId();
-
-            AuditLog::log('IMPORT_EMPLOYEE', 'employees', $newEmpId, null, [
-                'username' => $username, 'unit_id' => $targetUnitId, 'role_id' => $roleId
-            ]);
-
-            $imported++;
         }
 
         if ($imported > 0) {
-            $msg = "Berhasil mengimpor {$imported} data pegawai dan akun baru.";
+            $msg = "Berhasil mengimpor {$imported} data pegawai dan akun login baru.";
             if ($skipped > 0) {
-                $msg .= " ({$skipped} baris dilewati karena duplikasi/tidak valid).";
+                $msg .= " ({$skipped} baris dilewati).";
             }
             $this->setFlash('success', $msg);
         } else {
-            $this->setFlash('warning', 'Tidak ada data pegawai yang berhasil diimpor. ' . implode(' ', array_slice($errors, 0, 3)));
+            $errMsg = !empty($errors) ? (' ' . implode(' ', array_slice($errors, 0, 3))) : '';
+            $this->setFlash('warning', 'Tidak ada data pegawai yang berhasil diimpor.' . $errMsg);
         }
 
-        $this->redirect(Auth::baseUrl() . ($isYayasan ? '/master/employees' : '/users/school-accounts'));
+        $this->redirect($redirectUrl);
     }
 
     public function turnover(): void {
