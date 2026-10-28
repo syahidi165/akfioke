@@ -29,10 +29,10 @@ foreach ($list as $item) {
                 <span style="font-size: 0.8125rem; color: var(--text-muted, #64748b);">Administrasi Kepala Sekolah</span>
             </div>
             <h1 class="page-title" style="margin: 0 0 6px 0; font-size: 1.5rem; display: flex; align-items: center; gap: 10px;">
-                <i class="fa-solid fa-award" style="color: #f59e0b;"></i> Penetapan Guru &amp; Tenaga Pendidik Berprestasi
+                <i class="fa-solid fa-certificate" style="color: #f59e0b;"></i> Verifikasi Prestasi Guru
             </h1>
             <p class="page-subtitle" style="margin: 0; color: var(--text-muted, #64748b); font-size: 0.875rem;">
-                Pemberian penghargaan dan penetapan resmi guru berprestasi atas dedikasi, unggah sertifikat bukti prestasi, serta monitoring status validasi.
+                Tinjau, verifikasi sertifikat bukti prestasi yang diajukan secara mandiri oleh para guru, serta tetapkan status validasi resmi tingkat satuan pendidikan.
             </p>
         </div>
     </div>
@@ -193,11 +193,13 @@ foreach ($list as $item) {
 
                                 $status = $item['status'] ?? 'Terverifikasi';
                                 $statusBadge = match($status) {
-                                    'Terverifikasi' => 'badge-success',
-                                    'Dalam Proses'  => 'badge-warning',
-                                    'Selesai'       => 'badge-primary',
-                                    'Dibatalkan'    => 'badge-danger',
-                                    default         => 'badge-secondary'
+                                    'Terverifikasi'       => 'badge-success',
+                                    'Menunggu Verifikasi' => 'badge-warning',
+                                    'Ditolak'             => 'badge-danger',
+                                    'Dalam Proses'        => 'badge-warning',
+                                    'Selesai'             => 'badge-primary',
+                                    'Dibatalkan'          => 'badge-danger',
+                                    default               => 'badge-secondary'
                                 };
                             ?>
                                 <tr class="prestasi-row" data-search="<?= strtolower(SecurityHelper::escape($item['teacher_name'] . ' ' . $item['title'] . ' ' . $item['level'] . ' ' . ($item['nipy'] ?? '') . ' ' . $status)) ?>">
@@ -233,9 +235,24 @@ foreach ($list as $item) {
                                         <?php endif; ?>
                                     </td>
                                     <td style="text-align: center;">
-                                        <button type="button" class="btn btn-outline btn-sm btn-edit-prestasi" data-id="<?= $item['id'] ?>" style="padding: 3px 8px; font-size: 0.75rem;">
-                                            <i class="fa-solid fa-pen-to-square"></i> Edit
-                                        </button>
+                                        <div style="display: inline-flex; gap: 4px; align-items: center; justify-content: center; flex-wrap: wrap;">
+                                            <?php if ($status === 'Menunggu Verifikasi'): ?>
+                                                <form action="<?= $baseUrl ?>/guru/prestasi-tetapkan/verify" method="POST" style="margin: 0;" onsubmit="return confirm('Verifikasi dan setujui prestasi guru ini?');">
+                                                    <?= CSRF::field() ?>
+                                                    <input type="hidden" name="id" value="<?= $item['id'] ?>">
+                                                    <input type="hidden" name="action" value="Terverifikasi">
+                                                    <button type="submit" class="btn btn-sm" style="background: #10b981; color: white; padding: 3px 8px; font-size: 0.75rem; border: none; border-radius: 4px;" title="Verifikasi / Setujui">
+                                                        <i class="fa-solid fa-check"></i> Setujui
+                                                    </button>
+                                                </form>
+                                                <button type="button" class="btn btn-sm" style="background: #ef4444; color: white; padding: 3px 8px; font-size: 0.75rem; border: none; border-radius: 4px;" onclick="openTolakModal(<?= $item['id'] ?>, '<?= SecurityHelper::escape($item['teacher_name']) ?>', '<?= SecurityHelper::escape($item['title']) ?>')" title="Tolak">
+                                                    <i class="fa-solid fa-xmark"></i> Tolak
+                                                </button>
+                                            <?php endif; ?>
+                                            <button type="button" class="btn btn-outline btn-sm btn-edit-prestasi" data-id="<?= $item['id'] ?>" style="padding: 3px 8px; font-size: 0.75rem;" title="Edit Rincian">
+                                                <i class="fa-solid fa-pen-to-square"></i> Edit
+                                            </button>
+                                        </div>
                                     </td>
                                 </tr>
                             <?php endforeach; ?>
@@ -421,4 +438,60 @@ function closeEditPrestasiModal() {
         modal.style.visibility = 'hidden';
     }
 }
+
+function openTolakModal(id, teacherName, title) {
+    document.getElementById('tolakPrestasiId').value = id;
+    document.getElementById('tolakTeacherName').innerText = teacherName;
+    document.getElementById('tolakTitle').innerText = title;
+    document.getElementById('tolakNotes').value = '';
+    const modal = document.getElementById('modalTolakPrestasi');
+    if (modal) {
+        modal.style.display = 'flex';
+    }
+}
+
+function closeTolakModal() {
+    const modal = document.getElementById('modalTolakPrestasi');
+    if (modal) {
+        modal.style.display = 'none';
+    }
+}
 </script>
+
+<!-- Modal Tolak Prestasi Guru -->
+<div class="modal-overlay" id="modalTolakPrestasi" style="display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.6); z-index: 1050; align-items: center; justify-content: center; backdrop-filter: blur(2px);">
+    <div class="modal-container" style="background: #fff; width: 100%; max-width: 480px; border-radius: 12px; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2); overflow: hidden;">
+        <form action="<?= $baseUrl ?>/guru/prestasi-tetapkan/verify" method="POST">
+            <?= CSRF::field() ?>
+            <input type="hidden" name="id" id="tolakPrestasiId">
+            <input type="hidden" name="action" value="Ditolak">
+
+            <div class="modal-header" style="padding: 16px 20px; border-bottom: 1px solid var(--border-color, #e2e8f0); display: flex; justify-content: space-between; align-items: center; background: #fef2f2;">
+                <div>
+                    <h3 class="modal-title" style="margin: 0; font-size: 1.05rem; color: #dc2626; display: flex; align-items: center; gap: 8px;">
+                        <i class="fa-solid fa-triangle-exclamation"></i> Tolak Pengajuan Prestasi
+                    </h3>
+                </div>
+                <button type="button" class="btn btn-outline btn-sm" style="border: none; font-size: 1.25rem; line-height: 1; padding: 4px 8px;" onclick="closeTolakModal()">&times;</button>
+            </div>
+
+            <div class="modal-body" style="padding: 20px;">
+                <p style="font-size: 0.875rem; color: var(--text-muted); margin: 0 0 12px 0;">
+                    Anda akan menolak pengajuan prestasi dari <strong id="tolakTeacherName"></strong>: &ldquo;<span id="tolakTitle"></span>&rdquo;.
+                </p>
+
+                <div class="form-group">
+                    <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Alasan / Catatan Penolakan <span style="color: #ef4444;">*</span></label>
+                    <textarea name="verification_notes" id="tolakNotes" class="form-control" rows="3" placeholder="Contoh: Berkas sertifikat terlampir buram/tidak terbaca, mohon unggah ulang piagam asli." required></textarea>
+                </div>
+            </div>
+
+            <div class="modal-footer" style="padding: 14px 20px; border-top: 1px solid var(--border-color, #e2e8f0); display: flex; justify-content: flex-end; gap: 8px; background: #f8fafc;">
+                <button type="button" class="btn btn-outline" onclick="closeTolakModal()">Batal</button>
+                <button type="submit" class="btn btn-danger" style="font-weight: 600;">
+                    <i class="fa-solid fa-xmark" style="margin-right: 4px;"></i> Tolak Pengajuan
+                </button>
+            </div>
+        </form>
+    </div>
+</div>

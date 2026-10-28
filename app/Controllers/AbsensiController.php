@@ -7,12 +7,18 @@ use Core\Auth;
 use Core\Database;
 use Core\AuditLog;
 use Core\SecurityHelper;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
+use PhpOffice\PhpSpreadsheet\IOFactory;
+use PhpOffice\PhpSpreadsheet\Style\Alignment;
+use PhpOffice\PhpSpreadsheet\Style\Border;
+use PhpOffice\PhpSpreadsheet\Style\Fill;
 
 class AbsensiController extends Controller {
 
-    // --- 1. ABSENSI GURU & KAJIAN SABTU (WAKA KURIKULUM) ---
+    // --- 1. ABSENSI GURU & KAJIAN SABTU (DIINPUT OLEH TU) ---
     public function teachersAttendance(): void {
-        $this->requireRole(['waka_kurikulum', 'kepala_sekolah', 'deputi_pendidikan']);
+        $this->requireRole(['tata_usaha', 'kepala_sekolah', 'waka_kurikulum', 'deputi_pendidikan']);
         $unitId = Auth::unitId();
         $taId = Auth::academicYearId();
         $monthNum = (int)($_GET['month_num'] ?? date('n'));
@@ -49,7 +55,7 @@ class AbsensiController extends Controller {
         }
 
         $this->view('attendance/teachers', [
-            'pageTitle'    => 'Presensi Bulanan Guru & Kajian Sabtu (Waka Kurikulum)',
+            'pageTitle'    => 'Presensi Bulanan Guru & Kajian Sabtu',
             'teachers'     => $teachers,
             'monthNum'     => $monthNum,
             'filledMonths' => $filledMonths
@@ -57,7 +63,7 @@ class AbsensiController extends Controller {
     }
 
     public function saveTeachersAttendance(): void {
-        $this->requireRole(['waka_kurikulum', 'kepala_sekolah']);
+        $this->requireRole(['tata_usaha', 'waka_kurikulum', 'kepala_sekolah']);
         $unitId = Auth::unitId();
         $taId = Auth::academicYearId();
         $monthNum = (int)($_POST['month_num'] ?? date('n'));
@@ -95,9 +101,9 @@ class AbsensiController extends Controller {
         $this->redirect(Auth::baseUrl() . '/attendance/teachers?month_num=' . $monthNum);
     }
 
-    // --- 2. ABSENSI STAF (TU, CS, SECURITY) (KEPALA SEKOLAH) ---
+    // --- 2. ABSENSI STAF (TU, CS, SECURITY) (DIINPUT OLEH TU) ---
     public function staffAttendance(): void {
-        $this->requireRole(['kepala_sekolah', 'deputi_pendidikan']);
+        $this->requireRole(['tata_usaha', 'kepala_sekolah', 'deputi_pendidikan']);
         $unitId = Auth::unitId();
         $taId = Auth::academicYearId();
         $monthNum = (int)($_GET['month_num'] ?? date('n'));
@@ -122,14 +128,14 @@ class AbsensiController extends Controller {
         );
 
         $this->view('attendance/staff', [
-            'pageTitle' => 'Presensi Bulanan Staf TU, CS & Security (Kepala Sekolah)',
+            'pageTitle' => 'Presensi Bulanan Karyawan & Staf (TU, CS & Security)',
             'staff'     => $staff,
             'monthNum'  => $monthNum
         ]);
     }
 
     public function saveStaffAttendance(): void {
-        $this->requireRole('kepala_sekolah');
+        $this->requireRole(['tata_usaha', 'kepala_sekolah']);
         $unitId = Auth::unitId();
         $taId = Auth::academicYearId();
         $monthNum = (int)($_POST['month_num'] ?? date('n'));
@@ -375,5 +381,411 @@ class AbsensiController extends Controller {
         } else {
             $this->redirect(Auth::baseUrl() . "/attendance/students?class_id={$classId}&month_num={$monthNum}");
         }
+    }
+
+    // --- 4. EXCEL IMPORT & TEMPLATE PRESENSI GURU ---
+    public function teachersAttendanceTemplate(): void {
+        $this->requireRole(['tata_usaha', 'kepala_sekolah', 'waka_kurikulum']);
+        $unitId = Auth::unitId();
+        $taId = Auth::academicYearId();
+        $monthNum = (int)($_GET['month_num'] ?? date('n'));
+        $unit = Database::fetch("SELECT * FROM units WHERE id = ?", [$unitId]);
+        $unitCode = $unit['code'] ?? 'UNIT';
+
+        $monthNames = [
+            1 => 'Januari', 2 => 'Februari', 3 => 'Maret', 4 => 'April',
+            5 => 'Mei', 6 => 'Juni', 7 => 'Juli', 8 => 'Agustus',
+            9 => 'September', 10 => 'Oktober', 11 => 'November', 12 => 'Desember'
+        ];
+        $monthName = $monthNames[$monthNum] ?? "Bulan-{$monthNum}";
+
+        $teachers = Database::fetchAll(
+            "SELECT e.*, ea.hadir, ea.sakit, ea.izin, ea.alpha, ea.terlambat, ea.terlambat_menit, 
+                    ea.pulang_cepat, ea.lupa_catat, ea.mangkir,
+                    ea.kajian_hadir, ea.kajian_total 
+             FROM employees e 
+             LEFT JOIN employee_attendance ea ON e.id = ea.employee_id 
+                  AND ea.unit_id = e.unit_id 
+                  AND ea.academic_year_id = ? 
+                  AND ea.month_num = ?
+             WHERE e.unit_id = ? AND e.is_deleted = 0 
+               AND (e.position LIKE '%Guru%' OR e.position LIKE '%Waka%' OR e.position LIKE '%Tutor%' OR e.level_posisi LIKE '%Guru%' OR e.level_posisi LIKE '%Waka%' OR e.level_posisi LIKE '%Tutor%')
+               AND e.level_posisi NOT IN ('Direktur Pendidikan', 'Deputi Direktur', 'Kepala Sekolah')
+               AND e.position NOT IN ('Direktur Pendidikan', 'Deputi Direktur', 'Kepala Sekolah')
+             ORDER BY e.nama ASC",
+            [$taId, $monthNum, $unitId]
+        );
+
+        $spreadsheet = new Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+        $sheet->setTitle(substr("Guru-{$monthName}", 0, 30));
+
+        $headers = [
+            'ID Pegawai (Jangan Diubah)',
+            'NIPY',
+            'Nama Lengkap Guru',
+            'Posisi / Jabatan',
+            'Hadir (Hari)',
+            'Sakit (Hari)',
+            'Izin (Hari)',
+            'Alpha (Hari)',
+            'Terlambat (Menit)',
+            'Pulang Cepat (Hari)',
+            'Lupa Catat (Hari)',
+            'Kajian Hadir (Pekan)',
+            'Kajian Total (Pekan)'
+        ];
+
+        // Header Styling
+        $colIndex = 1;
+        foreach ($headers as $h) {
+            $coord = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($colIndex) . '1';
+            $sheet->setCellValue($coord, $h);
+            $colIndex++;
+        }
+
+        $headerEnd = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(count($headers)) . '1';
+        $sheet->getStyle("A1:{$headerEnd}")->applyFromArray([
+            'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF'], 'size' => 11],
+            'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '0284C7']],
+            'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
+            'borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN]]
+        ]);
+        $sheet->getRowDimension(1)->setRowHeight(26);
+
+        // Pre-fill Teachers data
+        $rowNum = 2;
+        foreach ($teachers as $t) {
+            $sheet->setCellValue("A{$rowNum}", (int)$t['id']);
+            $sheet->setCellValueExplicit("B{$rowNum}", SecurityHelper::cleanFormula($t['nipy'] ?? '-'), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+            $sheet->setCellValue("C{$rowNum}", SecurityHelper::cleanFormula($t['nama']));
+            $sheet->setCellValue("D{$rowNum}", SecurityHelper::cleanFormula($t['level_posisi'] ?: ($t['position'] ?: 'Guru')));
+            $sheet->setCellValue("E{$rowNum}", $t['hadir'] !== null ? (int)$t['hadir'] : 20);
+            $sheet->setCellValue("F{$rowNum}", $t['sakit'] !== null ? (int)$t['sakit'] : 0);
+            $sheet->setCellValue("G{$rowNum}", $t['izin'] !== null ? (int)$t['izin'] : 0);
+            $sheet->setCellValue("H{$rowNum}", $t['alpha'] !== null ? (int)$t['alpha'] : 0);
+            $sheet->setCellValue("I{$rowNum}", $t['terlambat_menit'] !== null ? (int)$t['terlambat_menit'] : ($t['terlambat'] ?? 0));
+            $sheet->setCellValue("J{$rowNum}", $t['pulang_cepat'] !== null ? (int)$t['pulang_cepat'] : 0);
+            $sheet->setCellValue("K{$rowNum}", $t['lupa_catat'] !== null ? (int)$t['lupa_catat'] : 0);
+            $sheet->setCellValue("L{$rowNum}", $t['kajian_hadir'] !== null ? (int)$t['kajian_hadir'] : 4);
+            $sheet->setCellValue("M{$rowNum}", $t['kajian_total'] !== null ? (int)$t['kajian_total'] : 4);
+            $rowNum++;
+        }
+
+        $lastRow = max(2, $rowNum - 1);
+        $dataEnd = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(count($headers)) . $lastRow;
+        $sheet->getStyle("A2:{$dataEnd}")->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
+
+        // Auto-fit columns
+        foreach (range(1, count($headers)) as $c) {
+            $colLetter = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($c);
+            $sheet->getColumnDimension($colLetter)->setAutoSize(true);
+        }
+
+        $filename = "Format_Absensi_Guru_{$unitCode}_Bulan_{$monthNum}_{$monthName}";
+        if (ob_get_length()) ob_end_clean();
+        header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        header('Content-Disposition: attachment;filename="' . $filename . '.xlsx"');
+        header('Cache-Control: max-age=0');
+
+        $writer = new Xlsx($spreadsheet);
+        $writer->save('php://output');
+        exit;
+    }
+
+    public function teachersAttendanceImport(): void {
+        $this->requireRole(['tata_usaha', 'kepala_sekolah', 'waka_kurikulum']);
+        $unitId = Auth::unitId();
+        $taId = Auth::academicYearId();
+        $userId = Auth::id();
+        $monthNum = (int)($_POST['month_num'] ?? date('n'));
+
+        if (!isset($_FILES['excel_file']) || $_FILES['excel_file']['error'] !== UPLOAD_ERR_OK) {
+            $this->setFlash('danger', 'Gagal mengunggah berkas. Pastikan Anda telah memilih berkas Excel.');
+            $this->redirect(Auth::baseUrl() . '/attendance/teachers?month_num=' . $monthNum);
+            return;
+        }
+
+        $tmpFile = $_FILES['excel_file']['tmp_name'];
+        $ext = strtolower(pathinfo($_FILES['excel_file']['name'], PATHINFO_EXTENSION));
+
+        if (!in_array($ext, ['xlsx', 'xls'])) {
+            $this->setFlash('danger', 'Hanya berkas Excel dengan ekstensi .xlsx atau .xls yang diperbolehkan.');
+            $this->redirect(Auth::baseUrl() . '/attendance/teachers?month_num=' . $monthNum);
+            return;
+        }
+
+        try {
+            $spreadsheet = IOFactory::load($tmpFile);
+            $sheet = $spreadsheet->getActiveSheet();
+            $highestRow = $sheet->getHighestRow();
+        } catch (\Throwable $e) {
+            $this->setFlash('danger', 'Gagal membaca berkas Excel: ' . $e->getMessage());
+            $this->redirect(Auth::baseUrl() . '/attendance/teachers?month_num=' . $monthNum);
+            return;
+        }
+
+        $saved = 0;
+        $skipped = 0;
+
+        for ($r = 2; $r <= $highestRow; $r++) {
+            $empId = (int)$sheet->getCell("A{$r}")->getValue();
+            $nipy = trim((string)$sheet->getCell("B{$r}")->getValue());
+            $nama = trim((string)$sheet->getCell("C{$r}")->getValue());
+
+            $hadir = (int)$sheet->getCell("E{$r}")->getValue();
+            $sakit = (int)$sheet->getCell("F{$r}")->getValue();
+            $izin = (int)$sheet->getCell("G{$r}")->getValue();
+            $alpha = (int)$sheet->getCell("H{$r}")->getValue();
+            $terlambat = (int)$sheet->getCell("I{$r}")->getValue();
+            $pulangCepat = (int)$sheet->getCell("J{$r}")->getValue();
+            $lupaCatat = (int)$sheet->getCell("K{$r}")->getValue();
+            $kajianHadir = (int)$sheet->getCell("L{$r}")->getValue();
+            $kajianTotal = (int)$sheet->getCell("M{$r}")->getValue();
+
+            // Match Pegawai
+            $emp = null;
+            if ($empId > 0) {
+                $emp = Database::fetch("SELECT id, nama FROM employees WHERE id = ? AND unit_id = ?", [$empId, $unitId]);
+            }
+            if (!$emp && !empty($nipy) && $nipy !== '-') {
+                $emp = Database::fetch("SELECT id, nama FROM employees WHERE nipy = ? AND unit_id = ?", [$nipy, $unitId]);
+            }
+            if (!$emp && !empty($nama)) {
+                $emp = Database::fetch("SELECT id, nama FROM employees WHERE nama = ? AND unit_id = ?", [$nama, $unitId]);
+            }
+
+            if (!$emp) {
+                $skipped++;
+                continue;
+            }
+
+            $targetEmpId = (int)$emp['id'];
+            if ($kajianTotal <= 0) $kajianTotal = 4;
+
+            Database::execute(
+                "INSERT INTO employee_attendance 
+                    (employee_id, unit_id, academic_year_id, month_num, hadir, sakit, izin, alpha, mangkir, terlambat, terlambat_menit, pulang_cepat, lupa_catat, kajian_hadir, kajian_total, recorded_by_user_id) 
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) 
+                 ON DUPLICATE KEY UPDATE 
+                    hadir = VALUES(hadir), sakit = VALUES(sakit), izin = VALUES(izin), alpha = VALUES(alpha), mangkir = VALUES(mangkir),
+                    terlambat = VALUES(terlambat), terlambat_menit = VALUES(terlambat_menit),
+                    pulang_cepat = VALUES(pulang_cepat), lupa_catat = VALUES(lupa_catat),
+                    kajian_hadir = VALUES(kajian_hadir), kajian_total = VALUES(kajian_total),
+                    recorded_by_user_id = VALUES(recorded_by_user_id)",
+                [$targetEmpId, $unitId, $taId, $monthNum, $hadir, $sakit, $izin, $alpha, $alpha, $terlambat, $terlambat, $pulangCepat, $lupaCatat, $kajianHadir, $kajianTotal, $userId]
+            );
+            $saved++;
+        }
+
+        AuditLog::log('IMPORT_TEACHERS_ATTENDANCE', 'employee_attendance', $unitId, null, [
+            'month' => $monthNum, 'saved' => $saved, 'skipped' => $skipped
+        ]);
+
+        $this->setFlash('success', "Alhamdulillah, berhasil mengimpor presensi {$saved} guru untuk bulan ke-{$monthNum}. (Dilewati: {$skipped})");
+        $this->redirect(Auth::baseUrl() . '/attendance/teachers?month_num=' . $monthNum);
+    }
+
+    // --- 5. EXCEL IMPORT & TEMPLATE PRESENSI STAF ---
+    public function staffAttendanceTemplate(): void {
+        $this->requireRole(['tata_usaha', 'kepala_sekolah']);
+        $unitId = Auth::unitId();
+        $taId = Auth::academicYearId();
+        $monthNum = (int)($_GET['month_num'] ?? date('n'));
+        $unit = Database::fetch("SELECT * FROM units WHERE id = ?", [$unitId]);
+        $unitCode = $unit['code'] ?? 'UNIT';
+
+        $monthNames = [
+            1 => 'Januari', 2 => 'Februari', 3 => 'Maret', 4 => 'April',
+            5 => 'Mei', 6 => 'Juni', 7 => 'Juli', 8 => 'Agustus',
+            9 => 'September', 10 => 'Oktober', 11 => 'November', 12 => 'Desember'
+        ];
+        $monthName = $monthNames[$monthNum] ?? "Bulan-{$monthNum}";
+
+        $staff = Database::fetchAll(
+            "SELECT e.*, ea.hadir, ea.sakit, ea.izin, ea.alpha, ea.terlambat, ea.terlambat_menit, 
+                    ea.pulang_cepat, ea.lupa_catat, ea.mangkir,
+                    ea.kajian_hadir, ea.kajian_total 
+             FROM employees e 
+             LEFT JOIN employee_attendance ea ON e.id = ea.employee_id 
+                  AND ea.unit_id = e.unit_id 
+                  AND ea.academic_year_id = ? 
+                  AND ea.month_num = ?
+             WHERE e.unit_id = ? AND e.is_deleted = 0 
+               AND (e.position LIKE '%Tata Usaha%' OR e.position LIKE '%Cleaning%' OR e.position LIKE '%Security%' 
+                    OR e.level_posisi LIKE '%Tata Usaha%' OR e.level_posisi LIKE '%Cleaning%' OR e.level_posisi LIKE '%Security%')
+               AND e.level_posisi NOT IN ('Direktur Pendidikan', 'Deputi Direktur', 'Kepala Sekolah', 'Operator Sekolah')
+               AND e.position NOT IN ('Direktur Pendidikan', 'Deputi Direktur', 'Kepala Sekolah', 'Operator Sekolah')
+             ORDER BY e.position ASC, e.nama ASC",
+            [$taId, $monthNum, $unitId]
+        );
+
+        $spreadsheet = new Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+        $sheet->setTitle(substr("Staf-{$monthName}", 0, 30));
+
+        $headers = [
+            'ID Pegawai (Jangan Diubah)',
+            'NIPY',
+            'Nama Lengkap Staf',
+            'Posisi / Divisi',
+            'Hadir (Hari)',
+            'Sakit (Hari)',
+            'Izin (Hari)',
+            'Alpha (Hari)',
+            'Terlambat (Menit)',
+            'Pulang Cepat (Hari)',
+            'Lupa Catat (Hari)',
+            'Kajian Hadir (Pekan)',
+            'Kajian Total (Pekan)'
+        ];
+
+        // Header Styling
+        $colIndex = 1;
+        foreach ($headers as $h) {
+            $coord = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($colIndex) . '1';
+            $sheet->setCellValue($coord, $h);
+            $colIndex++;
+        }
+
+        $headerEnd = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(count($headers)) . '1';
+        $sheet->getStyle("A1:{$headerEnd}")->applyFromArray([
+            'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF'], 'size' => 11],
+            'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '0F766E']], // Teal
+            'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
+            'borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN]]
+        ]);
+        $sheet->getRowDimension(1)->setRowHeight(26);
+
+        // Pre-fill Staff data
+        $rowNum = 2;
+        foreach ($staff as $s) {
+            $sheet->setCellValue("A{$rowNum}", (int)$s['id']);
+            $sheet->setCellValueExplicit("B{$rowNum}", SecurityHelper::cleanFormula($s['nipy'] ?? '-'), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+            $sheet->setCellValue("C{$rowNum}", SecurityHelper::cleanFormula($s['nama']));
+            $sheet->setCellValue("D{$rowNum}", SecurityHelper::cleanFormula($s['level_posisi'] ?: ($s['position'] ?: 'Staf')));
+            $sheet->setCellValue("E{$rowNum}", $s['hadir'] !== null ? (int)$s['hadir'] : 24);
+            $sheet->setCellValue("F{$rowNum}", $s['sakit'] !== null ? (int)$s['sakit'] : 0);
+            $sheet->setCellValue("G{$rowNum}", $s['izin'] !== null ? (int)$s['izin'] : 0);
+            $sheet->setCellValue("H{$rowNum}", $s['alpha'] !== null ? (int)$s['alpha'] : 0);
+            $sheet->setCellValue("I{$rowNum}", $s['terlambat_menit'] !== null ? (int)$s['terlambat_menit'] : ($s['terlambat'] ?? 0));
+            $sheet->setCellValue("J{$rowNum}", $s['pulang_cepat'] !== null ? (int)$s['pulang_cepat'] : 0);
+            $sheet->setCellValue("K{$rowNum}", $s['lupa_catat'] !== null ? (int)$s['lupa_catat'] : 0);
+            $sheet->setCellValue("L{$rowNum}", $s['kajian_hadir'] !== null ? (int)$s['kajian_hadir'] : 4);
+            $sheet->setCellValue("M{$rowNum}", $s['kajian_total'] !== null ? (int)$s['kajian_total'] : 4);
+            $rowNum++;
+        }
+
+        $lastRow = max(2, $rowNum - 1);
+        $dataEnd = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(count($headers)) . $lastRow;
+        $sheet->getStyle("A2:{$dataEnd}")->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
+
+        foreach (range(1, count($headers)) as $c) {
+            $colLetter = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($c);
+            $sheet->getColumnDimension($colLetter)->setAutoSize(true);
+        }
+
+        $filename = "Format_Absensi_Staf_{$unitCode}_Bulan_{$monthNum}_{$monthName}";
+        if (ob_get_length()) ob_end_clean();
+        header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        header('Content-Disposition: attachment;filename="' . $filename . '.xlsx"');
+        header('Cache-Control: max-age=0');
+
+        $writer = new Xlsx($spreadsheet);
+        $writer->save('php://output');
+        exit;
+    }
+
+    public function staffAttendanceImport(): void {
+        $this->requireRole(['tata_usaha', 'kepala_sekolah']);
+        $unitId = Auth::unitId();
+        $taId = Auth::academicYearId();
+        $userId = Auth::id();
+        $monthNum = (int)($_POST['month_num'] ?? date('n'));
+
+        if (!isset($_FILES['excel_file']) || $_FILES['excel_file']['error'] !== UPLOAD_ERR_OK) {
+            $this->setFlash('danger', 'Gagal mengunggah berkas. Pastikan Anda telah memilih berkas Excel.');
+            $this->redirect(Auth::baseUrl() . '/attendance/staff?month_num=' . $monthNum);
+            return;
+        }
+
+        $tmpFile = $_FILES['excel_file']['tmp_name'];
+        $ext = strtolower(pathinfo($_FILES['excel_file']['name'], PATHINFO_EXTENSION));
+
+        if (!in_array($ext, ['xlsx', 'xls'])) {
+            $this->setFlash('danger', 'Hanya berkas Excel dengan ekstensi .xlsx atau .xls yang diperbolehkan.');
+            $this->redirect(Auth::baseUrl() . '/attendance/staff?month_num=' . $monthNum);
+            return;
+        }
+
+        try {
+            $spreadsheet = IOFactory::load($tmpFile);
+            $sheet = $spreadsheet->getActiveSheet();
+            $highestRow = $sheet->getHighestRow();
+        } catch (\Throwable $e) {
+            $this->setFlash('danger', 'Gagal membaca berkas Excel: ' . $e->getMessage());
+            $this->redirect(Auth::baseUrl() . '/attendance/staff?month_num=' . $monthNum);
+            return;
+        }
+
+        $saved = 0;
+        $skipped = 0;
+
+        for ($r = 2; $r <= $highestRow; $r++) {
+            $empId = (int)$sheet->getCell("A{$r}")->getValue();
+            $nipy = trim((string)$sheet->getCell("B{$r}")->getValue());
+            $nama = trim((string)$sheet->getCell("C{$r}")->getValue());
+
+            $hadir = (int)$sheet->getCell("E{$r}")->getValue();
+            $sakit = (int)$sheet->getCell("F{$r}")->getValue();
+            $izin = (int)$sheet->getCell("G{$r}")->getValue();
+            $alpha = (int)$sheet->getCell("H{$r}")->getValue();
+            $terlambat = (int)$sheet->getCell("I{$r}")->getValue();
+            $pulangCepat = (int)$sheet->getCell("J{$r}")->getValue();
+            $lupaCatat = (int)$sheet->getCell("K{$r}")->getValue();
+            $kajianHadir = (int)$sheet->getCell("L{$r}")->getValue();
+            $kajianTotal = (int)$sheet->getCell("M{$r}")->getValue();
+
+            // Match Pegawai
+            $emp = null;
+            if ($empId > 0) {
+                $emp = Database::fetch("SELECT id, nama FROM employees WHERE id = ? AND unit_id = ?", [$empId, $unitId]);
+            }
+            if (!$emp && !empty($nipy) && $nipy !== '-') {
+                $emp = Database::fetch("SELECT id, nama FROM employees WHERE nipy = ? AND unit_id = ?", [$nipy, $unitId]);
+            }
+            if (!$emp && !empty($nama)) {
+                $emp = Database::fetch("SELECT id, nama FROM employees WHERE nama = ? AND unit_id = ?", [$nama, $unitId]);
+            }
+
+            if (!$emp) {
+                $skipped++;
+                continue;
+            }
+
+            $targetEmpId = (int)$emp['id'];
+            if ($kajianTotal <= 0) $kajianTotal = 4;
+
+            Database::execute(
+                "INSERT INTO employee_attendance 
+                    (employee_id, unit_id, academic_year_id, month_num, hadir, sakit, izin, alpha, mangkir, terlambat, terlambat_menit, pulang_cepat, lupa_catat, kajian_hadir, kajian_total, recorded_by_user_id) 
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) 
+                 ON DUPLICATE KEY UPDATE 
+                    hadir = VALUES(hadir), sakit = VALUES(sakit), izin = VALUES(izin), alpha = VALUES(alpha), mangkir = VALUES(mangkir),
+                    terlambat = VALUES(terlambat), terlambat_menit = VALUES(terlambat_menit),
+                    pulang_cepat = VALUES(pulang_cepat), lupa_catat = VALUES(lupa_catat),
+                    kajian_hadir = VALUES(kajian_hadir), kajian_total = VALUES(kajian_total),
+                    recorded_by_user_id = VALUES(recorded_by_user_id)",
+                [$targetEmpId, $unitId, $taId, $monthNum, $hadir, $sakit, $izin, $alpha, $alpha, $terlambat, $terlambat, $pulangCepat, $lupaCatat, $kajianHadir, $kajianTotal, $userId]
+            );
+            $saved++;
+        }
+
+        AuditLog::log('IMPORT_STAFF_ATTENDANCE', 'employee_attendance', $unitId, null, [
+            'month' => $monthNum, 'saved' => $saved, 'skipped' => $skipped
+        ]);
+
+        $this->setFlash('success', "Alhamdulillah, berhasil mengimpor presensi {$saved} staf untuk bulan ke-{$monthNum}. (Dilewati: {$skipped})");
+        $this->redirect(Auth::baseUrl() . '/attendance/staff?month_num=' . $monthNum);
     }
 }

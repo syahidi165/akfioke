@@ -338,6 +338,18 @@ if (!function_exists('isNavActive')) {
                 </a>
             </div>
             <div class="nav-item">
+                <a href="<?= $baseUrl ?>/attendance/teachers" class="nav-link <?= isNavActive('/attendance/teachers', $currentPath) ?>">
+                    <i class="fa-solid fa-clipboard-user"></i>
+                    <span class="nav-text">Absensi & Kajian Guru</span>
+                </a>
+            </div>
+            <div class="nav-item">
+                <a href="<?= $baseUrl ?>/attendance/staff" class="nav-link <?= isNavActive('/attendance/staff', $currentPath) ?>">
+                    <i class="fa-solid fa-id-card-clip"></i>
+                    <span class="nav-text">Absensi Staf (TU, CS, Security)</span>
+                </a>
+            </div>
+            <div class="nav-item">
                 <a href="<?= $baseUrl ?>/akfi/pribadi" class="nav-link <?= isNavActive('/akfi/pribadi', $currentPath) ?>">
                     <i class="fa-solid fa-award"></i>
                     <span class="nav-text">Rapor AKFI Saya</span>
@@ -392,12 +404,6 @@ if (!function_exists('isNavActive')) {
                 <a href="<?= $baseUrl ?>/jadwal/kelas" class="nav-link <?= isNavActive('/jadwal/kelas', $currentPath) ?>">
                     <i class="fa-solid fa-calendar-week"></i>
                     <span class="nav-text">Jadwal Pelajaran Kelas</span>
-                </a>
-            </div>
-            <div class="nav-item">
-                <a href="<?= $baseUrl ?>/attendance/teachers" class="nav-link <?= isNavActive('/attendance/teachers', $currentPath) ?>">
-                    <i class="fa-solid fa-clipboard-user"></i>
-                    <span class="nav-text">Kehadiran & Kajian Guru</span>
                 </a>
             </div>
             <div class="nav-item">
@@ -509,6 +515,12 @@ if (!function_exists('isNavActive')) {
                 </a>
             </div>
             <div class="nav-item">
+                <a href="<?= $baseUrl ?>/guru/prestasi" class="nav-link <?= isNavActive('/guru/prestasi', $currentPath) ?>">
+                    <i class="fa-solid fa-medal"></i>
+                    <span class="nav-text">Prestasi Guru</span>
+                </a>
+            </div>
+            <div class="nav-item">
                 <a href="<?= $baseUrl ?>/akfi/pribadi" class="nav-link <?= isNavActive('/akfi/pribadi', $currentPath) ?>">
                     <i class="fa-solid fa-award"></i>
                     <span class="nav-text">Rapor AKFI Saya</span>
@@ -545,6 +557,12 @@ if (!function_exists('isNavActive')) {
                 <a href="<?= $baseUrl ?>/supervisi/riwayat" class="nav-link <?= isNavActive('/supervisi/riwayat', $currentPath) ?>">
                     <i class="fa-solid fa-file-lines"></i>
                     <span class="nav-text">Hasil Supervisi Saya</span>
+                </a>
+            </div>
+            <div class="nav-item">
+                <a href="<?= $baseUrl ?>/guru/prestasi" class="nav-link <?= isNavActive('/guru/prestasi', $currentPath) ?>">
+                    <i class="fa-solid fa-medal"></i>
+                    <span class="nav-text">Prestasi Guru</span>
                 </a>
             </div>
             <div class="nav-item">
@@ -599,6 +617,12 @@ if (!function_exists('isNavActive')) {
                 </a>
             </div>
             <div class="nav-item">
+                <a href="<?= $baseUrl ?>/guru/prestasi" class="nav-link <?= isNavActive('/guru/prestasi', $currentPath) ?>">
+                    <i class="fa-solid fa-medal"></i>
+                    <span class="nav-text">Prestasi Guru</span>
+                </a>
+            </div>
+            <div class="nav-item">
                 <a href="<?= $baseUrl ?>/akfi/pribadi" class="nav-link <?= isNavActive('/akfi/pribadi', $currentPath) ?>">
                     <i class="fa-solid fa-award"></i>
                     <span class="nav-text">Rapor AKFI Saya</span>
@@ -650,12 +674,6 @@ if (!function_exists('isNavActive')) {
                 </a>
             </div>
             <div class="nav-item">
-                <a href="<?= $baseUrl ?>/attendance/staff" class="nav-link <?= isNavActive('/attendance/staff', $currentPath) ?>">
-                    <i class="fa-solid fa-id-card-clip"></i>
-                    <span class="nav-text">Absensi TU, CS, Security</span>
-                </a>
-            </div>
-            <div class="nav-item">
                 <a href="<?= $baseUrl ?>/kegiatan/luar-kbm" class="nav-link <?= isNavActive('/kegiatan/luar-kbm', $currentPath) ?>">
                     <i class="fa-solid fa-calendar-plus"></i>
                     <span class="nav-text">Kegiatan di Luar KBM</span>
@@ -669,8 +687,8 @@ if (!function_exists('isNavActive')) {
             </div>
             <div class="nav-item">
                 <a href="<?= $baseUrl ?>/guru/prestasi-tetapkan" class="nav-link <?= isNavActive('/guru/prestasi-tetapkan', $currentPath) ?>">
-                    <i class="fa-solid fa-medal"></i>
-                    <span class="nav-text">Guru Berprestasi</span>
+                    <i class="fa-solid fa-certificate"></i>
+                    <span class="nav-text">Verifikasi Prestasi Guru</span>
                 </a>
             </div>
             <div class="nav-item">

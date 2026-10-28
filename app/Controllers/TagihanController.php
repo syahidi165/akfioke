@@ -348,7 +348,8 @@ class TagihanController extends Controller {
         $bill = Database::fetch(
             "SELECT b.*, s.nama as student_name, s.nis, COALESCE(NULLIF(s.father_name, ''), NULLIF(s.mother_name, ''), 'Wali Santri') as parent_name, s.parent_phone, s.parent_email, 
                     c.name as class_name, u.name as unit_name, u.phone as unit_phone, u.bank_name, 
-                    u.bank_account, u.bank_holder, u.kop_title, u.kop_subtitle, u.address, u.email as unit_email 
+                    u.bank_account, u.bank_holder, u.kop_title, u.kop_subtitle, u.address, u.email as unit_email,
+                    u.code, u.level, u.npsn, u.akreditasi, u.nomor_akreditasi, u.nomor_izin_operasional, u.logo_path
              FROM bills b 
              JOIN students s ON b.student_id = s.id 
              JOIN units u ON b.unit_id = u.id 
@@ -367,74 +368,172 @@ class TagihanController extends Controller {
         $bsiHolder = $bill['bank_holder'] ?: $bill['unit_name'];
         $unitPhone = $bill['unit_phone'] ?: '-';
 
+        // Ambil data staf Tata Usaha aktif
+        $tuEmp = Database::fetch(
+            "SELECT e.nama, e.nipy 
+             FROM employees e 
+             JOIN user_roles ur ON e.user_id = ur.user_id 
+             JOIN roles r ON ur.role_id = r.id 
+             WHERE e.unit_id = ? AND r.name = 'tata_usaha' AND e.status = 'Aktif' 
+             LIMIT 1",
+            [$bill['unit_id']]
+        );
+        if (!$tuEmp) {
+            $tuEmp = Database::fetch(
+                "SELECT nama, nipy FROM employees 
+                 WHERE unit_id = ? AND (level_posisi LIKE '%Tata Usaha%' OR position LIKE '%Tata Usaha%') AND status = 'Aktif' 
+                 LIMIT 1", 
+                [$bill['unit_id']]
+            );
+        }
+        $tuName = $tuEmp['nama'] ?? 'Staff Tata Usaha';
+        $tuNipy = $tuEmp['nipy'] ?? '-';
+
+        // Render Kop Surat standar dual logo
+        $kopHtml = ExportHelper::renderKop($bill);
+        $letterNo = !empty($bill['tu_reminder_letter_no']) ? $bill['tu_reminder_letter_no'] : ('REM/TU/' . date('Ym') . '/' . sprintf('%04d', $billId));
+
         $html = "
         <html>
         <head>
             <meta charset='UTF-8'>
             <title>Format Surat Reminder Jumlah Tunggakan - FR 8001B</title>
             <style>
-                @page { margin: 25mm 20mm 20mm 20mm; }
-                body { font-family: 'Times New Roman', Times, serif; font-size: 12pt; line-height: 1.5; color: #111; }
-                .doc-code { font-size: 11pt; font-weight: normal; margin-bottom: 25px; color: #333; }
-                .salutation { margin-bottom: 20px; }
-                .content-p { text-align: justify; margin-bottom: 14px; text-indent: 0; }
-                .amount-highlight { font-weight: bold; font-size: 12.5pt; color: #000; }
-                .bank-box { margin: 15px 0 15px 0; line-height: 1.6; }
-                .contact-info { margin-top: 15px; margin-bottom: 20px; }
-                .closing { margin-top: 25px; }
+                @page { margin: 15mm 20mm 15mm 20mm; }
+                body { font-family: 'Times New Roman', Times, serif; font-size: 11pt; line-height: 1.45; color: #111; }
+                .kop-wrapper { margin-bottom: 16px; }
+                .meta-table { width: 100%; margin-bottom: 16px; font-size: 11pt; }
+                .meta-table td { padding: 2px 0; vertical-align: top; }
+                .salutation { margin-bottom: 14px; }
+                .content-p { text-align: justify; margin-bottom: 12px; line-height: 1.5; }
+                .amount-highlight { font-weight: bold; font-size: 12pt; color: #b91c1c; }
+                .bank-box { background: #f8fafc; border: 1px solid #cbd5e1; padding: 10px 14px; margin: 12px 0; line-height: 1.5; border-radius: 4px; }
+                .contact-info { margin-top: 10px; margin-bottom: 14px; }
+                .closing { margin-top: 14px; margin-bottom: 18px; }
+                .signature-table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 11pt; }
             </style>
         </head>
         <body>
-            <div class='doc-code'>7.2 Format Surat Reminder Jumlah Tunggakan - <strong>FR 8001B</strong></div>
+            <div class='kop-wrapper'>
+                {$kopHtml}
+            </div>
+
+            <table class='meta-table'>
+                <tr>
+                    <td style='width: 15%;'>Nomor</td>
+                    <td style='width: 3%;'>:</td>
+                    <td style='width: 47%;'>{$letterNo}</td>
+                    <td style='width: 35%; text-align: right;'>Batam, " . date('d F Y') . "</td>
+                </tr>
+                <tr>
+                    <td>Lampiran</td>
+                    <td>:</td>
+                    <td>-</td>
+                    <td style='text-align: right; color: #475569; font-size: 10pt;'><strong>FR 8001B</strong></td>
+                </tr>
+                <tr>
+                    <td>Hal</td>
+                    <td>:</td>
+                    <td colspan='2'><strong>Surat Reminder Jumlah Tunggakan SPP / Biaya Pendidikan</strong></td>
+                </tr>
+            </table>
 
             <div class='salutation'>
                 Kepada Yth. :<br>
-                <strong>Orang Tua Dari " . SecurityHelper::escape($bill['student_name']) . "</strong><br>
-                Di -<br>
-                &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Tempat
+                <strong>Orang Tua / Wali Dari ananda " . SecurityHelper::escape($bill['student_name']) . " (NIS: " . SecurityHelper::escape($bill['nis']) . ")</strong><br>
+                Kelas: " . SecurityHelper::escape($bill['class_name'] ?? '-') . "<br>
+                Di - Tempat
             </div>
 
             <div class='content-p' style='font-style: italic;'>
-                Assalamu'alaikum warahmatullahi wabarakaatuh,
+                Assalamu'alaikum warahmatullahi wabarakatuh,
             </div>
 
             <div class='content-p'>
-                Segala puji hanyalah milik Allah, kita memujiNya dengan nama-nama dan sifat-sifat Nya yang baik. Shalawat dan salam senantiasa tercurah atas junjungan dan panutan hidup kita, Nabi Muhammad Shallallahu'alaihi wa sallam. Melalui pesan ini kami beritahukan kepada Bapak/Ibu wali murid, bahwa berkaitan dengan Kelangsungan Belajar Mengajar (KBM), maka sudi kiranya Bapak/Ibu berkenan menjadi pembuka jalan kebaikan.
+                Segala puji hanyalah milik Allah Subhaanahu wa Ta'ala, kita memuji-Nya dengan nama-nama dan sifat-sifat-Nya yang mulia. Shalawat dan salam senantiasa tercurah atas junjungan dan panutan kita, Nabi Muhammad Shallallahu 'alaihi wa sallam beserta keluarga dan sahabatnya. Melalui surat ini kami sampaikan kepada Bapak/Ibu wali murid, bahwa berkaitan dengan kelancaran Kelangsungan Belajar Mengajar (KBM) di sekolah, sudi kiranya Bapak/Ibu berkenan menjadi pembuka jalan kebaikan.
             </div>
 
             <div class='content-p'>
-                Berdasarkan data yang ada pada kami,ada beberapa pembiayaan Bapak/Ibu yang belum dibayar sebesar <span class='amount-highlight'>Rp {$formattedAmount},00</span>
+                Berdasarkan data keuangan kami sampai dengan tanggal " . date('d F Y') . ", terdapat beberapa pembiayaan Bapak/Ibu yang belum diselesaikan dengan rincian kewajiban sebesar:
+                <div style='margin-top: 6px; font-size: 13pt; text-align: center;' class='amount-highlight'>
+                    Rp {$formattedAmount},00
+                </div>
             </div>
 
             <div class='content-p'>
-                Untuk itu kami do'akan semoga Allah beri kemudahan sehingga biaya yang belum dibayar bisa segera di penuhi.
+                Untuk itu kami mendo'akan semoga Allah Subhaanahu wa Ta'ala senantiasa melimpahkan kemudahan, kelapangan rezeki, dan barakah sehingga biaya yang belum diselesaikan dapat segera dipenuhi.
             </div>
 
             <div class='bank-box'>
-                Pembayaran bisa ditransfer ke BSI dengan no Rekening :<br>
-                <strong>{$bsiAcc} &nbsp;&nbsp;&nbsp; AN : {$bsiHolder}</strong>
+                Pembayaran dapat ditransfer melalui rekening resmi sekolah:<br>
+                Bank: <strong>Bank Syariah Indonesia (BSI)</strong><br>
+                Nomor Rekening: <strong style='font-size: 12pt;'>{$bsiAcc}</strong><br>
+                Atas Nama: <strong>{$bsiHolder}</strong>
             </div>
 
             <div class='contact-info'>
-                Untuk keterangan lebih lanjut silahkan menghubungi bagian keuangan (TU {$bill['unit_name']}) di no telp <strong>{$unitPhone}</strong>
+                Untuk keterangan lebih lanjut dan konfirmasi bukti pembayaran, silakan menghubungi bagian keuangan (TU " . SecurityHelper::escape($bill['unit_name']) . ") di nomor telepon: <strong>{$unitPhone}</strong>.
             </div>
 
             <div class='content-p'>
-                Demikian pesan ini kami sampaikan, atas perhatiannya kami ucapkan. Jazakamullahu khoiron.
-            </div>
-
-            <div class='content-p'>
-                Kepada Bapak/Ibu yang sudah membayar namun belum konfirmasi, mohon untuk mengkonfirmasi kembali kepada kita.
+                Demikian surat reminder ini kami sampaikan, atas perhatian dan kerjasama Bapak/Ibu kami ucapkan <em>Jazakumullahu khairan katsiran</em>.
             </div>
 
             <div class='closing' style='font-style: italic;'>
-                Wassalamu'alaikum warahmatullahi wabarakaatuh.
+                Wassalamu'alaikum warahmatullahi wabarakatuh.
             </div>
+
+            <table class='signature-table'>
+                <tr>
+                    <td style='width: 55%;'></td>
+                    <td style='width: 45%; text-align: center; line-height: 1.4;'>
+                        Bagian Tata Usaha & Keuangan<br>
+                        <strong>" . SecurityHelper::escape($bill['unit_name']) . "</strong>
+                        <br><br><br><br><br>
+                        <strong><u>" . SecurityHelper::escape($tuName) . "</u></strong><br>
+                        <span>NIPY. " . SecurityHelper::escape($tuNipy) . "</span>
+                    </td>
+                </tr>
+            </table>
         </body>
         </html>
         ";
 
         ExportHelper::pdf($html, 'Surat_Reminder_FR8001B_' . $bill['nis'], 'A4', 'portrait', true);
+    }
+
+    private function getSmtpConfig(int $unitId): ?array {
+        $unit = Database::fetch("SELECT * FROM units WHERE id = ?", [$unitId]);
+        if (!empty($unit['smtp_host']) && !empty($unit['smtp_user'])) {
+            return [
+                'host'       => $unit['smtp_host'],
+                'port'       => (int)($unit['smtp_port'] ?: 587),
+                'username'   => $unit['smtp_user'],
+                'password'   => SecurityHelper::decrypt($unit['smtp_pass']) ?: $unit['smtp_pass'],
+                'encryption' => $unit['smtp_enc'] ?: 'tls',
+                'from_email' => $unit['smtp_user'],
+                'from_name'  => $unit['name']
+            ];
+        }
+
+        try {
+            $smtp = Database::fetch("SELECT * FROM smtp_settings WHERE unit_id = ? OR unit_id IS NULL ORDER BY unit_id DESC LIMIT 1", [$unitId]);
+            if ($smtp && !empty($smtp['host'])) {
+                return [
+                    'host'       => $smtp['host'],
+                    'port'       => (int)($smtp['port'] ?: 587),
+                    'username'   => $smtp['username'],
+                    'password'   => $smtp['password'],
+                    'encryption' => $smtp['encryption'] ?: 'tls',
+                    'from_email' => $smtp['from_email'],
+                    'from_name'  => $smtp['from_name']
+                ];
+            }
+        } catch (\Exception $e) {
+            // Abaikan error tabel tidak ditemukan
+        }
+
+        return null;
     }
 
     public function kirimSuratFR8001B(): void {
@@ -468,8 +567,9 @@ class TagihanController extends Controller {
             [$letterNo, $billId]
         );
 
-        // Kirim email notifikasi jika SMTP tersedia
-        $smtp = Database::fetch("SELECT * FROM smtp_settings WHERE unit_id = ? OR unit_id IS NULL ORDER BY unit_id DESC LIMIT 1", [$unitId]);
+        // Kirim email notifikasi jika SMTP tersedia secara aman
+        $smtp = $this->getSmtpConfig($unitId);
+        $emailSent = false;
         if ($smtp && !empty($bill['parent_email'])) {
             try {
                 $mail = new PHPMailer(true);
@@ -478,7 +578,7 @@ class TagihanController extends Controller {
                 $mail->SMTPAuth   = true;
                 $mail->Username   = $smtp['username'];
                 $mail->Password   = $smtp['password'];
-                $mail->SMTPSecure = $smtp['encryption'] === 'tls' ? PHPMailer::ENCRYPTION_STARTTLS : PHPMailer::ENCRYPTION_SMTPS;
+                $mail->SMTPSecure = $smtp['encryption'] === 'ssl' ? PHPMailer::ENCRYPTION_SMTPS : PHPMailer::ENCRYPTION_STARTTLS;
                 $mail->Port       = (int)$smtp['port'];
 
                 $mail->setFrom($smtp['from_email'], $smtp['from_name']);
@@ -494,13 +594,20 @@ class TagihanController extends Controller {
                         <p><em>Jazakumullah Khairan Katsiran.</em></p>
                     </div>";
                 $mail->send();
+                $emailSent = true;
             } catch (\Exception $e) {
                 // Email error dicatat namun alur sistem tetap sukses
             }
         }
 
-        AuditLog::log('SEND_REMINDER_FR8001B', 'bills', $billId, null, ['letter_no' => $letterNo]);
-        $this->setFlash('success', 'Surat reminder penagihan FR 8001B berhasil dikirim/diterbitkan oleh TU.');
+        AuditLog::log('SEND_REMINDER_FR8001B', 'bills', $billId, null, ['letter_no' => $letterNo, 'email_sent' => $emailSent]);
+        $msg = 'Surat reminder penagihan FR 8001B berhasil diterbitkan oleh TU (' . $letterNo . ').';
+        if ($emailSent) {
+            $msg .= ' Email pemberitahuan juga telah berhasil dikirim ke orang tua.';
+        } elseif (empty($smtp)) {
+            $msg .= ' (Catatan: Pengiriman email dilewati karena SMTP unit belum dikonfigurasi).';
+        }
+        $this->setFlash('success', $msg);
         $this->redirect(Auth::baseUrl() . '/tagihan/manage');
     }
 
@@ -1812,7 +1919,7 @@ class TagihanController extends Controller {
             return;
         }
 
-        $smtp = Database::fetch("SELECT * FROM smtp_settings WHERE unit_id = ? OR unit_id IS NULL ORDER BY unit_id DESC LIMIT 1", [$unitId]);
+        $smtp = $this->getSmtpConfig($unitId);
         if ($smtp) {
             try {
                 $mail = new PHPMailer(true);
@@ -1821,7 +1928,7 @@ class TagihanController extends Controller {
                 $mail->SMTPAuth   = true;
                 $mail->Username   = $smtp['username'];
                 $mail->Password   = $smtp['password'];
-                $mail->SMTPSecure = $smtp['encryption'] === 'tls' ? PHPMailer::ENCRYPTION_STARTTLS : PHPMailer::ENCRYPTION_SMTPS;
+                $mail->SMTPSecure = $smtp['encryption'] === 'ssl' ? PHPMailer::ENCRYPTION_SMTPS : PHPMailer::ENCRYPTION_STARTTLS;
                 $mail->Port       = (int)$smtp['port'];
 
                 $mail->setFrom($smtp['from_email'], $smtp['from_name']);

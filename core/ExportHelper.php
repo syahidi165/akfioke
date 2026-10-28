@@ -108,64 +108,117 @@ class ExportHelper {
      * Template Kop Surat Standar Unit dengan Logo Kustom
      */
     public static function renderKop(array $unit): string {
-        $kopTitle = htmlspecialchars($unit['kop_title'] ?? 'YAYASAN ISLAM AL KAHFI BATAM', ENT_QUOTES, 'UTF-8');
-        $kopSub = htmlspecialchars($unit['kop_subtitle'] ?? '', ENT_QUOTES, 'UTF-8');
-        $address = htmlspecialchars($unit['address'] ?? '', ENT_QUOTES, 'UTF-8');
-        $phone = htmlspecialchars($unit['phone'] ?? '', ENT_QUOTES, 'UTF-8');
-        $email = htmlspecialchars($unit['email'] ?? '', ENT_QUOTES, 'UTF-8');
-
-        // Resolve logo_path jika tidak disediakan langsung di array $unit
-        $logoPath = $unit['logo_path'] ?? '';
-        $code = $unit['code'] ?? '';
-        if (empty($logoPath)) {
-            $uId = (int)($unit['unit_id'] ?? ($unit['id'] ?? 0));
-            if ($uId > 0) {
-                $dbUnit = Database::fetch("SELECT logo_path, code, kop_title, kop_subtitle, address, phone, email FROM units WHERE id = ?", [$uId]);
-                if ($dbUnit) {
-                    $logoPath = $dbUnit['logo_path'] ?? '';
-                    if (empty($code)) $code = $dbUnit['code'] ?? '';
-                    if (empty($unit['kop_title']) && !empty($dbUnit['kop_title'])) $kopTitle = htmlspecialchars($dbUnit['kop_title'], ENT_QUOTES, 'UTF-8');
-                    if (empty($unit['kop_subtitle']) && !empty($dbUnit['kop_subtitle'])) $kopSub = htmlspecialchars($dbUnit['kop_subtitle'], ENT_QUOTES, 'UTF-8');
-                    if (empty($unit['address']) && !empty($dbUnit['address'])) $address = htmlspecialchars($dbUnit['address'], ENT_QUOTES, 'UTF-8');
-                    if (empty($unit['phone']) && !empty($dbUnit['phone'])) $phone = htmlspecialchars($dbUnit['phone'], ENT_QUOTES, 'UTF-8');
-                    if (empty($unit['email']) && !empty($dbUnit['email'])) $email = htmlspecialchars($dbUnit['email'], ENT_QUOTES, 'UTF-8');
-                }
-            }
+        $uId = (int)($unit['unit_id'] ?? ($unit['id'] ?? 0));
+        $dbUnit = null;
+        if ($uId > 0) {
+            $dbUnit = Database::fetch("SELECT * FROM units WHERE id = ?", [$uId]);
+        } elseif (!empty($unit['code'])) {
+            $dbUnit = Database::fetch("SELECT * FROM units WHERE code = ?", [$unit['code']]);
         }
 
-        // Render gambar logo jika ada berkas fisiknya di server
-        $logoHtml = '';
-        $fullLogoPath = !empty($logoPath) ? dirname(__DIR__) . '/public/' . ltrim($logoPath, '/') : '';
-        if (!empty($fullLogoPath) && file_exists($fullLogoPath)) {
-            $ext = strtolower(pathinfo($fullLogoPath, PATHINFO_EXTENSION));
+        $source = array_merge($dbUnit ?: [], $unit);
+
+        $kopTitle = !empty($source['kop_title']) ? $source['kop_title'] : 'YAYASAN ISLAM AL KAHFI BATAM';
+        $kopSub = !empty($source['kop_subtitle']) ? $source['kop_subtitle'] : ($source['name'] ?? '');
+        $akreditasi = trim($source['akreditasi'] ?? '');
+        $izinOp = trim($source['nomor_izin_operasional'] ?? '');
+        $npsn = trim($source['npsn'] ?? '');
+        $address = trim($source['address'] ?? '');
+        $phone = trim($source['phone'] ?? '');
+        $email = trim($source['email'] ?? '');
+        $logoPath = trim($source['logo_path'] ?? '');
+        $code = trim($source['code'] ?? '');
+
+        // 1. Logo Kiri: Logo Yayasan Al Kahfi
+        $yayasanLogoPath = dirname(__DIR__) . '/public/images/logo_alkahfi.png';
+        if (!file_exists($yayasanLogoPath)) {
+            $yayasanLogoPath = dirname(__DIR__) . '/public/uploads/logos/app_logo_1790375160.png';
+        }
+        $yayasanLogoHtml = '';
+        if (file_exists($yayasanLogoPath)) {
+            $base64Y = base64_encode(file_get_contents($yayasanLogoPath));
+            $yayasanLogoHtml = "<img src='data:image/png;base64,{$base64Y}' style='max-height: 75px; max-width: 80px; object-fit: contain; display: block; margin: auto;'>";
+        } else {
+            $yayasanLogoHtml = "<div style='width: 65px; height: 65px; border-radius: 50%; background: #0284c7; color: #fff; font-weight: bold; line-height: 65px; font-size: 14px; text-align: center; margin: auto;'>YIAK</div>";
+        }
+
+        // 2. Logo Kanan: Logo Unit Sekolah
+        $unitLogoHtml = '';
+        $fullUnitLogoPath = !empty($logoPath) ? dirname(__DIR__) . '/public/' . ltrim($logoPath, '/') : '';
+        if (!empty($fullUnitLogoPath) && file_exists($fullUnitLogoPath)) {
+            $ext = strtolower(pathinfo($fullUnitLogoPath, PATHINFO_EXTENSION));
             $mime = match($ext) {
-                'png'  => 'image/png',
+                'png' => 'image/png',
                 'jpg', 'jpeg' => 'image/jpeg',
-                'svg'  => 'image/svg+xml',
+                'svg' => 'image/svg+xml',
                 'webp' => 'image/webp',
                 default => 'image/png'
             };
-            $base64 = base64_encode(file_get_contents($fullLogoPath));
-            $logoHtml = "<img src='data:{$mime};base64,{$base64}' style='max-height: 68px; max-width: 78px; object-fit: contain; margin: 0 auto; display: block;'>";
+            $base64U = base64_encode(file_get_contents($fullUnitLogoPath));
+            $unitLogoHtml = "<img src='data:{$mime};base64,{$base64U}' style='max-height: 75px; max-width: 80px; object-fit: contain; display: block; margin: auto;'>";
         } else {
-            $abbr = htmlspecialchars(!empty($code) ? $code : 'AK', ENT_QUOTES, 'UTF-8');
-            $logoHtml = "<div style='width: 60px; height: 60px; border-radius: 50%; background: #1e3a8a; color: #fff; font-weight: bold; line-height: 60px; font-size: 18px; text-align: center; margin: 0 auto;'>{$abbr}</div>";
+            $abbr = !empty($code) ? htmlspecialchars($code, ENT_QUOTES, 'UTF-8') : 'UNIT';
+            $unitLogoHtml = "<div style='width: 65px; height: 65px; border-radius: 50%; border: 2px solid #38bdf8; color: #0284c7; font-weight: bold; line-height: 61px; font-size: 13px; text-align: center; margin: auto;'>{$abbr}</div>";
         }
 
+        // Subline: Akreditasi
+        $akreditasiHtml = '';
+        if (!empty($akreditasi)) {
+            $akreditasiClean = htmlspecialchars($akreditasi, ENT_QUOTES, 'UTF-8');
+            $akreditasiHtml = "<div style='font-size: 12px; font-weight: bold; color: #0284c7; margin-top: 2px; letter-spacing: 0.5px;'>&ldquo;AKREDITASI {$akreditasiClean}&rdquo;</div>";
+        }
+
+        // Line: Izin Operasional & NPSN
+        $legalParts = [];
+        if (!empty($izinOp)) {
+            $legalParts[] = "Izin Operasional: " . htmlspecialchars($izinOp, ENT_QUOTES, 'UTF-8');
+        }
+        if (!empty($npsn)) {
+            $legalParts[] = "NPSN: " . htmlspecialchars($npsn, ENT_QUOTES, 'UTF-8');
+        }
+        $legalHtml = '';
+        if (!empty($legalParts)) {
+            $legalText = implode('; ', $legalParts);
+            $legalHtml = "<div style='font-size: 9.5px; color: #0284c7; margin-top: 2px; font-weight: 500;'>{$legalText}</div>";
+        }
+
+        // Line: Alamat
+        $addressParts = [];
+        if (!empty($address)) {
+            $addressParts[] = htmlspecialchars($address, ENT_QUOTES, 'UTF-8');
+        }
+        if (!empty($phone)) {
+            $addressParts[] = "Telp: " . htmlspecialchars($phone, ENT_QUOTES, 'UTF-8');
+        }
+        if (!empty($email)) {
+            $addressParts[] = "Email: " . htmlspecialchars($email, ENT_QUOTES, 'UTF-8');
+        }
+        $addressText = implode(' | ', $addressParts);
+        $addressHtml = "<div style='font-size: 8.5px; color: #3b82f6; margin-top: 3px;'>{$addressText}</div>";
+
+        $escapedKopTitle = htmlspecialchars($kopTitle, ENT_QUOTES, 'UTF-8');
+        $escapedKopSub = htmlspecialchars($kopSub, ENT_QUOTES, 'UTF-8');
+
         return "
-        <div style='border-bottom: 3px double #000; padding-bottom: 8px; margin-bottom: 16px; text-align: center; font-family: Helvetica, Arial, sans-serif;'>
-            <table style='width: 100%; border-collapse: collapse;'>
+        <div style='margin-bottom: 16px; font-family: Helvetica, Arial, sans-serif;'>
+            <table style='width: 100%; border-collapse: collapse; margin-bottom: 4px;'>
                 <tr>
-                    <td style='width: 82px; text-align: center; vertical-align: middle;'>
-                        {$logoHtml}
+                    <td style='width: 85px; text-align: center; vertical-align: middle;'>
+                        {$yayasanLogoHtml}
                     </td>
-                    <td style='text-align: center; vertical-align: middle; padding-left: 6px;'>
-                        <div style='font-size: 15px; font-weight: bold; text-transform: uppercase; color: #1e3a8a; letter-spacing: 0.5px;'>{$kopTitle}</div>
-                        <div style='font-size: 13px; font-weight: bold; text-transform: uppercase; color: #111; margin-top: 2px;'>{$kopSub}</div>
-                        <div style='font-size: 9.5px; color: #444; margin-top: 4px;'>Alamat: {$address} | Telp: {$phone} | Email: {$email}</div>
+                    <td style='text-align: center; vertical-align: middle; padding: 0 10px;'>
+                        <div style='font-size: 13.5px; font-weight: bold; text-transform: uppercase; color: #38bdf8; letter-spacing: 0.8px;'>{$escapedKopTitle}</div>
+                        <div style='font-size: 15px; font-weight: 900; text-transform: uppercase; color: #2563eb; margin-top: 2px; letter-spacing: 0.3px;'>{$escapedKopSub}</div>
+                        {$akreditasiHtml}
+                        {$legalHtml}
+                        {$addressHtml}
+                    </td>
+                    <td style='width: 85px; text-align: center; vertical-align: middle;'>
+                        {$unitLogoHtml}
                     </td>
                 </tr>
             </table>
+            <div style='border-top: 2.5px solid #0284c7; border-bottom: 1px solid #0284c7; height: 2px; margin-top: 4px;'></div>
         </div>
         ";
     }

@@ -595,6 +595,99 @@ use Core\SecurityHelper;
         </div>
     </div>
 
+    <!-- WIDGET NOTIFIKASI COUNTDOWN AKREDITASI & IZIN OPERASIONAL -->
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; margin-bottom: 24px;">
+        <!-- KARTU AKREDITASI -->
+        <div class="card" style="margin-bottom: 0; position: relative; overflow: hidden; border-radius: 12px; border: 1px solid <?= $akreditasiStatus === 'danger' ? '#fecaca' : ($akreditasiStatus === 'warning' ? '#fde68a' : 'var(--border-color)') ?>; background: <?= $akreditasiStatus === 'danger' ? '#fef2f2' : ($akreditasiStatus === 'warning' ? '#fffbeb' : 'var(--bg-card)') ?>; padding: 20px 20px 16px 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
+            <div style="position: absolute; left: 0; top: 0; bottom: 0; width: 6px; background: <?= $akreditasiStatus === 'expired' || $akreditasiStatus === 'danger' ? '#ef4444' : ($akreditasiStatus === 'warning' ? '#f59e0b' : '#10b981') ?>;"></div>
+            <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;">
+                <div style="display: flex; gap: 12px; align-items: center;">
+                    <div style="width: 44px; height: 44px; border-radius: 10px; background: <?= $akreditasiStatus === 'danger' ? '#fee2e2' : ($akreditasiStatus === 'warning' ? '#fef3c7' : '#ecfdf5') ?>; color: <?= $akreditasiStatus === 'danger' ? '#dc2626' : ($akreditasiStatus === 'warning' ? '#d97706' : '#059669') ?>; display: flex; align-items: center; justify-content: center; font-size: 20px;">
+                        <i class="fa-solid fa-award"></i>
+                    </div>
+                    <div>
+                        <div style="font-size: 11px; text-transform: uppercase; font-weight: 700; color: var(--text-muted); letter-spacing: 0.5px;">Status Akreditasi Sekolah</div>
+                        <div style="font-size: 16px; font-weight: 700; color: var(--text-main); margin-top: 2px;">
+                            Peringkat <?= !empty($currentUnit['akreditasi']) ? SecurityHelper::escape($currentUnit['akreditasi']) : '-' ?>
+                            <?php if (!empty($currentUnit['nomor_akreditasi'])): ?>
+                                <span style="font-size: 12px; font-weight: 500; color: var(--text-muted);">(No: <?= SecurityHelper::escape($currentUnit['nomor_akreditasi']) ?>)</span>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                </div>
+                <div>
+                    <?php if ($akreditasiStatus === 'expired'): ?>
+                        <span class="badge badge-danger"><i class="fa-solid fa-triangle-exclamation"></i> KEDALUWARSA</span>
+                    <?php elseif ($akreditasiStatus === 'danger'): ?>
+                        <span class="badge badge-danger"><i class="fa-solid fa-clock"></i> SEGERA HABIS</span>
+                    <?php elseif ($akreditasiStatus === 'warning'): ?>
+                        <span class="badge badge-warning"><i class="fa-solid fa-hourglass-half"></i> PERSIAPKAN</span>
+                    <?php elseif ($akreditasiStatus === 'valid'): ?>
+                        <span class="badge badge-success"><i class="fa-solid fa-check"></i> AKTIF</span>
+                    <?php else: ?>
+                        <span class="badge badge-secondary">BELUM DIATUR</span>
+                    <?php endif; ?>
+                </div>
+            </div>
+            <div style="margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center;">
+                <div style="font-size: 12px; color: var(--text-muted);">
+                    <i class="fa-regular fa-calendar" style="margin-right: 4px;"></i> Berlaku s.d: <strong><?= !empty($currentUnit['akreditasi_expired_at']) ? date('d F Y', strtotime($currentUnit['akreditasi_expired_at'])) : 'Belum diatur' ?></strong>
+                </div>
+                <?php if ($akreditasiDaysLeft !== null): ?>
+                    <div style="font-weight: 700; font-size: 13px; color: <?= $akreditasiDaysLeft <= 90 ? '#dc2626' : ($akreditasiDaysLeft <= 180 ? '#d97706' : '#059669') ?>;">
+                        <i class="fa-solid fa-stopwatch" style="margin-right: 4px;"></i>
+                        <?= $akreditasiDaysLeft < 0 ? abs($akreditasiDaysLeft) . ' hari lewat' : $akreditasiDaysLeft . ' hari lagi' ?>
+                    </div>
+                <?php endif; ?>
+            </div>
+        </div>
+
+        <!-- KARTU IZIN OPERASIONAL -->
+        <div class="card" style="margin-bottom: 0; position: relative; overflow: hidden; border-radius: 12px; border: 1px solid <?= $izinStatus === 'danger' ? '#fecaca' : ($izinStatus === 'warning' ? '#fde68a' : 'var(--border-color)') ?>; background: <?= $izinStatus === 'danger' ? '#fef2f2' : ($izinStatus === 'warning' ? '#fffbeb' : 'var(--bg-card)') ?>; padding: 20px 20px 16px 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
+            <div style="position: absolute; left: 0; top: 0; bottom: 0; width: 6px; background: <?= $izinStatus === 'expired' || $izinStatus === 'danger' ? '#ef4444' : ($izinStatus === 'warning' ? '#f59e0b' : '#3b82f6') ?>;"></div>
+            <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;">
+                <div style="display: flex; gap: 12px; align-items: center;">
+                    <div style="width: 44px; height: 44px; border-radius: 10px; background: <?= $izinStatus === 'danger' ? '#fee2e2' : ($izinStatus === 'warning' ? '#fef3c7' : '#eff6ff') ?>; color: <?= $izinStatus === 'danger' ? '#dc2626' : ($izinStatus === 'warning' ? '#d97706' : '#2563eb') ?>; display: flex; align-items: center; justify-content: center; font-size: 20px;">
+                        <i class="fa-solid fa-file-shield"></i>
+                    </div>
+                    <div>
+                        <div style="font-size: 11px; text-transform: uppercase; font-weight: 700; color: var(--text-muted); letter-spacing: 0.5px;">Izin Operasional & Legalitas</div>
+                        <div style="font-size: 15px; font-weight: 700; color: var(--text-main); margin-top: 2px;">
+                            <?= !empty($currentUnit['nomor_izin_operasional']) ? SecurityHelper::escape($currentUnit['nomor_izin_operasional']) : 'Belum diisi' ?>
+                            <?php if (!empty($currentUnit['npsn'])): ?>
+                                <span style="font-size: 12px; font-weight: 500; color: var(--text-muted);">| NPSN: <?= SecurityHelper::escape($currentUnit['npsn']) ?></span>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                </div>
+                <div>
+                    <?php if ($izinStatus === 'expired'): ?>
+                        <span class="badge badge-danger"><i class="fa-solid fa-triangle-exclamation"></i> KEDALUWARSA</span>
+                    <?php elseif ($izinStatus === 'danger'): ?>
+                        <span class="badge badge-danger"><i class="fa-solid fa-clock"></i> SEGERA HABIS</span>
+                    <?php elseif ($izinStatus === 'warning'): ?>
+                        <span class="badge badge-warning"><i class="fa-solid fa-hourglass-half"></i> PERSIAPKAN</span>
+                    <?php elseif ($izinStatus === 'valid'): ?>
+                        <span class="badge badge-info"><i class="fa-solid fa-check"></i> AKTIF</span>
+                    <?php else: ?>
+                        <span class="badge badge-secondary">BELUM DIATUR</span>
+                    <?php endif; ?>
+                </div>
+            </div>
+            <div style="margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center;">
+                <div style="font-size: 12px; color: var(--text-muted);">
+                    <i class="fa-regular fa-calendar" style="margin-right: 4px;"></i> Berlaku s.d: <strong><?= !empty($currentUnit['izin_operasional_expired_at']) ? date('d F Y', strtotime($currentUnit['izin_operasional_expired_at'])) : 'Belum diatur' ?></strong>
+                </div>
+                <?php if ($izinDaysLeft !== null): ?>
+                    <div style="font-weight: 700; font-size: 13px; color: <?= $izinDaysLeft <= 90 ? '#dc2626' : ($izinDaysLeft <= 180 ? '#d97706' : '#2563eb') ?>;">
+                        <i class="fa-solid fa-stopwatch" style="margin-right: 4px;"></i>
+                        <?= $izinDaysLeft < 0 ? abs($izinDaysLeft) . ' hari lewat' : $izinDaysLeft . ' hari lagi' ?>
+                    </div>
+                <?php endif; ?>
+            </div>
+        </div>
+    </div>
+
     <!-- STAT CARDS KEPALA SEKOLAH -->
     <div class="grid-cols-4" style="margin-bottom: 24px;">
         <!-- Live Count Siswa Aktif -->

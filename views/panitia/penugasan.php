@@ -32,10 +32,10 @@ foreach ($assignments as $a) {
                 <span style="font-size: 0.8125rem; color: var(--text-muted, #64748b);">Administrasi Kepala Sekolah</span>
             </div>
             <h1 class="page-title" style="margin: 0 0 6px 0; font-size: 1.5rem; display: flex; align-items: center; gap: 10px;">
-                <i class="fa-solid fa-user-tag" style="color: #0d9488;"></i> SK Penugasan Pembina & Peserta Lomba Siswa
+                <i class="fa-solid fa-user-tag" style="color: #0d9488;"></i> SPT Penugasan Pembina &amp; Delegasi Lomba Siswa
             </h1>
             <p class="page-subtitle" style="margin: 0; color: var(--text-muted, #64748b); font-size: 0.875rem;">
-                Penetapan resmi surat keputusan (SK) guru pembina ajang talenta nasional (OSN, O2SN, FLS2N), pemilihan peserta didik utusan lomba, dan cetak SK berformat PDF.
+                Penerbitan resmi Surat Perintah Tugas (SPT) guru pembina ajang talenta nasional (OSN, O2SN, FLS2N), pemilihan peserta didik utusan lomba, dan cetak SPT berformat PDF.
             </p>
         </div>
     </div>
@@ -46,7 +46,7 @@ foreach ($assignments as $a) {
     <div class="card" style="padding: 16px 20px; border-left: 4px solid #0d9488;">
         <div style="font-size: 0.75rem; text-transform: uppercase; color: var(--text-muted, #64748b); font-weight: 600; letter-spacing: 0.5px;">Total Penugasan</div>
         <div style="font-size: 1.75rem; font-weight: 700; color: var(--text-main, #0f172a); margin: 6px 0 2px 0;">
-            <?= $totalAssignments ?> <span style="font-size: 0.875rem; font-weight: 400; color: #64748b;">SK</span>
+            <?= $totalAssignments ?> <span style="font-size: 0.875rem; font-weight: 400; color: #64748b;">SPT</span>
         </div>
         <div style="font-size: 0.8125rem; color: #0d9488; font-weight: 500;">
             <i class="fa-solid fa-circle-check"></i> <?= $aktifCount ?> Aktif | <?= $selesaiCount ?> Selesai
@@ -83,7 +83,7 @@ foreach ($assignments as $a) {
     <div class="card">
         <div class="card-header" style="border-bottom: 1px solid var(--border-color, #e2e8f0); padding: 16px 20px;">
             <h3 class="card-title" style="margin: 0; font-size: 1rem; display: flex; align-items: center; gap: 8px;">
-                <i class="fa-solid fa-file-signature" style="color: #0d9488;"></i> Form SK Penugasan Pembina
+                <i class="fa-solid fa-file-signature" style="color: #0d9488;"></i> Form Penerbitan SPT Pembina
             </h3>
         </div>
         <div class="card-body" style="padding: 20px;">
@@ -110,8 +110,8 @@ foreach ($assignments as $a) {
                 </div>
 
                 <div class="form-group" style="margin-bottom: 16px;">
-                    <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Nomor SK (Opsional)</label>
-                    <input type="text" name="sk_number" class="form-control" placeholder="Contoh: 421.1/SK-LOMBA/<?= date('Y') ?>/001">
+                    <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Nomor SPT (Opsional)</label>
+                    <input type="text" name="sk_number" class="form-control" placeholder="Contoh: 421.1/SPT-LOMBA/<?= date('Y') ?>/001">
                     <small style="color: var(--text-muted, #64748b); font-size: 0.75rem;">Biarkan kosong untuk penomoran otomatis sistem.</small>
                 </div>
 
@@ -139,7 +139,7 @@ foreach ($assignments as $a) {
                 </div>
 
                 <button type="submit" class="btn btn-primary" style="width: 100%; justify-content: center; padding: 10px 16px; font-weight: 600;">
-                    <i class="fa-solid fa-floppy-disk" style="margin-right: 6px;"></i> Simpan &amp; Terbitkan SK
+                    <i class="fa-solid fa-floppy-disk" style="margin-right: 6px;"></i> Simpan &amp; Terbitkan SPT
                 </button>
             </form>
         </div>
@@ -167,7 +167,7 @@ foreach ($assignments as $a) {
                     <thead>
                         <tr>
                             <th style="width: 45px; text-align: center;">No</th>
-                            <th>Guru Pembina &amp; No. SK</th>
+                            <th>Guru Pembina &amp; No. SPT</th>
                             <th style="width: 90px; text-align: center;">Cabang</th>
                             <th>Peserta Didik Binaan</th>
                             <th style="width: 120px; text-align: center;">Status Lomba</th>
@@ -261,13 +261,13 @@ foreach ($assignments as $a) {
                                     </td>
                                     <td style="text-align: center;">
                                         <div style="display: inline-flex; gap: 6px; align-items: center; flex-wrap: wrap; justify-content: center;">
-                                            <!-- Cetak SK Button -->
-                                            <a href="<?= Auth::baseUrl() ?>/panitia/penugasan/cetak-sk/<?= $a['id'] ?>" target="_blank" class="btn btn-primary btn-sm" style="padding: 4px 10px; font-size: 0.75rem; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;" title="Cetak Surat Keputusan (PDF)">
-                                                <i class="fa-solid fa-file-pdf"></i> Cetak SK
+                                            <!-- Cetak SPT Button -->
+                                            <a href="<?= Auth::baseUrl() ?>/panitia/penugasan/cetak-sk/<?= $a['id'] ?>" target="_blank" class="btn btn-primary btn-sm" style="padding: 4px 10px; font-size: 0.75rem; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;" title="Cetak Surat Perintah Tugas (PDF)">
+                                                <i class="fa-solid fa-file-pdf"></i> Cetak SPT
                                             </a>
 
-                                            <!-- Kelola Santri & Detail SK -->
-                                            <button type="button" class="btn btn-outline btn-sm btn-open-students" data-id="<?= $a['id'] ?>" style="padding: 4px 8px; font-size: 0.75rem;" title="Ubah Santri Binaan, No SK & Status">
+                                            <!-- Kelola Santri & Detail SPT -->
+                                            <button type="button" class="btn btn-outline btn-sm btn-open-students" data-id="<?= $a['id'] ?>" style="padding: 4px 8px; font-size: 0.75rem;" title="Ubah Santri Binaan, No SPT & Status">
                                                 <i class="fa-solid fa-pen-to-square"></i> Kelola
                                             </button>
                                         </div>
@@ -297,7 +297,7 @@ foreach ($assignments as $a) {
             <div class="modal-header" style="padding: 16px 20px; border-bottom: 1px solid var(--border-color, #e2e8f0); display: flex; justify-content: space-between; align-items: center; background: #f8fafc;">
                 <div>
                     <h3 class="modal-title" style="margin: 0; font-size: 1.05rem; display: flex; align-items: center; gap: 8px;">
-                        <i class="fa-solid fa-user-graduate" style="color: #0d9488;"></i> Pilih Santri Peserta &amp; Nomor SK
+                        <i class="fa-solid fa-user-graduate" style="color: #0d9488;"></i> Pilih Santri Peserta &amp; Nomor SPT
                     </h3>
                     <div id="modalTeacherName" style="font-size: 0.8125rem; color: #64748b; margin-top: 2px;"></div>
                 </div>
@@ -306,8 +306,8 @@ foreach ($assignments as $a) {
 
             <div class="modal-body" style="padding: 20px; max-height: 60vh; overflow-y: auto;">
                 <div class="form-group" style="margin-bottom: 14px;">
-                    <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Nomor SK Penugasan</label>
-                    <input type="text" name="sk_number" id="modalSkNumber" class="form-control" placeholder="Contoh: 421.1/SK-LOMBA/<?= date('Y') ?>/001">
+                    <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Nomor SPT Penugasan</label>
+                    <input type="text" name="sk_number" id="modalSkNumber" class="form-control" placeholder="Contoh: 421.1/SPT-LOMBA/<?= date('Y') ?>/001">
                 </div>
 
                 <div class="form-group" style="margin-bottom: 14px;">
@@ -346,7 +346,7 @@ foreach ($assignments as $a) {
             <div class="modal-footer" style="padding: 14px 20px; border-top: 1px solid var(--border-color, #e2e8f0); display: flex; justify-content: flex-end; gap: 8px; background: #f8fafc;">
                 <button type="button" class="btn btn-outline" onclick="closeStudentsModal()">Batal</button>
                 <button type="submit" class="btn btn-primary" style="font-weight: 600;">
-                    <i class="fa-solid fa-floppy-disk" style="margin-right: 6px;"></i> Simpan Perubahan SK
+                    <i class="fa-solid fa-floppy-disk" style="margin-right: 6px;"></i> Simpan Perubahan SPT
                 </button>
             </div>
         </form>

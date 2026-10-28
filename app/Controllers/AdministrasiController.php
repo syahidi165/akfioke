@@ -170,6 +170,26 @@ class AdministrasiController extends Controller {
         $now = date('Y-m-d');
         $isOnTime = 1;
 
+        // Cek deadline unit
+        $deadlineRow = Database::fetch(
+            "SELECT deadline_datetime, deadline_date FROM unit_administrasi_deadlines 
+             WHERE unit_id = ? AND academic_year_id = ? AND jenis_admin_id = ?",
+            [$unitId, $taId, $jenisId]
+        );
+        $deadlineTs = null;
+        $savedDeadlineDate = null;
+        if (!empty($deadlineRow['deadline_datetime'])) {
+            $deadlineTs = strtotime($deadlineRow['deadline_datetime']);
+            $savedDeadlineDate = date('Y-m-d', $deadlineTs);
+        } elseif (!empty($deadlineRow['deadline_date'])) {
+            $deadlineTs = strtotime($deadlineRow['deadline_date'] . ' 23:59:59');
+            $savedDeadlineDate = $deadlineRow['deadline_date'];
+        }
+
+        if ($deadlineTs !== null) {
+            $isOnTime = (time() > $deadlineTs) ? 0 : 1;
+        }
+
         // Hitung versi unggahan berdasarkan jenis dan period/month_num
         $prev = Database::fetch(
             "SELECT MAX(version_num) as v FROM administrasi_uploads 
@@ -179,9 +199,9 @@ class AdministrasiController extends Controller {
         $versionNum = ($prev['v'] ?? 0) + 1;
 
         Database::execute(
-            "INSERT INTO administrasi_uploads (unit_id, academic_year_id, user_id, jenis_admin_id, sub_title, month_num, file_path, original_filename, file_size, uploaded_at, is_on_time, status, version_num) 
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, 'Menunggu Review', ?)",
-            [$unitId, $taId, $userId, $jenisId, $subTitle, $monthNum, $uploadRes['file_path'], $uploadRes['original_filename'], $uploadRes['file_size'], $isOnTime, $versionNum]
+            "INSERT INTO administrasi_uploads (unit_id, academic_year_id, user_id, jenis_admin_id, sub_title, month_num, file_path, original_filename, file_size, deadline_date, uploaded_at, is_on_time, status, version_num) 
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, 'Menunggu Review', ?)",
+            [$unitId, $taId, $userId, $jenisId, $subTitle, $monthNum, $uploadRes['file_path'], $uploadRes['original_filename'], $uploadRes['file_size'], $savedDeadlineDate, $isOnTime, $versionNum]
         );
 
         AuditLog::log('UPLOAD_ADMINISTRASI', 'administrasi_uploads', Database::lastInsertId(), null, ['file' => $uploadRes['original_filename'], 'version' => $versionNum]);
@@ -1137,7 +1157,7 @@ class AdministrasiController extends Controller {
         }
 
         // Query master items filtered by permission
-        $query = "SELECT m.*, uad.due_info as unit_due_info, uad.deadline_date,
+        $query = "SELECT m.*, uad.due_info as unit_due_info, uad.deadline_date, uad.deadline_datetime,
                          COALESCE(uad.due_info, m.due_info) as effective_due_info
                   FROM master_jenis_administrasi m
                   LEFT JOIN unit_administrasi_deadlines uad 
@@ -1188,7 +1208,8 @@ class AdministrasiController extends Controller {
 
         $jenisId = (int)($_POST['jenis_admin_id'] ?? 0);
         $dueInfo = trim($_POST['due_info'] ?? '');
-        $deadlineDate = !empty($_POST['deadline_date']) ? $_POST['deadline_date'] : null;
+        $deadlineDatetime = !empty($_POST['deadline_datetime']) ? date('Y-m-d H:i:s', strtotime($_POST['deadline_datetime'])) : null;
+        $deadlineDate = !empty($_POST['deadline_date']) ? $_POST['deadline_date'] : ($deadlineDatetime ? substr($deadlineDatetime, 0, 10) : null);
 
         $item = Database::fetch("SELECT * FROM master_jenis_administrasi WHERE id = ?", [$jenisId]);
         if (!$item) {
@@ -1218,17 +1239,21 @@ class AdministrasiController extends Controller {
         if ($jenisId > 0 && !empty($dueInfo)) {
             Database::execute(
                 "INSERT INTO unit_administrasi_deadlines 
-                    (unit_id, academic_year_id, jenis_admin_id, due_info, deadline_date, updated_by_user_id)
-                 VALUES (?, ?, ?, ?, ?, ?)
+                    (unit_id, academic_year_id, jenis_admin_id, due_info, deadline_date, deadline_datetime, updated_by_user_id)
+                 VALUES (?, ?, ?, ?, ?, ?, ?)
                  ON DUPLICATE KEY UPDATE 
-                    due_info = VALUES(due_info), deadline_date = VALUES(deadline_date), updated_by_user_id = VALUES(updated_by_user_id)",
-                [$targetUnitId, $taId, $jenisId, $dueInfo, $deadlineDate, $userId]
+                    due_info = VALUES(due_info), 
+                    deadline_date = VALUES(deadline_date), 
+                    deadline_datetime = VALUES(deadline_datetime), 
+                    updated_by_user_id = VALUES(updated_by_user_id)",
+                [$targetUnitId, $taId, $jenisId, $dueInfo, $deadlineDate, $deadlineDatetime, $userId]
             );
 
             AuditLog::log('UPDATE_UNIT_DEADLINE', 'unit_administrasi_deadlines', $targetUnitId, null, [
-                'jenis_admin_id' => $jenisId,
-                'due_info'       => $dueInfo,
-                'deadline_date'  => $deadlineDate
+                'jenis_admin_id'    => $jenisId,
+                'due_info'          => $dueInfo,
+                'deadline_date'     => $deadlineDate,
+                'deadline_datetime' => $deadlineDatetime
             ]);
             $this->setFlash('success', 'Batas waktu administrasi untuk unit berhasil disimpan.');
         }

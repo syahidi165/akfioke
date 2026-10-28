@@ -167,6 +167,50 @@ class DashboardController extends Controller {
             $data['totalSiswaYayasan'] = $totalSiswaYayasan;
 
         } elseif ($role === 'kepala_sekolah') {
+            $currentUnit = Database::fetch("SELECT * FROM units WHERE id = ?", [$unitId]) ?: [];
+            $data['currentUnit'] = $currentUnit;
+
+            // Countdown Akreditasi & Izin Operasional
+            $now = new \DateTime();
+
+            $akreditasiDaysLeft = null;
+            $akreditasiStatus = 'none';
+            if (!empty($currentUnit['akreditasi_expired_at'])) {
+                $expA = new \DateTime($currentUnit['akreditasi_expired_at']);
+                $diffA = $now->diff($expA);
+                $akreditasiDaysLeft = (int)$diffA->format('%r%a');
+                if ($akreditasiDaysLeft < 0) {
+                    $akreditasiStatus = 'expired';
+                } elseif ($akreditasiDaysLeft <= 90) {
+                    $akreditasiStatus = 'danger';
+                } elseif ($akreditasiDaysLeft <= 180) {
+                    $akreditasiStatus = 'warning';
+                } else {
+                    $akreditasiStatus = 'valid';
+                }
+            }
+            $data['akreditasiDaysLeft'] = $akreditasiDaysLeft;
+            $data['akreditasiStatus'] = $akreditasiStatus;
+
+            $izinDaysLeft = null;
+            $izinStatus = 'none';
+            if (!empty($currentUnit['izin_operasional_expired_at'])) {
+                $expI = new \DateTime($currentUnit['izin_operasional_expired_at']);
+                $diffI = $now->diff($expI);
+                $izinDaysLeft = (int)$diffI->format('%r%a');
+                if ($izinDaysLeft < 0) {
+                    $izinStatus = 'expired';
+                } elseif ($izinDaysLeft <= 90) {
+                    $izinStatus = 'danger';
+                } elseif ($izinDaysLeft <= 180) {
+                    $izinStatus = 'warning';
+                } else {
+                    $izinStatus = 'valid';
+                }
+            }
+            $data['izinDaysLeft'] = $izinDaysLeft;
+            $data['izinStatus'] = $izinStatus;
+
             // Live Student Count: hanya menghitung siswa yang ada di sekolahnya saja
             $data['liveStudentCount'] = (int)(Database::fetch("SELECT COUNT(*) as c FROM students WHERE unit_id = ? AND status = 'Aktif'", [$unitId])['c'] ?? 0);
             $data['totalStudents'] = $data['liveStudentCount'];

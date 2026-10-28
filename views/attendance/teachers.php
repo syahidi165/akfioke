@@ -28,8 +28,8 @@ foreach ($teachers as $t) {
     <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 16px;">
         <div>
             <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 6px;">
-                <span class="badge badge-primary">Waka Kurikulum</span>
-                <span style="font-size: 0.8125rem; color: var(--text-muted, #64748b);">Monitoring Kehadiran &amp; Kajian</span>
+                <span class="badge badge-success"><i class="fa-solid fa-user-pen"></i> Tata Usaha</span>
+                <span style="font-size: 0.8125rem; color: var(--text-muted, #64748b);">Pengelolaan Presensi Guru &amp; Kajian</span>
             </div>
             <h1 class="page-title" style="margin: 0 0 6px 0; font-size: 1.5rem; display: flex; align-items: center; gap: 10px;">
                 <i class="fa-solid fa-clipboard-user" style="color: #0d9488;"></i> Presensi Kehadiran Guru &amp; Kajian Sabtu
@@ -38,9 +38,15 @@ foreach ($teachers as $t) {
                 Pencatatan presensi dinas KBM, ketepatan waktu, dan kehadiran kajian rutin Sabtu per bulan untuk indikator AKFI Guru.
             </p>
         </div>
-        <div style="display: flex; gap: 8px;">
+        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+            <a href="<?= $baseUrl ?>/attendance/teachers/template?month_num=<?= $monthNum ?>" class="btn btn-outline" style="font-size: 0.8125rem;">
+                <i class="fa-solid fa-file-excel" style="color: #10b981;"></i> Unduh Format Excel (Guru Pre-filled)
+            </a>
+            <button type="button" class="btn btn-primary" onclick="openImportGuruModal()" style="font-size: 0.8125rem;">
+                <i class="fa-solid fa-file-import"></i> Import Presensi Excel
+            </button>
             <button type="button" class="btn btn-outline" onclick="quickFillAll()" style="font-size: 0.8125rem;">
-                <i class="fa-solid fa-wand-magic-sparkles" style="color: #0d9488;"></i> Isi Cepat Default (Hadir 20, Kajian 4)
+                <i class="fa-solid fa-wand-magic-sparkles" style="color: #0d9488;"></i> Isi Cepat Default
             </button>
         </div>
     </div>
@@ -125,20 +131,20 @@ foreach ($teachers as $t) {
                     <thead>
                         <tr>
                             <th rowspan="2" style="width: 45px; text-align: center; vertical-align: middle;">No</th>
-                            <th rowspan="2" style="vertical-align: middle;">Nama Lengkap &amp; Jabatan Guru</th>
+                            <th rowspan="2" style="min-width: 220px; vertical-align: middle;">Nama Lengkap &amp; Jabatan Guru</th>
                             <th colspan="7" style="text-align: center; border-bottom: 1px solid var(--border-color, #e2e8f0); background: #f8fafc;">Presensi KBM &amp; Kedisiplinan Kerja (Hari / Kali)</th>
                             <th colspan="2" style="text-align: center; border-bottom: 1px solid var(--border-color, #e2e8f0); background: #f0fdf4;">Kajian Rutin Sabtu</th>
                         </tr>
                         <tr>
-                            <th style="width: 75px; text-align: center; background: #f8fafc; color: #16a34a;">Hadir</th>
-                            <th style="width: 65px; text-align: center; background: #f8fafc; color: #0284c7;">Sakit</th>
-                            <th style="width: 65px; text-align: center; background: #f8fafc; color: #d97706;">Izin</th>
-                            <th style="width: 75px; text-align: center; background: #f8fafc; color: #ef4444;" title="Tidak Hadir / Mangkir / Alpha">Tidak Hadir</th>
-                            <th style="width: 75px; text-align: center; background: #f8fafc; color: #ea580c;" title="Terlambat Masuk Kerja / KBM (Hari/Kali)">Terlambat</th>
-                            <th style="width: 85px; text-align: center; background: #f8fafc; color: #b45309;" title="Pulang Cepat Sebelum Waktu Selesai (Hari/Kali)">Pulang Cepat</th>
-                            <th style="width: 85px; text-align: center; background: #f8fafc; color: #7c3aed;" title="Lupa Catat / Absen Datang/Pulang (Hari/Kali)">Lupa Catat</th>
-                            <th style="width: 75px; text-align: center; background: #f0fdf4; color: #166534;">Hadir</th>
-                            <th style="width: 75px; text-align: center; background: #f0fdf4; color: #166534;">Total</th>
+                            <th style="min-width: 90px; width: 90px; text-align: center; background: #f8fafc; color: #16a34a;">Hadir</th>
+                            <th style="min-width: 80px; width: 80px; text-align: center; background: #f8fafc; color: #0284c7;">Sakit</th>
+                            <th style="min-width: 80px; width: 80px; text-align: center; background: #f8fafc; color: #d97706;">Izin</th>
+                            <th style="min-width: 95px; width: 95px; text-align: center; background: #f8fafc; color: #ef4444;" title="Tidak Hadir / Mangkir / Alpha">Tidak Hadir</th>
+                            <th style="min-width: 95px; width: 95px; text-align: center; background: #f8fafc; color: #ea580c;" title="Terlambat Masuk Kerja / KBM (Hari/Kali)">Terlambat</th>
+                            <th style="min-width: 105px; width: 105px; text-align: center; background: #f8fafc; color: #b45309;" title="Pulang Cepat Sebelum Waktu Selesai (Hari/Kali)">Pulang Cepat</th>
+                            <th style="min-width: 100px; width: 100px; text-align: center; background: #f8fafc; color: #7c3aed;" title="Lupa Catat / Absen Datang/Pulang (Hari/Kali)">Lupa Catat</th>
+                            <th style="min-width: 85px; width: 85px; text-align: center; background: #f0fdf4; color: #166534;">Hadir</th>
+                            <th style="min-width: 85px; width: 85px; text-align: center; background: #f0fdf4; color: #166534;">Total</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -162,31 +168,31 @@ foreach ($teachers as $t) {
                                         </div>
                                     </td>
                                     <td>
-                                        <input type="number" min="0" max="31" name="att[<?= $t['id'] ?>][hadir]" class="form-control att-hadir" value="<?= $t['hadir'] ?? 20 ?>" style="text-align: center; font-weight: 600; height: 34px;">
+                                        <input type="number" min="0" max="31" name="att[<?= $t['id'] ?>][hadir]" class="form-control att-hadir" value="<?= $t['hadir'] ?? 20 ?>" style="text-align: center; font-weight: 600; height: 38px; min-width: 65px; padding: 4px 6px; font-size: 14px;">
                                     </td>
                                     <td>
-                                        <input type="number" min="0" max="31" name="att[<?= $t['id'] ?>][sakit]" class="form-control att-sakit" value="<?= $t['sakit'] ?? 0 ?>" style="text-align: center; height: 34px;">
+                                        <input type="number" min="0" max="31" name="att[<?= $t['id'] ?>][sakit]" class="form-control att-sakit" value="<?= $t['sakit'] ?? 0 ?>" style="text-align: center; height: 38px; min-width: 65px; padding: 4px 6px; font-size: 14px;">
                                     </td>
                                     <td>
-                                        <input type="number" min="0" max="31" name="att[<?= $t['id'] ?>][izin]" class="form-control att-izin" value="<?= $t['izin'] ?? 0 ?>" style="text-align: center; height: 34px;">
+                                        <input type="number" min="0" max="31" name="att[<?= $t['id'] ?>][izin]" class="form-control att-izin" value="<?= $t['izin'] ?? 0 ?>" style="text-align: center; height: 38px; min-width: 65px; padding: 4px 6px; font-size: 14px;">
                                     </td>
                                     <td>
-                                        <input type="number" min="0" max="31" name="att[<?= $t['id'] ?>][alpha]" class="form-control att-alpha" value="<?= $t['mangkir'] ?? $t['alpha'] ?? 0 ?>" style="text-align: center; height: 34px; color: #ef4444; font-weight: 600;" title="Tidak Hadir / Mangkir (Hari)">
+                                        <input type="number" min="0" max="31" name="att[<?= $t['id'] ?>][alpha]" class="form-control att-alpha" value="<?= $t['mangkir'] ?? $t['alpha'] ?? 0 ?>" style="text-align: center; height: 38px; min-width: 65px; padding: 4px 6px; font-size: 14px; color: #ef4444; font-weight: 600;" title="Tidak Hadir / Mangkir (Hari)">
                                     </td>
                                     <td>
-                                        <input type="number" min="0" max="31" name="att[<?= $t['id'] ?>][terlambat]" class="form-control att-terlambat" value="<?= $t['terlambat'] ?? ($t['terlambat_menit'] > 0 ? 1 : 0) ?>" style="text-align: center; height: 34px; color: #ea580c; font-weight: 600;" placeholder="Hari/x" title="Terlambat (Hari/Kali)">
+                                        <input type="number" min="0" max="31" name="att[<?= $t['id'] ?>][terlambat]" class="form-control att-terlambat" value="<?= $t['terlambat'] ?? ($t['terlambat_menit'] > 0 ? 1 : 0) ?>" style="text-align: center; height: 38px; min-width: 65px; padding: 4px 6px; font-size: 14px; color: #ea580c; font-weight: 600;" placeholder="Hari/x" title="Terlambat (Hari/Kali)">
                                     </td>
                                     <td>
-                                        <input type="number" min="0" max="31" name="att[<?= $t['id'] ?>][pulang_cepat]" class="form-control att-pulang-cepat" value="<?= $t['pulang_cepat'] ?? 0 ?>" style="text-align: center; height: 34px; color: #b45309; font-weight: 600;" placeholder="Hari/x" title="Pulang Cepat (Hari/Kali)">
+                                        <input type="number" min="0" max="31" name="att[<?= $t['id'] ?>][pulang_cepat]" class="form-control att-pulang-cepat" value="<?= $t['pulang_cepat'] ?? 0 ?>" style="text-align: center; height: 38px; min-width: 65px; padding: 4px 6px; font-size: 14px; color: #b45309; font-weight: 600;" placeholder="Hari/x" title="Pulang Cepat (Hari/Kali)">
                                     </td>
                                     <td>
-                                        <input type="number" min="0" max="31" name="att[<?= $t['id'] ?>][lupa_catat]" class="form-control att-lupa-catat" value="<?= $t['lupa_catat'] ?? 0 ?>" style="text-align: center; height: 34px; color: #7c3aed; font-weight: 600;" placeholder="Hari/x" title="Lupa Catat (Hari/Kali)">
+                                        <input type="number" min="0" max="31" name="att[<?= $t['id'] ?>][lupa_catat]" class="form-control att-lupa-catat" value="<?= $t['lupa_catat'] ?? 0 ?>" style="text-align: center; height: 38px; min-width: 65px; padding: 4px 6px; font-size: 14px; color: #7c3aed; font-weight: 600;" placeholder="Hari/x" title="Lupa Catat (Hari/Kali)">
                                     </td>
                                     <td>
-                                        <input type="number" min="0" max="5" name="att[<?= $t['id'] ?>][kajian_hadir]" class="form-control att-kajian-hadir" value="<?= $t['kajian_hadir'] ?? 4 ?>" style="text-align: center; font-weight: 600; height: 34px; color: #0d9488;">
+                                        <input type="number" min="0" max="5" name="att[<?= $t['id'] ?>][kajian_hadir]" class="form-control att-kajian-hadir" value="<?= $t['kajian_hadir'] ?? 4 ?>" style="text-align: center; font-weight: 600; height: 38px; min-width: 65px; padding: 4px 6px; font-size: 14px; color: #0d9488;">
                                     </td>
                                     <td>
-                                        <input type="number" min="0" max="5" name="att[<?= $t['id'] ?>][kajian_total]" class="form-control att-kajian-total" value="<?= $t['kajian_total'] ?? 4 ?>" style="text-align: center; height: 34px;">
+                                        <input type="number" min="0" max="5" name="att[<?= $t['id'] ?>][kajian_total]" class="form-control att-kajian-total" value="<?= $t['kajian_total'] ?? 4 ?>" style="text-align: center; height: 38px; min-width: 65px; padding: 4px 6px; font-size: 14px;">
                                     </td>
                                 </tr>
                             <?php endforeach; ?>
@@ -235,4 +241,54 @@ function quickFillAll() {
     document.querySelectorAll('.att-kajian-hadir').forEach(el => el.value = 4);
     document.querySelectorAll('.att-kajian-total').forEach(el => el.value = 4);
 }
+
+function openImportGuruModal() {
+    document.getElementById('modalImportGuru').classList.add('active');
+}
+
+function closeImportGuruModal() {
+    document.getElementById('modalImportGuru').classList.remove('active');
+}
 </script>
+
+<!-- Modal Import Presensi Guru Excel -->
+<div class="modal-overlay" id="modalImportGuru">
+    <div class="modal-container" style="max-width: 500px;">
+        <form method="POST" action="<?= $baseUrl ?>/attendance/teachers/import" enctype="multipart/form-data">
+            <?= CSRF::inputField() ?>
+            <div class="modal-header">
+                <h3 class="card-title">
+                    <i class="fa-solid fa-file-excel" style="color: #10b981; margin-right: 8px;"></i> 
+                    Import Presensi Guru by Excel
+                </h3>
+                <button type="button" class="btn btn-outline btn-sm" onclick="closeImportGuruModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-info" style="font-size: 12.5px; line-height: 1.5; margin-bottom: 16px;">
+                    <i class="fa-solid fa-circle-info"></i> <strong>Kemudahan untuk TU:</strong> Seluruh nama dan data ID guru pada unit sekolah ini sudah terdaftar di dalam format Excel. Anda cukup mengisi angka kehadiran, sakit, izin, alpha, keterlambatan, dan kajian tanpa perlu mengetik ulang nama guru.
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Pilih Periode Bulan Presensi</label>
+                    <select name="month_num" class="form-control" required>
+                        <?php foreach ($months as $num => $name): ?>
+                            <option value="<?= $num ?>" <?= $num == $monthNum ? 'selected' : '' ?>>
+                                Bulan <?= $num ?> &ndash; <?= $name ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Pilih Berkas Excel (.xlsx / .xls)</label>
+                    <input type="file" name="excel_file" class="form-control" accept=".xlsx, .xls" required>
+                    <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">
+                        Gunakan tombol <strong>"Unduh Format Excel (Guru Pre-filled)"</strong> terlebih dahulu untuk mendapatkan template resmi.
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline" onclick="closeImportGuruModal()">Batal</button>
+                <button type="submit" class="btn btn-primary"><i class="fa-solid fa-upload"></i> Unggah &amp; Simpan Presensi</button>
+            </div>
+        </form>
+    </div>
+</div>

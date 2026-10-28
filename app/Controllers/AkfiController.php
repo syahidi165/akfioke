@@ -753,7 +753,7 @@ class AkfiController extends Controller {
 
         $savedItems = !empty($assessment['items_json']) ? json_decode($assessment['items_json'], true) : [];
 
-        $kop = ExportHelper::renderKop($assessment);
+        $kop = ExportHelper::renderKopYayasan();
 
         // Predicate label
         $predikatLabel = match($assessment['letter_grade']) {

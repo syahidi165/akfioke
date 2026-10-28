@@ -51,4 +51,18 @@ class Notification {
             [$userId]
         );
     }
+
+    public static function delete(int $notificationId, int $userId): void {
+        Database::execute(
+            "DELETE FROM notifications WHERE id = ? AND user_id = ?",
+            [$notificationId, $userId]
+        );
+    }
+
+    public static function deleteAll(int $userId): void {
+        Database::execute(
+            "DELETE FROM notifications WHERE user_id = ?",
+            [$userId]
+        );
+    }
 }

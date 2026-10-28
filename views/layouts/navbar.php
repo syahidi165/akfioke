@@ -117,13 +117,23 @@ if (!empty($currentUnit['logo_path'])) {
                         </div>
                     <?php else: ?>
                         <?php foreach ($unreadNotifs as $notif): ?>
-                            <a href="<?= $notif['url'] ? SecurityHelper::escape($notif['url']) : '#' ?>" style="display: block; padding: 10px 16px; border-bottom: 1px solid #f1f5f9; text-decoration: none; color: inherit;">
-                                <div style="font-weight: 600; font-size: 12px; color: var(--primary);"><?= SecurityHelper::escape($notif['title']) ?></div>
-                                <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;"><?= SecurityHelper::escape($notif['message']) ?></div>
-                                <div style="font-size: 10px; color: #94a3b8; margin-top: 4px;"><?= date('d M H:i', strtotime($notif['created_at'])) ?></div>
+                            <a href="<?= $baseUrl ?>/notifications/<?= (int)$notif['id'] ?>/read" style="display: block; padding: 11px 16px; border-bottom: 1px solid #f1f5f9; text-decoration: none; color: inherit; transition: background 0.15s;" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='transparent'">
+                                <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 8px;">
+                                    <div style="font-weight: 600; font-size: 12px; color: var(--primary);"><?= SecurityHelper::escape($notif['title']) ?></div>
+                                    <span style="width: 7px; height: 7px; border-radius: 50%; background: #3b82f6; display: inline-block; margin-top: 4px; flex-shrink: 0;" title="Belum dibaca"></span>
+                                </div>
+                                <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px; line-height: 1.4;"><?= SecurityHelper::escape($notif['message']) ?></div>
+                                <div style="font-size: 10px; color: #94a3b8; margin-top: 4px;">
+                                    <i class="fa-regular fa-clock" style="font-size: 9px; margin-right: 3px;"></i><?= date('d M H:i', strtotime($notif['created_at'])) ?>
+                                </div>
                             </a>
                         <?php endforeach; ?>
                     <?php endif; ?>
+                </div>
+                <div style="padding: 8px 16px; background: #f8fafc; border-top: 1px solid var(--border-color); text-align: center;">
+                    <a href="<?= $baseUrl ?>/notifications" style="font-size: 11.5px; color: var(--primary); font-weight: 600; text-decoration: none;">
+                        Lihat Semua Notifikasi &rarr;
+                    </a>
                 </div>
             </div>
         </div>

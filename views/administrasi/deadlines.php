@@ -66,13 +66,26 @@ use Core\CSRF;
                             <td><strong><?= SecurityHelper::escape($m['title']) ?></strong></td>
                             <td><?= SecurityHelper::escape($m['frequency']) ?></td>
                             <td>
-                                <strong style="color: var(--primary); font-size: 13.5px;">
-                                    <?= SecurityHelper::escape($m['effective_due_info']) ?>
-                                </strong>
-                                <?php if (!empty($m['unit_due_info'])): ?>
-                                    <span class="badge badge-success" style="font-size: 10px; margin-left: 4px;">Khusus Unit</span>
-                                <?php else: ?>
-                                    <span class="badge badge-secondary" style="font-size: 10px; margin-left: 4px;">Standar</span>
+                                <div>
+                                    <strong style="color: var(--primary); font-size: 13.5px;">
+                                        <?= SecurityHelper::escape($m['effective_due_info']) ?>
+                                    </strong>
+                                    <?php if (!empty($m['unit_due_info'])): ?>
+                                        <span class="badge badge-success" style="font-size: 10px; margin-left: 4px;">Khusus Unit</span>
+                                    <?php else: ?>
+                                        <span class="badge badge-secondary" style="font-size: 10px; margin-left: 4px;">Standar</span>
+                                    <?php endif; ?>
+                                </div>
+                                <?php if (!empty($m['deadline_datetime'])): ?>
+                                    <div style="font-size: 11.5px; color: var(--text-muted); margin-top: 3px;">
+                                        <i class="fa-regular fa-clock" style="color: #f59e0b;"></i> 
+                                        Batas: <strong style="color: var(--text-main);"><?= date('d M Y, H:i', strtotime($m['deadline_datetime'])) ?> WIB</strong>
+                                    </div>
+                                <?php elseif (!empty($m['deadline_date'])): ?>
+                                    <div style="font-size: 11.5px; color: var(--text-muted); margin-top: 3px;">
+                                        <i class="fa-regular fa-calendar" style="color: #f59e0b;"></i> 
+                                        Batas: <strong style="color: var(--text-main);"><?= date('d M Y', strtotime($m['deadline_date'])) ?> 23:59 WIB</strong>
+                                    </div>
                                 <?php endif; ?>
                             </td>
                             <td style="text-align: center;">
@@ -90,7 +103,7 @@ use Core\CSRF;
 
 <!-- Modal Ubah Deadline -->
 <div class="modal-overlay" id="deadlineModal">
-    <div class="modal-container" style="max-width: 460px;">
+    <div class="modal-container" style="max-width: 500px;">
         <form method="POST" action="<?= $baseUrl ?>/administrasi/deadlines/save">
             <?= CSRF::inputField() ?>
             <input type="hidden" name="jenis_admin_id" id="deadline_jenis_id">
@@ -113,8 +126,16 @@ use Core\CSRF;
 
                 <div class="form-group">
                     <label class="form-label">Batas Waktu Pengumpulan (Deskripsi Due)</label>
-                    <input type="text" name="due_info" id="deadline_due_info" class="form-control" required placeholder="Contoh: Tanggal 5 setiap bulan / Pekan ke-2 Semester Ganjil">
-                    <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">Deskripsi batas waktu ini akan tampil di panduan guru unit <?= SecurityHelper::escape($unit['name'] ?? '') ?>.</div>
+                    <input type="text" name="due_info" id="deadline_due_info" class="form-control" required placeholder="Contoh: Pekan ke-2 Semester Ganjil / Tanggal 5 setiap bulan">
+                    <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">Deskripsi batas waktu ini akan tampil di panduan instrumen guru unit <?= SecurityHelper::escape($unit['name'] ?? '') ?>.</div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Tanggal & Jam Batas Akhir (Due Date Timestamp)</label>
+                    <input type="datetime-local" name="deadline_datetime" id="deadline_datetime" class="form-control">
+                    <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">
+                        Jika dokumen diunggah melewati waktu ini, sistem otomatis menetapkan status <strong>Terlambat</strong> dan persentase ketepatan waktu berkurang pada Auto Data Collector AKFI.
+                    </div>
                 </div>
             </div>
             <div class="modal-footer">
@@ -130,6 +151,17 @@ function openDeadlineModal(m) {
     document.getElementById('deadline_jenis_id').value = m.id;
     document.getElementById('deadline_doc_title').innerText = m.title;
     document.getElementById('deadline_due_info').value = m.unit_due_info || m.due_info || '';
+    
+    if (m.deadline_datetime) {
+        let dt = m.deadline_datetime.replace(' ', 'T');
+        if (dt.length > 16) dt = dt.substring(0, 16);
+        document.getElementById('deadline_datetime').value = dt;
+    } else if (m.deadline_date) {
+        document.getElementById('deadline_datetime').value = m.deadline_date + 'T23:59';
+    } else {
+        document.getElementById('deadline_datetime').value = '';
+    }
+
     document.getElementById('deadlineModal').classList.add('active');
 }
 </script>

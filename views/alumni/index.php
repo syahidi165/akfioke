@@ -8,14 +8,23 @@ $totalAlumni = count($alumniList);
 $pctFavorite = $totalAlumni > 0 ? round(($favoriteCount / $totalAlumni) * 100, 1) : 0;
 ?>
 
-<div class="page-header">
+<div class="page-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
     <div>
         <h1 class="page-title"><?= SecurityHelper::escape($pageTitle) ?></h1>
         <div class="page-subtitle">
             Pelacakan studi lanjut alumni ke sekolah unggulan atau PTN favorit untuk pemenuhan indikator mutu AKFI.
         </div>
     </div>
+    <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+        <a href="<?= Auth::baseUrl() ?>/alumni/template" class="btn btn-secondary" title="Unduh Excel template yang sudah berisi seluruh data alumni dari sekolah ini">
+            <i class="fa-solid fa-file-excel" style="color: #10b981; margin-right: 6px;"></i> Unduh Format Excel (Data Alumni)
+        </a>
+        <button type="button" class="btn btn-primary" onclick="document.getElementById('modalImportAlumni').style.display='flex'">
+            <i class="fa-solid fa-file-import" style="margin-right: 6px;"></i> Impor dari Excel
+        </button>
+    </div>
 </div>
+
 
 <!-- 3 KARTU STATISTIK ALUMNI -->
 <div class="grid-cols-3" style="margin-bottom: 24px;">
@@ -206,6 +215,45 @@ $pctFavorite = $totalAlumni > 0 ? round(($favoriteCount / $totalAlumni) * 100, 1
                     <?php endif; ?>
                 </tbody>
             </table>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL IMPORT EXCEL ALUMNI -->
+<div id="modalImportAlumni" class="modal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 9999; align-items: center; justify-content: center; padding: 16px;">
+    <div class="card" style="max-width: 500px; width: 100%; margin: auto; box-shadow: var(--shadow-lg);">
+        <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+            <h3 class="card-title">
+                <i class="fa-solid fa-file-import" style="color: var(--primary-light); margin-right: 8px;"></i>
+                Impor Data Jejak Alumni
+            </h3>
+            <button type="button" onclick="document.getElementById('modalImportAlumni').style.display='none'" style="background: none; border: none; font-size: 18px; cursor: pointer; color: var(--text-muted);">&times;</button>
+        </div>
+        <div class="card-body">
+            <div style="background: var(--bg-hover); padding: 12px 14px; border-radius: var(--radius-md); margin-bottom: 16px; font-size: 13px; line-height: 1.5;">
+                <p style="margin: 0 0 6px 0; font-weight: 600; color: var(--primary-light);">
+                    <i class="fa-solid fa-circle-info"></i> Petunjuk Import:
+                </p>
+                <ol style="margin: 0; padding-left: 18px; color: var(--text-muted);">
+                    <li>Klik <strong>Unduh Format Excel</strong> terlebih dahulu. Format excel otomatis berisi seluruh siswa alumni sekolah ini, sehingga operator tidak perlu mengetik nama siswa lagi.</li>
+                    <li>Lengkapi kolom <strong>Tahun Lulus, Status Studi, Jalur Masuk, Nama Sekolah/Kampus Lanjutan, Jurusan, Status Favorit, dan Catatan</strong>.</li>
+                    <li>Jangan mengubah kolom <strong>ID Siswa</strong> atau <strong>NIS</strong>.</li>
+                </ol>
+            </div>
+
+            <form action="<?= Auth::baseUrl() ?>/alumni/import" method="POST" enctype="multipart/form-data">
+                <?= CSRF::field() ?>
+                <div class="form-group">
+                    <label class="form-label">Pilih File Excel (.xlsx / .xls) <span style="color: var(--danger);">*</span></label>
+                    <input type="file" name="excel_file" class="form-control" accept=".xlsx, .xls" required>
+                </div>
+                <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px;">
+                    <button type="button" class="btn btn-secondary" onclick="document.getElementById('modalImportAlumni').style.display='none'">Batal</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fa-solid fa-upload" style="margin-right: 6px;"></i> Upload & Proses
+                    </button>
+                </div>
+            </form>
         </div>
     </div>
 </div>

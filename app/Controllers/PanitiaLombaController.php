@@ -254,9 +254,10 @@ class PanitiaLombaController extends Controller {
             [$unitId]
         );
 
-        $skNo = htmlspecialchars($assignment['sk_number'] ?: ('421.1/SK-LOMBA/' . date('Y') . '/' . sprintf('%03d', $id)), ENT_QUOTES, 'UTF-8');
+        $sptNo = htmlspecialchars($assignment['sk_number'] ?: ('421.1/SPT-LOMBA/' . date('Y') . '/' . sprintf('%03d', $id)), ENT_QUOTES, 'UTF-8');
         $teacherName = htmlspecialchars($assignment['teacher_name'], ENT_QUOTES, 'UTF-8');
         $teacherNipy = htmlspecialchars($assignment['nipy'] ?? '-', ENT_QUOTES, 'UTF-8');
+        $teacherPosition = htmlspecialchars($assignment['teacher_position'] ?? 'Guru / Pendidik', ENT_QUOTES, 'UTF-8');
         $eventType = htmlspecialchars($assignment['event_type'], ENT_QUOTES, 'UTF-8');
         $unitName = htmlspecialchars($assignment['unit_name'], ENT_QUOTES, 'UTF-8');
         $principalName = htmlspecialchars($principal['nama'] ?? 'Kepala Sekolah', ENT_QUOTES, 'UTF-8');
@@ -272,7 +273,7 @@ class PanitiaLombaController extends Controller {
 
         $studentRowsHtml = '';
         if (empty($studentList)) {
-            $studentRowsHtml = '<tr><td colspan="4" style="text-align: center; color: #666; padding: 12px; border: 1px solid #333;">(Belum ada santri yang didaftarkan pada SK ini)</td></tr>';
+            $studentRowsHtml = '<tr><td colspan="4" style="text-align: center; color: #666; padding: 12px; border: 1px solid #cbd5e1;">(Belum ada peserta didik yang didaftarkan pada SPT ini)</td></tr>';
         } else {
             foreach ($studentList as $idx => $st) {
                 $no = $idx + 1;
@@ -281,98 +282,102 @@ class PanitiaLombaController extends Controller {
                 $sKelas = htmlspecialchars($st['class_name'] ?? '-', ENT_QUOTES, 'UTF-8');
                 $studentRowsHtml .= "
                 <tr>
-                    <td style='text-align: center; border: 1px solid #333; padding: 6px 8px;'>{$no}</td>
-                    <td style='text-align: center; border: 1px solid #333; padding: 6px 8px; font-family: monospace;'>{$sNis}</td>
-                    <td style='border: 1px solid #333; padding: 6px 8px;'><strong>{$sNama}</strong></td>
-                    <td style='text-align: center; border: 1px solid #333; padding: 6px 8px;'>{$sKelas}</td>
+                    <td style='text-align: center; border: 1px solid #334155; padding: 6px 8px;'>{$no}</td>
+                    <td style='text-align: center; border: 1px solid #334155; padding: 6px 8px; font-family: monospace;'>{$sNis}</td>
+                    <td style='border: 1px solid #334155; padding: 6px 8px;'><strong>{$sNama}</strong></td>
+                    <td style='text-align: center; border: 1px solid #334155; padding: 6px 8px;'>{$sKelas}</td>
                 </tr>";
             }
         }
-
-        $statusLomba = $assignment['status'] ?? 'Aktif';
 
         $html = "
         <!DOCTYPE html>
         <html>
         <head>
             <meta charset='utf-8'>
-            <title>SK Pembina Lomba</title>
+            <title>Surat Perintah Tugas (SPT) - {$teacherName}</title>
             <style>
-                body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 11pt; color: #111; line-height: 1.5; margin: 20px; }
-                h2, h3, h4 { margin: 0; text-align: center; text-transform: uppercase; }
-                .table-data { width: 100%; border-collapse: collapse; margin-top: 10px; margin-bottom: 15px; }
-                .table-data th { background-color: #f1f5f9; border: 1px solid #333; padding: 8px; font-size: 10pt; text-align: center; }
+                body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 11pt; color: #1e293b; line-height: 1.6; margin: 15px 25px; }
+                h2, h3, h4 { margin: 0; text-align: center; }
+                .table-data { width: 100%; border-collapse: collapse; margin-top: 8px; margin-bottom: 12px; }
+                .table-data th { background-color: #f1f5f9; border: 1px solid #334155; padding: 7px; font-size: 10pt; text-align: center; font-weight: bold; }
                 .table-data td { font-size: 10pt; }
             </style>
         </head>
         <body>
             {$kopHtml}
 
-            <div style='text-align: center; margin-bottom: 20px;'>
-                <h3 style='font-size: 13pt; text-decoration: underline; letter-spacing: 0.5px;'>SURAT KEPUTUSAN KEPALA SEKOLAH</h3>
-                <div style='font-size: 10.5pt; font-weight: bold; margin-top: 2px;'>Nomor: {$skNo}</div>
-                <div style='font-size: 10pt; font-weight: bold; text-transform: uppercase; margin-top: 6px;'>
-                    TENTANG<br>
-                    PENUGASAN GURU PEMBINA DAN PESERTA DIDIK PADA AJANG TALENTA<br>
-                    {$fullEventName} TINGKAT KOTA / WILAYAH
-                </div>
+            <div style='text-align: center; margin-bottom: 18px;'>
+                <h3 style='font-size: 13pt; font-weight: bold; text-decoration: underline; letter-spacing: 1px;'>SURAT PERINTAH TUGAS (SPT)</h3>
+                <div style='font-size: 10.5pt; font-weight: bold; margin-top: 3px;'>Nomor: {$sptNo}</div>
             </div>
 
-            <table style='width: 100%; margin-bottom: 12px; font-size: 10.5pt;'>
+            <div style='font-size: 10.5pt; margin-bottom: 8px;'>
+                Yang bertanda tangan di bawah ini, Kepala Sekolah <strong>{$unitName}</strong> menerangkan bahwa:
+            </div>
+
+            <table style='width: 100%; margin-left: 12px; margin-bottom: 12px; font-size: 10.5pt;'>
                 <tr>
-                    <td style='width: 120px; vertical-align: top; font-weight: bold;'>Menimbang</td>
-                    <td style='width: 15px; vertical-align: top;'>:</td>
-                    <td style='text-align: justify;'>
-                        Bahwa dalam rangka mengembangkan potensi, bakat, dan prestasi peserta didik pada bidang talenta kompetisi resmi nasional, dipandang perlu menetapkan guru pembina dan peserta didik yang mewakili satuan pendidikan {$unitName}.
-                    </td>
+                    <td style='width: 140px; padding: 2px 0;'>Nama</td>
+                    <td style='width: 15px;'>:</td>
+                    <td><strong>{$principalName}</strong></td>
                 </tr>
                 <tr>
-                    <td style='vertical-align: top; font-weight: bold; padding-top: 6px;'>Mengingat</td>
-                    <td style='vertical-align: top; padding-top: 6px;'>:</td>
-                    <td style='text-align: justify; padding-top: 6px;'>
-                        1. Program Kerja Kesiswaan dan Prestasi Santri {$unitName};<br>
-                        2. Petunjuk Teknis Pelaksanaan Ajang Talenta Nasional Puspresnas / Balai Pengembangan Talenta Indonesia.
-                    </td>
+                    <td style='padding: 2px 0;'>NIPY</td>
+                    <td>:</td>
+                    <td style='font-family: monospace;'>{$principalNipy}</td>
+                </tr>
+                <tr>
+                    <td style='padding: 2px 0;'>Jabatan</td>
+                    <td>:</td>
+                    <td>Kepala Sekolah {$unitName}</td>
                 </tr>
             </table>
 
-            <div style='text-align: center; font-weight: bold; margin: 15px 0 10px 0; font-size: 11pt;'>MEMUTUSKAN</div>
+            <div style='text-align: center; font-weight: bold; font-size: 11pt; margin: 12px 0 8px 0; letter-spacing: 1px;'>
+                MEMBERIKAN TUGAS KEPADA:
+            </div>
 
-            <table style='width: 100%; margin-bottom: 14px; font-size: 10.5pt;'>
+            <table style='width: 100%; margin-left: 12px; margin-bottom: 14px; font-size: 10.5pt;'>
                 <tr>
-                    <td style='width: 120px; vertical-align: top; font-weight: bold;'>Menetapkan</td>
-                    <td style='width: 15px; vertical-align: top;'>:</td>
-                    <td></td>
+                    <td style='width: 140px; padding: 2px 0;'>Nama Pendidik</td>
+                    <td style='width: 15px;'>:</td>
+                    <td><strong>{$teacherName}</strong></td>
                 </tr>
                 <tr>
-                    <td style='vertical-align: top; font-weight: bold;'>PERTAMA</td>
-                    <td style='vertical-align: top;'>:</td>
-                    <td>
-                        Menugaskan Guru/Pendidik di bawah ini sebagai <strong>Guru Pembina Lomba {$eventType}</strong>:
-                        <table style='margin-top: 6px; margin-left: 10px; font-size: 10pt;'>
-                            <tr><td style='width: 120px;'>Nama Lengkap</td><td style='width: 10px;'>:</td><td><strong>{$teacherName}</strong></td></tr>
-                            <tr><td>NIPY</td><td>:</td><td style='font-family: monospace;'>{$teacherNipy}</td></tr>
-                            <tr><td>Tugas Bimbingan</td><td>:</td><td>Pembina Cabang {$fullEventName}</td></tr>
-                            <tr><td>Status Penugasan</td><td>:</td><td><strong style='color: #0d9488;'>{$statusLomba}</strong></td></tr>
-                        </table>
-                    </td>
+                    <td style='padding: 2px 0;'>NIPY</td>
+                    <td>:</td>
+                    <td style='font-family: monospace;'>{$teacherNipy}</td>
                 </tr>
                 <tr>
-                    <td style='vertical-align: top; font-weight: bold; padding-top: 10px;'>KEDUA</td>
-                    <td style='vertical-align: top; padding-top: 10px;'>:</td>
-                    <td style='padding-top: 10px;'>
-                        Menetapkan Peserta Didik yang dibina dan diutus sebagai kontingen resmi sekolah:
-                    </td>
+                    <td style='padding: 2px 0;'>Jabatan / Tugas</td>
+                    <td>:</td>
+                    <td>{$teacherPosition} / <strong>Guru Pembina & Pendamping Lomba</strong></td>
+                </tr>
+                <tr>
+                    <td style='padding: 2px 0;'>Unit Kerja</td>
+                    <td>:</td>
+                    <td>{$unitName}</td>
                 </tr>
             </table>
+
+            <div style='font-weight: bold; font-size: 10.5pt; margin-bottom: 6px;'>UNTUK:</div>
+            <ol style='margin: 0 0 12px 0; padding-left: 24px; font-size: 10.5pt; text-align: justify;'>
+                <li style='margin-bottom: 4px;'>
+                    Melaksanakan bimbingan, pelatihan intensif, pendampingan, dan pengawalan kontingen peserta didik {$unitName} pada ajang talenta bergengsi <strong>{$fullEventName}</strong> Tingkat Kota / Wilayah.
+                </li>
+                <li style='margin-bottom: 4px;'>
+                    Mendampingi serta mengikutsertakan peserta didik di bawah ini sebagai delegasi resmi perwakilan sekolah:
+                </li>
+            </ol>
 
             <table class='table-data'>
                 <thead>
                     <tr>
                         <th style='width: 35px;'>No</th>
-                        <th style='width: 100px;'>NIS</th>
+                        <th style='width: 110px;'>NIS</th>
                         <th>Nama Lengkap Peserta Didik</th>
-                        <th style='width: 120px;'>Rombel / Kelas</th>
+                        <th style='width: 130px;'>Rombel / Kelas</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -380,29 +385,36 @@ class PanitiaLombaController extends Controller {
                 </tbody>
             </table>
 
-            <table style='width: 100%; font-size: 10.5pt; margin-top: 5px;'>
+            <ol start='3' style='margin: 0 0 16px 0; padding-left: 24px; font-size: 10.5pt; text-align: justify;'>
+                <li style='margin-bottom: 4px;'>
+                    Menjaga nama baik, akhlak, dan integritas sekolah selama pelaksanaan kegiatan berlangsung.
+                </li>
+                <li style='margin-bottom: 4px;'>
+                    Melaporkan seluruh hasil kegiatan, pencapaian prestasi santri, serta dokumentasi perlombaan kepada Kepala Sekolah setelah seluruh rangkaian kegiatan selesai.
+                </li>
+            </ol>
+
+            <div style='font-size: 10.5pt; text-align: justify; margin-bottom: 25px;'>
+                Demikian Surat Perintah Tugas (SPT) ini diterbitkan untuk dapat dilaksanakan dengan sebaik-baiknya dan penuh rasa tanggung jawab.
+            </div>
+
+            <table style='width: 100%; font-size: 10.5pt;'>
                 <tr>
-                    <td style='width: 120px; vertical-align: top; font-weight: bold;'>KETIGA</td>
-                    <td style='width: 15px; vertical-align: top;'>:</td>
-                    <td style='text-align: justify;'>
-                        Surat Keputusan ini berlaku sejak tanggal ditetapkan hingga seluruh rangkaian kegiatan lomba selesai, dengan ketentuan apabila terdapat kekeliruan akan diperbaiki sebagaimana mestinya.
+                    <td style='width: 55%;'></td>
+                    <td style='width: 45%; text-align: left;'>
+                        <div>Dikeluarkan di : Batam</div>
+                        <div>Pada tanggal : {$tanggalSurat}</div>
+                        <div style='margin-top: 6px; font-weight: bold;'>Kepala Sekolah,</div>
+                        <div style='height: 60px;'></div>
+                        <div style='font-weight: bold; text-decoration: underline;'>{$principalName}</div>
+                        <div style='font-family: monospace; font-size: 9.5pt;'>NIPY. {$principalNipy}</div>
                     </td>
                 </tr>
             </table>
-
-            <div style='margin-top: 30px; float: right; width: 240px; text-align: left; font-size: 10.5pt;'>
-                <div>Ditetapkan di : Batam</div>
-                <div>Pada tanggal : {$tanggalSurat}</div>
-                <div style='margin-top: 6px; font-weight: bold;'>Kepala Sekolah,</div>
-                <div style='height: 55px;'></div>
-                <div style='font-weight: bold; text-decoration: underline;'>{$principalName}</div>
-                <div style='font-family: monospace; font-size: 9.5pt;'>NIPY. {$principalNipy}</div>
-            </div>
-            <div style='clear: both;'></div>
         </body>
         </html>";
 
-        ExportHelper::pdf($html, "SK_Pembina_Lomba_{$eventType}_" . preg_replace('/[^a-zA-Z0-9]/', '_', $teacherName));
+        ExportHelper::pdf($html, "SPT_Pembina_Lomba_{$eventType}_" . preg_replace('/[^a-zA-Z0-9]/', '_', $teacherName));
     }
 
     // --- 3. PRESTASI SISWA OLEH PANITIA LOMBA ---
@@ -670,6 +682,103 @@ class PanitiaLombaController extends Controller {
 
         $this->setFlash('success', 'Data status dan berkas bukti guru berprestasi berhasil diperbarui.');
         $this->redirect(Auth::baseUrl() . '/guru/prestasi-tetapkan');
+    }
+
+    public function guruPrestasiVerify(): void {
+        $this->requireRole('kepala_sekolah');
+        $unitId = Auth::unitId();
+        $userId = Auth::id();
+        $id = (int)($_POST['id'] ?? 0);
+        $action = $_POST['action'] ?? 'Terverifikasi';
+        $notes = trim($_POST['verification_notes'] ?? '');
+
+        $status = ($action === 'Terverifikasi') ? 'Terverifikasi' : 'Ditolak';
+
+        Database::execute(
+            "UPDATE guru_berprestasi SET status = ?, verified_by_user_id = ?, verified_at = NOW(), verification_notes = ? WHERE id = ? AND unit_id = ?",
+            [$status, $userId, $notes, $id, $unitId]
+        );
+
+        $this->setFlash('success', 'Status prestasi guru berhasil diverifikasi menjadi: ' . $status);
+        $this->redirect(Auth::baseUrl() . '/guru/prestasi-tetapkan');
+    }
+
+    // --- 5B. PRESTASI GURU MANDIRI (DIISI OLEH MASING-MASING GURU) ---
+    public function guruPrestasiMandiri(): void {
+        $this->requireRole(['walas', 'guru_mapel', 'guru_diniyah', 'guru_tahfidz', 'guru_mapel_kbtk', 'guru_supervisor']);
+        $userId = Auth::id();
+        $unitId = Auth::unitId();
+        $taId = Auth::academicYearId();
+
+        $emp = Database::fetch("SELECT * FROM employees WHERE user_id = ?", [$userId]);
+        if (!$emp) {
+            $user = Database::fetch("SELECT email FROM users WHERE id = ?", [$userId]);
+            if ($user) {
+                $emp = Database::fetch("SELECT * FROM employees WHERE email = ?", [$user['email']]);
+            }
+        }
+        $empId = (int)($emp['id'] ?? 0);
+
+        $myAchievements = Database::fetchAll(
+            "SELECT gb.*, u.name as unit_name, v.nama as verifier_name 
+             FROM guru_berprestasi gb 
+             JOIN units u ON gb.unit_id = u.id 
+             LEFT JOIN users vu ON gb.verified_by_user_id = vu.id 
+             LEFT JOIN employees v ON vu.id = v.user_id 
+             WHERE gb.employee_id = ? AND gb.academic_year_id = ? 
+             ORDER BY gb.id DESC",
+            [$empId, $taId]
+        );
+
+        $this->view('panitia/guru_prestasi_mandiri', [
+            'pageTitle'      => 'Portofolio & Prestasi Guru Mandiri',
+            'myAchievements' => $myAchievements,
+            'employee'       => $emp
+        ]);
+    }
+
+    public function guruPrestasiMandiriSave(): void {
+        $this->requireRole(['walas', 'guru_mapel', 'guru_diniyah', 'guru_tahfidz', 'guru_mapel_kbtk', 'guru_supervisor']);
+        $userId = Auth::id();
+        $unitId = Auth::unitId();
+        $taId = Auth::academicYearId();
+
+        $emp = Database::fetch("SELECT * FROM employees WHERE user_id = ?", [$userId]);
+        if (!$emp) {
+            $user = Database::fetch("SELECT email FROM users WHERE id = ?", [$userId]);
+            if ($user) {
+                $emp = Database::fetch("SELECT * FROM employees WHERE email = ?", [$user['email']]);
+            }
+        }
+        $empId = (int)($emp['id'] ?? 0);
+
+        if (!$empId) {
+            $this->setFlash('danger', 'Data profil pegawai Anda tidak ditemukan.');
+            $this->redirect(Auth::baseUrl() . '/guru/prestasi');
+            return;
+        }
+
+        $title = trim($_POST['title'] ?? '');
+        $level = trim($_POST['level'] ?? 'Tingkat Kota / Wilayah');
+        $year = trim($_POST['year'] ?? date('Y'));
+        $notes = trim($_POST['notes'] ?? '');
+
+        $proofDocument = null;
+        if (!empty($_FILES['certificate']['name'])) {
+            $up = Uploader::upload($_FILES['certificate'], 'prestasi_guru');
+            if ($up['success']) {
+                $proofDocument = $up['file_path'];
+            }
+        }
+
+        Database::execute(
+            "INSERT INTO guru_berprestasi (unit_id, academic_year_id, employee_id, title, level, year, notes, status, proof_document, created_by_user_id) 
+             VALUES (?, ?, ?, ?, ?, ?, ?, 'Menunggu Verifikasi', ?, ?)",
+            [$unitId, $taId, $empId, $title, $level, $year, $notes, $proofDocument, $userId]
+        );
+
+        $this->setFlash('success', 'Prestasi Anda berhasil diajukan dan sedang menunggu verifikasi Kepala Sekolah.');
+        $this->redirect(Auth::baseUrl() . '/guru/prestasi');
     }
 
     // --- 6. BEST PRACTICE / PTK (GURU & WALAS) ---

@@ -42,6 +42,13 @@ class MasterController extends Controller {
         $bankHolder = trim($_POST['bank_holder'] ?? '');
         $deleteLogo = !empty($_POST['delete_logo']);
 
+        $npsn = trim($_POST['npsn'] ?? '');
+        $akreditasi = trim($_POST['akreditasi'] ?? '');
+        $nomorAkreditasi = trim($_POST['nomor_akreditasi'] ?? '');
+        $akreditasiExpiredAt = !empty($_POST['akreditasi_expired_at']) ? trim($_POST['akreditasi_expired_at']) : null;
+        $nomorIzinOperasional = trim($_POST['nomor_izin_operasional'] ?? '');
+        $izinOperasionalExpiredAt = !empty($_POST['izin_operasional_expired_at']) ? trim($_POST['izin_operasional_expired_at']) : null;
+
         // Handle upload berkas logo jika ada
         $uploadedLogoPath = null;
         if (!empty($_FILES['logo']['tmp_name']) && $_FILES['logo']['error'] === UPLOAD_ERR_OK) {
@@ -99,15 +106,15 @@ class MasterController extends Controller {
             }
 
             Database::execute(
-                "UPDATE units SET code = ?, name = ?, level = ?, kop_title = ?, kop_subtitle = ?, address = ?, phone = ?, email = ?, bank_name = ?, bank_account = ?, bank_holder = ?, logo_path = ?, updated_at = NOW() WHERE id = ?",
-                [$code, $name, $level, $kopTitle, $kopSubtitle, $address, $phone, $email, $bankName, $bankAccount, $bankHolder, $finalLogoPath, $id]
+                "UPDATE units SET code = ?, name = ?, level = ?, kop_title = ?, kop_subtitle = ?, address = ?, phone = ?, email = ?, bank_name = ?, bank_account = ?, bank_holder = ?, logo_path = ?, npsn = ?, akreditasi = ?, nomor_akreditasi = ?, akreditasi_expired_at = ?, nomor_izin_operasional = ?, izin_operasional_expired_at = ?, updated_at = NOW() WHERE id = ?",
+                [$code, $name, $level, $kopTitle, $kopSubtitle, $address, $phone, $email, $bankName, $bankAccount, $bankHolder, $finalLogoPath, $npsn, $akreditasi, $nomorAkreditasi, $akreditasiExpiredAt, $nomorIzinOperasional, $izinOperasionalExpiredAt, $id]
             );
             AuditLog::log('UPDATE_UNIT', 'units', $id, $old, $_POST);
             $this->setFlash('success', 'Data unit sekolah dan logo berhasil diperbarui.');
         } else {
             Database::execute(
-                "INSERT INTO units (code, name, level, kop_title, kop_subtitle, address, phone, email, bank_name, bank_account, bank_holder, logo_path) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                [$code, $name, $level, $kopTitle, $kopSubtitle, $address, $phone, $email, $bankName, $bankAccount, $bankHolder, $uploadedLogoPath]
+                "INSERT INTO units (code, name, level, kop_title, kop_subtitle, address, phone, email, bank_name, bank_account, bank_holder, logo_path, npsn, akreditasi, nomor_akreditasi, akreditasi_expired_at, nomor_izin_operasional, izin_operasional_expired_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                [$code, $name, $level, $kopTitle, $kopSubtitle, $address, $phone, $email, $bankName, $bankAccount, $bankHolder, $uploadedLogoPath, $npsn, $akreditasi, $nomorAkreditasi, $akreditasiExpiredAt, $nomorIzinOperasional, $izinOperasionalExpiredAt]
             );
             $newId = Database::lastInsertId();
             AuditLog::log('CREATE_UNIT', 'units', $newId, null, $_POST);

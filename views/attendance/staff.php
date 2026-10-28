@@ -33,10 +33,10 @@ $avgAttendance = $effectiveDays > 0 ? round(($totHadir / $effectiveDays) * 100, 
 $avgKajian = $totKajianTotal > 0 ? round(($totKajianHadir / $totKajianTotal) * 100, 1) : 0;
 ?>
 
-<div class="page-header">
+<div class="page-header" style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 16px;">
     <div>
         <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
-            <span class="badge badge-primary">Presensi Pegawai</span>
+            <span class="badge badge-success"><i class="fa-solid fa-user-pen"></i> Tata Usaha</span>
             <span style="font-size: 0.8125rem; color: var(--text-muted, #64748b);">Staf Non-Guru</span>
         </div>
         <h1 class="page-title">
@@ -46,6 +46,14 @@ $avgKajian = $totKajianTotal > 0 ? round(($totKajianHadir / $totKajianTotal) * 1
         <p class="page-subtitle">
             Pencatatan rekap kehadiran bulanan, ketepatan jam kerja, dan presensi kajian Sabtu untuk staf operasional sekolah.
         </p>
+    </div>
+    <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+        <a href="<?= $baseUrl ?>/attendance/staff/template?month_num=<?= $monthNum ?>" class="btn btn-outline" style="font-size: 0.8125rem;">
+            <i class="fa-solid fa-file-excel" style="color: #10b981;"></i> Unduh Format Excel (Staf Pre-filled)
+        </a>
+        <button type="button" class="btn btn-primary" onclick="openImportStafModal()" style="font-size: 0.8125rem;">
+            <i class="fa-solid fa-file-import"></i> Import Presensi Staf
+        </button>
     </div>
 </div>
 
@@ -142,15 +150,15 @@ $avgKajian = $totKajianTotal > 0 ? round(($totKajianHadir / $totKajianTotal) * 1
                             <th colspan="2" style="border-bottom: 1px solid var(--border-color, #e2e8f0); background: #eff6ff; color: #1e40af;">Kajian Sabtu</th>
                         </tr>
                         <tr style="background: #f1f5f9; font-size: 0.8rem;">
-                            <th style="width: 75px; color: #16a34a;">Hadir</th>
-                            <th style="width: 65px; color: #0284c7;">Sakit</th>
-                            <th style="width: 65px; color: #d97706;">Izin</th>
-                            <th style="width: 75px; color: #dc2626;" title="Tidak Hadir / Mangkir / Alpha">Tidak Hadir</th>
-                            <th style="width: 75px; color: #ea580c;" title="Terlambat Masuk Kerja (Hari/Kali)">Terlambat</th>
-                            <th style="width: 85px; color: #b45309;" title="Pulang Cepat Sebelum Jam Kerja Berakhir (Hari/Kali)">Pulang Cepat</th>
-                            <th style="width: 85px; color: #7c3aed;" title="Lupa Catat / Lupa Absen Datang/Pulang (Hari/Kali)">Lupa Catat</th>
-                            <th style="width: 75px; color: #4338ca;">Hadir</th>
-                            <th style="width: 75px; color: #64748b;">Total</th>
+                            <th style="min-width: 90px; width: 90px; color: #16a34a;">Hadir</th>
+                            <th style="min-width: 80px; width: 80px; color: #0284c7;">Sakit</th>
+                            <th style="min-width: 80px; width: 80px; color: #d97706;">Izin</th>
+                            <th style="min-width: 95px; width: 95px; color: #dc2626;" title="Tidak Hadir / Mangkir / Alpha">Tidak Hadir</th>
+                            <th style="min-width: 95px; width: 95px; color: #ea580c;" title="Terlambat Masuk Kerja (Hari/Kali)">Terlambat</th>
+                            <th style="min-width: 105px; width: 105px; color: #b45309;" title="Pulang Cepat Sebelum Jam Kerja Berakhir (Hari/Kali)">Pulang Cepat</th>
+                            <th style="min-width: 100px; width: 100px; color: #7c3aed;" title="Lupa Catat / Lupa Absen Datang/Pulang (Hari/Kali)">Lupa Catat</th>
+                            <th style="min-width: 85px; width: 85px; color: #4338ca;">Hadir</th>
+                            <th style="min-width: 85px; width: 85px; color: #64748b;">Total</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -186,47 +194,47 @@ $avgKajian = $totKajianTotal > 0 ? round(($totKajianHadir / $totKajianTotal) * 1
                                     </td>
                                     <td>
                                         <input type="number" min="0" max="31" name="att[<?= $s['id'] ?>][hadir]" 
-                                               class="form-control" style="text-align: center; font-weight: 700; color: #16a34a; height: 36px;" 
+                                               class="form-control" style="text-align: center; font-weight: 700; color: #16a34a; height: 38px; min-width: 65px; padding: 4px 6px; font-size: 14px;" 
                                                value="<?= $s['hadir'] ?? 24 ?>" required>
                                     </td>
                                     <td>
                                         <input type="number" min="0" max="31" name="att[<?= $s['id'] ?>][sakit]" 
-                                               class="form-control" style="text-align: center; height: 36px;" 
+                                               class="form-control" style="text-align: center; height: 38px; min-width: 65px; padding: 4px 6px; font-size: 14px;" 
                                                value="<?= $s['sakit'] ?? 0 ?>">
                                     </td>
                                     <td>
                                         <input type="number" min="0" max="31" name="att[<?= $s['id'] ?>][izin]" 
-                                               class="form-control" style="text-align: center; height: 36px;" 
+                                               class="form-control" style="text-align: center; height: 38px; min-width: 65px; padding: 4px 6px; font-size: 14px;" 
                                                value="<?= $s['izin'] ?? 0 ?>">
                                     </td>
                                     <td>
                                         <input type="number" min="0" max="31" name="att[<?= $s['id'] ?>][alpha]" 
-                                               class="form-control" style="text-align: center; font-weight: 700; color: #dc2626; height: 36px;" 
+                                               class="form-control" style="text-align: center; font-weight: 700; color: #dc2626; height: 38px; min-width: 65px; padding: 4px 6px; font-size: 14px;" 
                                                value="<?= $s['mangkir'] ?? $s['alpha'] ?? 0 ?>" title="Tidak Hadir / Mangkir (Hari)">
                                     </td>
                                     <td>
                                         <input type="number" min="0" max="31" name="att[<?= $s['id'] ?>][terlambat]" 
-                                               class="form-control" style="text-align: center; height: 36px; color: #ea580c; font-weight: 600;" 
+                                               class="form-control" style="text-align: center; height: 38px; min-width: 65px; padding: 4px 6px; font-size: 14px; color: #ea580c; font-weight: 600;" 
                                                value="<?= $s['terlambat'] ?? ($s['terlambat_menit'] > 0 ? 1 : 0) ?>" placeholder="Hari/x" title="Terlambat (Hari/Kali)">
                                     </td>
                                     <td>
                                         <input type="number" min="0" max="31" name="att[<?= $s['id'] ?>][pulang_cepat]" 
-                                               class="form-control" style="text-align: center; height: 36px; color: #b45309; font-weight: 600;" 
+                                               class="form-control" style="text-align: center; height: 38px; min-width: 65px; padding: 4px 6px; font-size: 14px; color: #b45309; font-weight: 600;" 
                                                value="<?= $s['pulang_cepat'] ?? 0 ?>" placeholder="Hari/x" title="Pulang Cepat (Hari/Kali)">
                                     </td>
                                     <td>
                                         <input type="number" min="0" max="31" name="att[<?= $s['id'] ?>][lupa_catat]" 
-                                               class="form-control" style="text-align: center; height: 36px; color: #7c3aed; font-weight: 600;" 
+                                               class="form-control" style="text-align: center; height: 38px; min-width: 65px; padding: 4px 6px; font-size: 14px; color: #7c3aed; font-weight: 600;" 
                                                value="<?= $s['lupa_catat'] ?? 0 ?>" placeholder="Hari/x" title="Lupa Catat (Hari/Kali)">
                                     </td>
                                     <td>
                                         <input type="number" min="0" max="5" name="att[<?= $s['id'] ?>][kajian_hadir]" 
-                                               class="form-control" style="text-align: center; font-weight: 700; color: #4338ca; height: 36px;" 
+                                               class="form-control" style="text-align: center; font-weight: 700; color: #4338ca; height: 38px; min-width: 65px; padding: 4px 6px; font-size: 14px;" 
                                                value="<?= $s['kajian_hadir'] ?? 4 ?>">
                                     </td>
                                     <td>
                                         <input type="number" min="0" max="5" name="att[<?= $s['id'] ?>][kajian_total]" 
-                                               class="form-control" style="text-align: center; height: 36px;" 
+                                               class="form-control" style="text-align: center; height: 38px; min-width: 65px; padding: 4px 6px; font-size: 14px;" 
                                                value="<?= $s['kajian_total'] ?? 4 ?>">
                                     </td>
                                 </tr>
@@ -246,3 +254,54 @@ $avgKajian = $totKajianTotal > 0 ? round(($totKajianHadir / $totKajianTotal) * 1
         </form>
     </div>
 </div>
+
+<!-- Modal Import Presensi Staf Excel -->
+<div class="modal-overlay" id="modalImportStaf">
+    <div class="modal-container" style="max-width: 500px;">
+        <form method="POST" action="<?= $baseUrl ?>/attendance/staff/import" enctype="multipart/form-data">
+            <?= CSRF::inputField() ?>
+            <div class="modal-header">
+                <h3 class="card-title">
+                    <i class="fa-solid fa-file-excel" style="color: #10b981; margin-right: 8px;"></i> 
+                    Import Presensi Staf by Excel
+                </h3>
+                <button type="button" class="btn btn-outline btn-sm" onclick="closeImportStafModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-info" style="font-size: 12.5px; line-height: 1.5; margin-bottom: 16px;">
+                    <i class="fa-solid fa-circle-info"></i> <strong>Kemudahan untuk TU:</strong> Seluruh nama pegawai non-guru (TU, Cleaning Service, Security) sudah terisi otomatis pada template Excel yang diunduh. Anda tidak perlu mengetik nama staf lagi secara manual.
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Pilih Periode Bulan Presensi</label>
+                    <select name="month_num" class="form-control" required>
+                        <?php foreach ($months as $num => $name): ?>
+                            <option value="<?= $num ?>" <?= $num == $monthNum ? 'selected' : '' ?>>
+                                Bulan <?= $num ?> &ndash; <?= $name ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Pilih Berkas Excel (.xlsx / .xls)</label>
+                    <input type="file" name="excel_file" class="form-control" accept=".xlsx, .xls" required>
+                    <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">
+                        Gunakan tombol <strong>"Unduh Format Excel (Staf Pre-filled)"</strong> terlebih dahulu untuk mendapatkan template resmi.
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline" onclick="closeImportStafModal()">Batal</button>
+                <button type="submit" class="btn btn-primary"><i class="fa-solid fa-upload"></i> Unggah &amp; Simpan Presensi</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function openImportStafModal() {
+    document.getElementById('modalImportStaf').classList.add('active');
+}
+function closeImportStafModal() {
+    document.getElementById('modalImportStaf').classList.remove('active');
+}
+</script>

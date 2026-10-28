@@ -30,6 +30,7 @@ use App\Controllers\ProfileController;
 use App\Controllers\SarprasController;
 use App\Controllers\JadwalController;
 use App\Controllers\PwaController;
+use App\Controllers\NotificationController;
 
 // PWA (Progressive Web App) Routes
 Router::get('/manifest.json', [PwaController::class, 'manifest']);
@@ -50,6 +51,16 @@ Router::post('/switch-ta', [AuthController::class, 'switchTa']);
 Router::get('/dashboard', [DashboardController::class, 'index']);
 Router::get('/panduan', [DashboardController::class, 'downloadPanduan']);
 Router::get('/buku-panduan', [DashboardController::class, 'downloadPanduan']);
+
+// Notifikasi Sistem
+Router::get('/notifications', [NotificationController::class, 'index']);
+Router::get('/notifications/mark-all-read', [NotificationController::class, 'markAllRead']);
+Router::get('/notifications/delete-all', [NotificationController::class, 'deleteAll']);
+Router::post('/notifications/delete-all', [NotificationController::class, 'deleteAll']);
+Router::get('/notifications/:id/read', [NotificationController::class, 'read']);
+Router::get('/notifications/:id/mark-read', [NotificationController::class, 'markRead']);
+Router::get('/notifications/:id/delete', [NotificationController::class, 'delete']);
+Router::post('/notifications/:id/delete', [NotificationController::class, 'delete']);
 
 // 3. Master Data (Operator Yayasan & Operator Sekolah)
 Router::get('/master/units', [MasterController::class, 'units']);
@@ -212,8 +223,12 @@ Router::get('/nilai/rapor-gabungan/:id', [NilaiBulananController::class, 'printR
 
 // 10. Absensi Pegawai & Siswa
 Router::get('/attendance/teachers', [AbsensiController::class, 'teachersAttendance']);
+Router::get('/attendance/teachers/template', [AbsensiController::class, 'teachersAttendanceTemplate']);
+Router::post('/attendance/teachers/import', [AbsensiController::class, 'teachersAttendanceImport']);
 Router::post('/attendance/teachers/save', [AbsensiController::class, 'saveTeachersAttendance']);
 Router::get('/attendance/staff', [AbsensiController::class, 'staffAttendance']);
+Router::get('/attendance/staff/template', [AbsensiController::class, 'staffAttendanceTemplate']);
+Router::post('/attendance/staff/import', [AbsensiController::class, 'staffAttendanceImport']);
 Router::post('/attendance/staff/save', [AbsensiController::class, 'saveStaffAttendance']);
 Router::get('/attendance/students', [AbsensiController::class, 'studentsAttendance']);
 Router::post('/attendance/students/save', [AbsensiController::class, 'saveStudentsAttendance']);
@@ -296,6 +311,9 @@ Router::post('/prestasi/walas/save', [PanitiaLombaController::class, 'prestasiWa
 Router::get('/guru/prestasi-tetapkan', [PanitiaLombaController::class, 'guruPrestasiIndex']);
 Router::post('/guru/prestasi-tetapkan/save', [PanitiaLombaController::class, 'guruPrestasiSave']);
 Router::post('/guru/prestasi-tetapkan/update', [PanitiaLombaController::class, 'guruPrestasiUpdate']);
+Router::post('/guru/prestasi-tetapkan/verify', [PanitiaLombaController::class, 'guruPrestasiVerify']);
+Router::get('/guru/prestasi', [PanitiaLombaController::class, 'guruPrestasiMandiri']);
+Router::post('/guru/prestasi/save', [PanitiaLombaController::class, 'guruPrestasiMandiriSave']);
 Router::get('/guru/best-practice', [PanitiaLombaController::class, 'bestPracticeIndex']);
 Router::post('/guru/best-practice/upload', [PanitiaLombaController::class, 'bestPracticeUpload']);
 Router::get('/walas/rekomendasi', [AlumniController::class, 'walasRekomendasi']);
@@ -303,6 +321,8 @@ Router::post('/walas/rekomendasi/submit', [AlumniController::class, 'walasRekome
 Router::post('/walas/rekomendasi/delete', [AlumniController::class, 'walasRekomendasiDelete']);
 Router::get('/alumni', [AlumniController::class, 'alumniIndex']);
 Router::post('/alumni/save', [AlumniController::class, 'alumniSave']);
+Router::get('/alumni/template', [AlumniController::class, 'alumniTemplate']);
+Router::post('/alumni/import', [AlumniController::class, 'alumniImport']);
 Router::get('/spmb/target', [SpmbController::class, 'targetIndex']);
 Router::post('/spmb/target/save', [SpmbController::class, 'targetSave']);
 Router::get('/spmb/operator', [SpmbController::class, 'operatorIndex']);

@@ -52,6 +52,17 @@ use Core\CSRF;
                             <td>
                                 <strong><?= SecurityHelper::escape($u['name']) ?></strong>
                                 <div style="font-size: 11px; color: var(--text-muted);"><?= SecurityHelper::escape($u['kop_subtitle']) ?></div>
+                                <div style="margin-top: 5px; display: flex; gap: 4px; flex-wrap: wrap;">
+                                    <?php if (!empty($u['npsn'])): ?>
+                                        <span class="badge badge-info" style="font-size: 10px;">NPSN: <?= SecurityHelper::escape($u['npsn']) ?></span>
+                                    <?php endif; ?>
+                                    <?php if (!empty($u['akreditasi'])): ?>
+                                        <span class="badge badge-success" style="font-size: 10px;">Akreditasi: <?= SecurityHelper::escape($u['akreditasi']) ?><?= !empty($u['akreditasi_expired_at']) ? ' (s.d ' . date('d/m/Y', strtotime($u['akreditasi_expired_at'])) . ')' : '' ?></span>
+                                    <?php endif; ?>
+                                    <?php if (!empty($u['nomor_izin_operasional'])): ?>
+                                        <span class="badge badge-secondary" style="font-size: 10px;">Izin Op: <?= !empty($u['izin_operasional_expired_at']) ? 's.d ' . date('d/m/Y', strtotime($u['izin_operasional_expired_at'])) : 'Ada' ?></span>
+                                    <?php endif; ?>
+                                </div>
                             </td>
                             <td><span class="badge badge-secondary"><?= SecurityHelper::escape($u['level']) ?></span></td>
                             <td>
@@ -157,7 +168,47 @@ use Core\CSRF;
                     <textarea name="address" id="unit_address" class="form-control" rows="2"></textarea>
                 </div>
 
-                <h4 style="font-size: 13px; font-weight: 700; margin: 16px 0 10px; color: var(--primary);">Rekening Bank Penampung SPP</h4>
+                <h4 style="font-size: 13px; font-weight: 700; margin: 16px 0 10px; color: var(--primary); border-top: 1px dashed var(--border-color); padding-top: 14px;">
+                    <i class="fa-solid fa-certificate" style="margin-right: 6px; color: var(--accent);"></i> Legalitas, Akreditasi & Izin Operasional
+                </h4>
+                <div class="grid-cols-2">
+                    <div class="form-group">
+                        <label class="form-label">NPSN</label>
+                        <input type="text" name="npsn" id="unit_npsn" class="form-control" placeholder="Contoh: 69968633">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Peringkat Akreditasi</label>
+                        <select name="akreditasi" id="unit_akreditasi" class="form-control">
+                            <option value="">-- Pilih Peringkat --</option>
+                            <option value="A">A (Unggul)</option>
+                            <option value="B">B (Baik)</option>
+                            <option value="C">C (Cukup)</option>
+                            <option value="Belum Terakreditasi">Belum Terakreditasi</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="grid-cols-2">
+                    <div class="form-group">
+                        <label class="form-label">Nomor Sertifikat / SK Akreditasi</label>
+                        <input type="text" name="nomor_akreditasi" id="unit_nomor_akreditasi" class="form-control" placeholder="Contoh: 123/BAN-SM/SK/2022">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Masa Berlaku Akreditasi Hingga</label>
+                        <input type="date" name="akreditasi_expired_at" id="unit_akreditasi_expired_at" class="form-control">
+                    </div>
+                </div>
+                <div class="grid-cols-2">
+                    <div class="form-group">
+                        <label class="form-label">Nomor Izin Operasional</label>
+                        <input type="text" name="nomor_izin_operasional" id="unit_nomor_izin_operasional" class="form-control" placeholder="Contoh: 1302/KPTS-4/VII/2017">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Masa Berlaku Izin Operasional Hingga</label>
+                        <input type="date" name="izin_operasional_expired_at" id="unit_izin_operasional_expired_at" class="form-control">
+                    </div>
+                </div>
+
+                <h4 style="font-size: 13px; font-weight: 700; margin: 16px 0 10px; color: var(--primary); border-top: 1px dashed var(--border-color); padding-top: 14px;">Rekening Bank Penampung SPP</h4>
                 <div class="grid-cols-3">
                     <div class="form-group">
                         <label class="form-label">Nama Bank</label>
@@ -305,6 +356,12 @@ function openUnitModal() {
     document.getElementById('unit_bank_name').value = '';
     document.getElementById('unit_bank_account').value = '';
     document.getElementById('unit_bank_holder').value = '';
+    document.getElementById('unit_npsn').value = '';
+    document.getElementById('unit_akreditasi').value = '';
+    document.getElementById('unit_nomor_akreditasi').value = '';
+    document.getElementById('unit_akreditasi_expired_at').value = '';
+    document.getElementById('unit_nomor_izin_operasional').value = '';
+    document.getElementById('unit_izin_operasional_expired_at').value = '';
     document.getElementById('unit_logo_file').value = '';
     document.getElementById('unit_logo_img').style.display = 'none';
     document.getElementById('unit_logo_img').src = '';
@@ -327,6 +384,12 @@ function editUnit(u) {
     document.getElementById('unit_bank_name').value = u.bank_name || '';
     document.getElementById('unit_bank_account').value = u.bank_account || '';
     document.getElementById('unit_bank_holder').value = u.bank_holder || '';
+    document.getElementById('unit_npsn').value = u.npsn || '';
+    document.getElementById('unit_akreditasi').value = u.akreditasi || '';
+    document.getElementById('unit_nomor_akreditasi').value = u.nomor_akreditasi || '';
+    document.getElementById('unit_akreditasi_expired_at').value = u.akreditasi_expired_at || '';
+    document.getElementById('unit_nomor_izin_operasional').value = u.nomor_izin_operasional || '';
+    document.getElementById('unit_izin_operasional_expired_at').value = u.izin_operasional_expired_at || '';
     document.getElementById('unit_logo_file').value = '';
     document.getElementById('delete_logo_chk').checked = false;
 
