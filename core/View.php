@@ -11,7 +11,9 @@ class View {
         $currentUser = Auth::user();
         $activeRole = Auth::activeRole();
         $userRoles = Auth::roles();
-        $currentUnitId = Auth::unitId();
+        $activeRoleName = $activeRole['name'] ?? '';
+        $isYayasanOfficer = in_array($activeRoleName, ['operator_yayasan', 'direktur_pendidikan', 'deputi_pendidikan', 'ketua_yayasan', 'pembina_yayasan'], true);
+        $currentUnitId = $isYayasanOfficer ? 0 : Auth::unitId();
         $currentTaId = Auth::academicYearId();
         $baseUrl = Auth::baseUrl();
         $csrfToken = CSRF::getToken();
@@ -24,7 +26,9 @@ class View {
         // Daftar tahun ajaran & unit untuk switcher global di header
         $globalAcademicYears = Database::fetchAll("SELECT * FROM academic_years ORDER BY id DESC");
         $globalUnits = Database::fetchAll("SELECT * FROM units ORDER BY id ASC");
-        $currentUnit = Database::fetch("SELECT * FROM units WHERE id = ?", [$currentUnitId]) ?: ($globalUnits[0] ?? []);
+        $currentUnit = ($currentUnitId > 0 && !$isYayasanOfficer) 
+            ? (Database::fetch("SELECT * FROM units WHERE id = ?", [$currentUnitId]) ?: []) 
+            : [];
 
         // System & Brand Settings
         $appName = Setting::get('app_name', 'Manajemen Sekolah Berbasis Komputer (MASEKO)');

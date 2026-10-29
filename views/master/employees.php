@@ -109,7 +109,7 @@ $canEdit = Auth::hasRole('operator_yayasan');
                                     <td class="text-center">
                                         <div style="display: flex; gap: 4px; justify-content: center; align-items: center;">
                                             <!-- Edit Pegawai & Akun -->
-                                            <button type="button" class="btn btn-outline btn-sm" onclick='editEmployee(<?= json_encode($e) ?>)' title="Edit Biodata Pegawai & Akun Login">
+                                            <button type="button" class="btn btn-outline btn-sm" data-emp="<?= htmlspecialchars(json_encode($e, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP), ENT_QUOTES, 'UTF-8') ?>" onclick="editEmployee(JSON.parse(this.getAttribute('data-emp')))" title="Edit Biodata Pegawai & Akun Login">
                                                 <i class="fa-solid fa-pen-to-square"></i>
                                             </button>
 

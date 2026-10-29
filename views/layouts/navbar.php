@@ -5,9 +5,9 @@ use Core\SecurityHelper;
 $activeRoleName = $activeRole['name'] ?? '';
 $isYayasanOfficer = in_array($activeRoleName, ['operator_yayasan', 'direktur_pendidikan', 'deputi_pendidikan', 'ketua_yayasan', 'pembina_yayasan'], true);
 
-// Resolusi logo unit aktif
+// Resolusi logo unit aktif (hanya untuk unit sekolah, bukan yayasan)
 $unitLogoUrl = '';
-if (!empty($currentUnit['logo_path'])) {
+if (!$isYayasanOfficer && !empty($currentUnit['logo_path'])) {
     $logoRel = ltrim($currentUnit['logo_path'], '/');
     $logoFullPath = dirname(__DIR__, 2) . '/public/' . $logoRel;
     if (file_exists($logoFullPath)) {
@@ -153,18 +153,20 @@ if (!empty($currentUnit['logo_path'])) {
             </a>
         </div>
 
-        <!-- Logo Unit (Desktop Saja) -->
-        <?php if (!empty($unitLogoUrl)): ?>
-            <div class="header-unit-logo" title="<?= SecurityHelper::escape($currentUnit['name'] ?? 'Unit') ?>">
-                <img src="<?= $unitLogoUrl ?>" 
-                     alt="<?= SecurityHelper::escape($currentUnit['name'] ?? 'Logo Unit') ?>">
-            </div>
-        <?php elseif (!empty($currentUnit['code']) && !$isYayasanOfficer): ?>
-            <div class="header-unit-logo" title="<?= SecurityHelper::escape($currentUnit['name'] ?? 'Unit') ?>">
-                <div class="header-unit-code">
-                    <?= SecurityHelper::escape($currentUnit['code'] ?? 'AK') ?>
+        <!-- Logo Unit (Desktop Saja) - Hanya untuk unit sekolah -->
+        <?php if (!$isYayasanOfficer): ?>
+            <?php if (!empty($unitLogoUrl)): ?>
+                <div class="header-unit-logo" title="<?= SecurityHelper::escape($currentUnit['name'] ?? 'Unit') ?>">
+                    <img src="<?= $unitLogoUrl ?>" 
+                         alt="<?= SecurityHelper::escape($currentUnit['name'] ?? 'Logo Unit') ?>">
                 </div>
-            </div>
+            <?php elseif (!empty($currentUnit['code'])): ?>
+                <div class="header-unit-logo" title="<?= SecurityHelper::escape($currentUnit['name'] ?? 'Unit') ?>">
+                    <div class="header-unit-code">
+                        <?= SecurityHelper::escape($currentUnit['code'] ?? 'AK') ?>
+                    </div>
+                </div>
+            <?php endif; ?>
         <?php endif; ?>
     </div>
 </header>

@@ -17,6 +17,8 @@ class Database {
                 self::$instance = new PDO($dsn, $config['username'], $config['password'], $config['options']);
                 // Nonaktifkan ONLY_FULL_GROUP_BY agar kompatibel penuh dengan MySQL 8.0 di Linux VPS
                 @self::$instance->exec("SET SESSION sql_mode = (SELECT REPLACE(REPLACE(@@sql_mode, 'ONLY_FULL_GROUP_BY,', ''), ',ONLY_FULL_GROUP_BY', ''))");
+                // Pastikan koneksi selalu utf8mb4 agar karakter bahasa Arab (Mushaf) tidak berubah jadi tanda tanya/mojibake
+                @self::$instance->exec("SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci");
             } catch (PDOException $e) {
                 // Jangan ekspos kredensial database
                 error_log("Database connection error: " . $e->getMessage());

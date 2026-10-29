@@ -159,7 +159,7 @@ $canEdit = Auth::hasRole('operator_sekolah');
                                             <i class="fa-solid fa-id-card"></i>
                                         </a>
                                         <?php if ($canEdit): ?>
-                                            <button type="button" class="btn btn-outline btn-sm" onclick='editStudent(<?= json_encode($s) ?>)' title="Edit Data Siswa">
+                                            <button type="button" class="btn btn-outline btn-sm" data-student="<?= htmlspecialchars(json_encode($s, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP), ENT_QUOTES, 'UTF-8') ?>" onclick="editStudent(JSON.parse(this.getAttribute('data-student')))" title="Edit Data Siswa">
                                                 <i class="fa-solid fa-pen-to-square"></i>
                                             </button>
                                         <?php endif; ?>

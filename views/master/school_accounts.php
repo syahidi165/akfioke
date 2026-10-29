@@ -114,7 +114,7 @@ if ($isYayasan) {
                                     <td class="text-center">
                                         <div style="display: flex; gap: 4px; justify-content: center;">
                                             <!-- Edit Akun Operator -->
-                                            <button type="button" class="btn btn-outline btn-sm" onclick='openEditAccountModal(<?= json_encode($op) ?>)' title="Edit Akun Operator">
+                                            <button type="button" class="btn btn-outline btn-sm" data-user="<?= htmlspecialchars(json_encode($op, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP), ENT_QUOTES, 'UTF-8') ?>" onclick="openEditAccountModal(JSON.parse(this.getAttribute('data-user')))" title="Edit Akun Operator">
                                                 <i class="fa-solid fa-pen-to-square"></i>
                                             </button>
 
@@ -291,7 +291,7 @@ if ($isYayasan) {
                             <td class="text-center">
                                 <div style="display: flex; gap: 4px; justify-content: center;">
                                     <!-- Edit Akun -->
-                                    <button type="button" class="btn btn-outline btn-sm" onclick='openEditAccountModal(<?= json_encode($u) ?>)' title="Edit Akun Pengguna">
+                                    <button type="button" class="btn btn-outline btn-sm" data-user="<?= htmlspecialchars(json_encode($u, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP), ENT_QUOTES, 'UTF-8') ?>" onclick="openEditAccountModal(JSON.parse(this.getAttribute('data-user')))" title="Edit Akun Pengguna">
                                         <i class="fa-solid fa-pen-to-square"></i>
                                     </button>
 

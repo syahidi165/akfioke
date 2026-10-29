@@ -81,6 +81,7 @@ class SecurityHelper {
 
     public static function sendSecurityHeaders(): void {
         if (!headers_sent()) {
+            header('Content-Type: text/html; charset=UTF-8');
             header('X-Frame-Options: DENY');
             header('X-Content-Type-Options: nosniff');
             // X-XSS-Protection dinonaktifkan (0) sesuai rekomendasi modern OWASP, andalkan CSP

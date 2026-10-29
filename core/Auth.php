@@ -153,7 +153,10 @@ class Auth {
         $_SESSION['last_activity'] = time();
         $_SESSION['academic_year_id'] = $activeTa ? (int)$activeTa['id'] : 1;
         $_SESSION['academic_year_name'] = $activeTa ? "{$activeTa['name']} ({$activeTa['semester']})" : '2024/2025 (Genap)';
-        $_SESSION['unit_id'] = $user['unit_id'] ?? ($employee['unit_id'] ?? ($student['unit_id'] ?? 3));
+
+        $primaryRole = $roles[0]['name'] ?? '';
+        $isYayasanRole = in_array($primaryRole, ['operator_yayasan', 'direktur_pendidikan', 'deputi_pendidikan', 'ketua_yayasan', 'pembina_yayasan'], true);
+        $_SESSION['unit_id'] = $isYayasanRole ? null : ($user['unit_id'] ?? ($employee['unit_id'] ?? ($student['unit_id'] ?? null)));
 
         AuditLog::log('LOGIN_SUCCESS', 'users', $user['id'], null, ['active_role' => $roles[0]['name']]);
 
@@ -173,6 +176,15 @@ class Auth {
         foreach ($_SESSION['roles'] as $r) {
             if ((int)$r['id'] === $roleId) {
                 $_SESSION['active_role'] = $r;
+                $isYayasan = in_array($r['name'], ['operator_yayasan', 'direktur_pendidikan', 'deputi_pendidikan', 'ketua_yayasan', 'pembina_yayasan'], true);
+                if ($isYayasan) {
+                    $_SESSION['unit_id'] = null;
+                } else {
+                    $u = Database::fetch("SELECT unit_id FROM users WHERE id = ?", [$_SESSION['user_id']]);
+                    $emp = Database::fetch("SELECT unit_id FROM employees WHERE user_id = ? AND is_deleted = 0", [$_SESSION['user_id']]);
+                    $std = Database::fetch("SELECT unit_id FROM students WHERE student_user_id = ?", [$_SESSION['user_id']]);
+                    $_SESSION['unit_id'] = $u['unit_id'] ?? ($emp['unit_id'] ?? ($std['unit_id'] ?? null));
+                }
                 session_regenerate_id(true);
                 AuditLog::log('SWITCH_ROLE', 'roles', $roleId, null, ['new_role' => $r['name']]);
                 return true;
@@ -269,7 +281,11 @@ class Auth {
 
     public static function unitId(): int {
         self::startSession();
-        return (int)($_SESSION['unit_id'] ?? 3);
+        $role = self::activeRoleName();
+        if (in_array($role, ['operator_yayasan', 'direktur_pendidikan', 'deputi_pendidikan', 'ketua_yayasan', 'pembina_yayasan'], true)) {
+            return 0;
+        }
+        return (int)($_SESSION['unit_id'] ?? 0);
     }
 
     public static function setUnitId(int $unitId): void {
