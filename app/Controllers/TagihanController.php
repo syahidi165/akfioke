@@ -728,7 +728,7 @@ class TagihanController extends Controller {
              JOIN units u ON b.unit_id = u.id 
              LEFT JOIN class_students cs ON s.id = cs.student_id AND cs.status = 'Aktif' 
              LEFT JOIN classes c ON cs.class_id = c.id 
-             LEFT JOIN employees ks ON u.id = ks.unit_id AND (ks.position LIKE '%Kepala%' OR ks.level_posisi LIKE '%Kepala%')
+             LEFT JOIN employees ks ON u.id = ks.unit_id AND (ks.position LIKE '%Kepala Sekolah%' OR ks.level_posisi LIKE '%Kepala Sekolah%' OR ks.level_posisi LIKE '%Kepsek%' OR ks.level_posisi LIKE '%Kanit%')
              WHERE b.unit_id = ? AND (b.pipeline_stage IN ('escalated_kepsek', 'kepsek_summon_sent', 'selesai_kepsek') OR b.status = 'Tertunggak')
              ORDER BY FIELD(b.pipeline_stage, 'escalated_kepsek', 'kepsek_summon_sent', 'selesai_kepsek') ASC, b.due_date ASC",
             [$unitId]
@@ -745,7 +745,7 @@ class TagihanController extends Controller {
 
         // Ambil info Kepala Sekolah untuk default no HP
         $kepsekEmp = Database::fetch(
-            "SELECT e.nama, e.contact_phone as phone FROM employees e WHERE e.unit_id = ? AND (e.position LIKE '%Kepala%' OR e.level_posisi LIKE '%Kepala%') LIMIT 1",
+            "SELECT e.nama, e.contact_phone as phone FROM employees e WHERE e.unit_id = ? AND (e.position LIKE '%Kepala Sekolah%' OR e.level_posisi LIKE '%Kepala Sekolah%' OR e.level_posisi LIKE '%Kepsek%' OR e.level_posisi LIKE '%Kanit%') LIMIT 1",
             [$unitId]
         );
 
@@ -811,7 +811,7 @@ class TagihanController extends Controller {
              JOIN units u ON b.unit_id = u.id 
              LEFT JOIN class_students cs ON s.id = cs.student_id AND cs.status = 'Aktif' 
              LEFT JOIN classes c ON cs.class_id = c.id 
-             LEFT JOIN employees ks ON u.id = ks.unit_id AND (ks.position LIKE '%Kepala%' OR ks.level_posisi LIKE '%Kepala%')
+             LEFT JOIN employees ks ON u.id = ks.unit_id AND (ks.position LIKE '%Kepala Sekolah%' OR ks.level_posisi LIKE '%Kepala Sekolah%' OR ks.level_posisi LIKE '%Kepsek%' OR ks.level_posisi LIKE '%Kanit%')
              WHERE b.id = ?",
             [$billId]
         );
@@ -1226,7 +1226,7 @@ class TagihanController extends Controller {
              JOIN units u ON b.unit_id = u.id 
              LEFT JOIN class_students cs ON s.id = cs.student_id AND cs.status = 'Aktif' 
              LEFT JOIN classes c ON cs.class_id = c.id 
-             LEFT JOIN employees ks ON u.id = ks.unit_id AND (ks.position LIKE '%Kepala%' OR ks.level_posisi LIKE '%Kepala%')
+             LEFT JOIN employees ks ON u.id = ks.unit_id AND (ks.position LIKE '%Kepala Sekolah%' OR ks.level_posisi LIKE '%Kepala Sekolah%' OR ks.level_posisi LIKE '%Kepsek%' OR ks.level_posisi LIKE '%Kanit%')
              WHERE b.pipeline_stage IN ('escalated_deputi', 'deputi_summon_sent', 'selesai_deputi') 
              ORDER BY FIELD(b.pipeline_stage, 'escalated_deputi', 'deputi_summon_sent', 'selesai_deputi') ASC, b.due_date ASC"
         );
@@ -1298,7 +1298,7 @@ class TagihanController extends Controller {
              JOIN units u ON b.unit_id = u.id 
              LEFT JOIN class_students cs ON s.id = cs.student_id AND cs.status = 'Aktif' 
              LEFT JOIN classes c ON cs.class_id = c.id 
-             LEFT JOIN employees ks ON u.id = ks.unit_id AND (ks.position LIKE '%Kepala%' OR ks.level_posisi LIKE '%Kepala%')
+             LEFT JOIN employees ks ON u.id = ks.unit_id AND (ks.position LIKE '%Kepala Sekolah%' OR ks.level_posisi LIKE '%Kepala Sekolah%' OR ks.level_posisi LIKE '%Kepsek%' OR ks.level_posisi LIKE '%Kanit%')
              WHERE b.id = ?",
             [$billId]
         );

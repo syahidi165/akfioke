@@ -146,7 +146,7 @@ class AkfiController extends Controller {
                 "SELECT e.* FROM employees e 
                  WHERE e.unit_id = ? AND e.is_deleted = 0 AND e.status = 'Aktif'
                    AND e.position NOT LIKE '%Kepala Sekolah%' AND e.position NOT LIKE '%Kepsek%'
-                   AND e.level_posisi NOT LIKE '%Kepala%' AND e.level_posisi NOT LIKE '%Kanit%'
+                   AND e.level_posisi NOT LIKE '%Kepala Sekolah%' AND e.level_posisi NOT LIKE '%Kepsek%' AND e.level_posisi NOT LIKE '%Kanit%'
                    AND e.level_posisi NOT LIKE '%Direktur%' AND e.position NOT LIKE '%Direktur%'",
                 [$unitId]
             );
@@ -457,8 +457,25 @@ class AkfiController extends Controller {
                         (SELECT username FROM users WHERE id = e.user_id) as username
                  FROM employees e
                  JOIN units u ON e.unit_id = u.id
+                 LEFT JOIN users usr ON e.user_id = usr.id
+                 LEFT JOIN user_roles ur ON usr.id = ur.user_id
+                 LEFT JOIN roles r ON ur.role_id = r.id AND r.name = 'kepala_sekolah'
                  WHERE e.unit_id = ? AND e.is_deleted = 0 
-                   AND (e.level_posisi LIKE '%Kepala%' OR e.level_posisi LIKE '%Kanit%')
+                   AND (
+                       r.id IS NOT NULL 
+                       OR e.level_posisi = 'Kepala Sekolah'
+                       OR e.level_posisi LIKE '%Kepala Sekolah%'
+                       OR e.level_posisi LIKE '%Kepsek%'
+                       OR e.level_posisi LIKE '%Kanit%'
+                       OR e.level_posisi LIKE '%Kepala Satuan%'
+                   )
+                   AND e.level_posisi NOT LIKE '%Kepala Lab%'
+                   AND e.level_posisi NOT LIKE '%Kepala Perpustakaan%'
+                   AND e.level_posisi NOT LIKE '%Kepala TU%'
+                   AND e.level_posisi NOT LIKE '%Kepala Tata Usaha%'
+                   AND e.level_posisi NOT LIKE '%Kepala Bengkel%'
+                   AND e.level_posisi NOT LIKE '%Kepala Ruang%'
+                 ORDER BY (CASE WHEN r.id IS NOT NULL THEN 1 WHEN e.level_posisi LIKE '%Kepala Sekolah%' THEN 2 ELSE 3 END) ASC
                  LIMIT 1",
                 [$uId]
             );
@@ -526,8 +543,26 @@ class AkfiController extends Controller {
                     a.id as assessment_id, a.total_score, a.letter_grade, a.sikap_score, a.status
              FROM employees e
              JOIN units u ON e.unit_id = u.id
+             LEFT JOIN users usr ON e.user_id = usr.id
+             LEFT JOIN user_roles ur ON usr.id = ur.user_id
+             LEFT JOIN roles r ON ur.role_id = r.id AND r.name = 'kepala_sekolah'
              LEFT JOIN akfi_assessments a ON e.id = a.employee_id AND a.academic_year_id = ?
-             WHERE e.is_deleted = 0 AND (e.level_posisi LIKE '%Kepala%' OR e.level_posisi LIKE '%Kanit%')
+             WHERE e.is_deleted = 0 
+               AND (
+                   r.id IS NOT NULL 
+                   OR e.level_posisi = 'Kepala Sekolah'
+                   OR e.level_posisi LIKE '%Kepala Sekolah%'
+                   OR e.level_posisi LIKE '%Kepsek%'
+                   OR e.level_posisi LIKE '%Kanit%'
+                   OR e.level_posisi LIKE '%Kepala Satuan%'
+               )
+               AND e.level_posisi NOT LIKE '%Kepala Lab%'
+               AND e.level_posisi NOT LIKE '%Kepala Perpustakaan%'
+               AND e.level_posisi NOT LIKE '%Kepala TU%'
+               AND e.level_posisi NOT LIKE '%Kepala Tata Usaha%'
+               AND e.level_posisi NOT LIKE '%Kepala Bengkel%'
+               AND e.level_posisi NOT LIKE '%Kepala Ruang%'
+             GROUP BY e.id
              ORDER BY u.id ASC",
             [$taId]
         );
@@ -941,7 +976,25 @@ class AkfiController extends Controller {
         $unit = Database::fetch("SELECT level FROM units WHERE id = ?", [$unitId]);
         $lvl = $unit['level'] ?? 'SD';
 
-        if (str_contains($pos, 'KEPALA') || str_contains($pos, 'KEPSEK') || str_contains($pos, 'KANIT')) {
+        $isKepsek = false;
+        if (str_contains($pos, 'KEPALA SEKOLAH') || str_contains($pos, 'KEPALA SATUAN') || str_contains($pos, 'KEPSEK') || str_contains($pos, 'KANIT')) {
+            $isKepsek = true;
+        } elseif ($pos === 'KEPALA' || preg_match('/\b(KEPSEK|KANIT)\b/', $pos)) {
+            $isKepsek = true;
+        } elseif ($userId > 0) {
+            $rKepsek = Database::fetch(
+                "SELECT ur.role_id FROM user_roles ur JOIN roles r ON ur.role_id = r.id WHERE ur.user_id = ? AND r.name = 'kepala_sekolah'",
+                [$userId]
+            );
+            if ($rKepsek) $isKepsek = true;
+        }
+
+        // Pastikan bukan Kepala Lab / Kepala TU / Kepala Perpustakaan
+        if (str_contains($pos, 'KEPALA LAB') || str_contains($pos, 'KEPALA TU') || str_contains($pos, 'KEPALA TATA USAHA') || str_contains($pos, 'KEPALA PERPUS') || str_contains($pos, 'KEPALA RUANG') || str_contains($pos, 'KEPALA BENGKEL')) {
+            $isKepsek = false;
+        }
+
+        if ($isKepsek) {
             if ($lvl === 'TK') return 9;
             if ($lvl === 'SMP' || $lvl === 'SMA') return 10;
             return 8; // SD

@@ -90,4 +90,25 @@ try {
     echo "[SKIP] tahfidz_halaqah.tutor_employee_id: " . $e->getMessage() . "\n";
 }
 
+// 6. Cleanup erroneous KS draft assessment for non-KS employees (e.g. Kepala Lab IPA)
+try {
+    Database::execute("
+        DELETE a FROM akfi_assessments a
+        JOIN employees e ON a.employee_id = e.id
+        LEFT JOIN users u ON e.user_id = u.id
+        LEFT JOIN user_roles ur ON u.id = ur.user_id
+        LEFT JOIN roles r ON ur.role_id = r.id AND r.name = 'kepala_sekolah'
+        WHERE a.template_id IN (8, 9, 10)
+          AND a.status = 'Draft'
+          AND r.id IS NULL
+          AND e.level_posisi NOT LIKE '%Kepala Sekolah%'
+          AND e.level_posisi NOT LIKE '%Kepsek%'
+          AND e.level_posisi NOT LIKE '%Kanit%'
+          AND e.level_posisi NOT LIKE '%Kepala Satuan%'
+    ");
+    echo "[OK] Pembersihan draft KS keliru untuk pegawai non-KS selesai.\n";
+} catch (\Throwable $e) {
+    echo "[SKIP] Cleanup draft KS: " . $e->getMessage() . "\n";
+}
+
 echo "=== MIGRASI SELESAI DENGAN SUKSES! ===\n";
