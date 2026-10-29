@@ -482,7 +482,12 @@ class MasterController extends Controller {
         $employees = Database::fetchAll($sql, $params);
         $units = Database::fetchAll("SELECT * FROM units ORDER BY id ASC");
         $superiors = Database::fetchAll("SELECT id, nama, level_posisi FROM employees WHERE is_deleted = 0 ORDER BY nama ASC");
-        $roles = Database::fetchAll("SELECT * FROM roles WHERE name NOT IN ('operator_yayasan', 'direktur_pendidikan', 'pembina_yayasan') ORDER BY display_name ASC");
+        $isYayasan = Auth::hasAnyRole(['operator_yayasan', 'direktur_pendidikan', 'deputi_pendidikan', 'pembina_yayasan']);
+        if ($isYayasan) {
+            $roles = Database::fetchAll("SELECT * FROM roles WHERE name NOT IN ('operator_yayasan', 'direktur_pendidikan', 'pembina_yayasan') ORDER BY display_name ASC");
+        } else {
+            $roles = Database::fetchAll("SELECT * FROM roles WHERE name NOT IN ('operator_yayasan', 'direktur_pendidikan', 'deputi_pendidikan', 'pembina_yayasan', 'operator_sekolah', 'direktur_pengadaan', 'direktur_sarpras') ORDER BY display_name ASC");
+        }
 
         $this->view('master/employees', [
             'pageTitle'  => 'Data Master Guru, Karyawan & Akun Pengguna Yayasan',
@@ -519,6 +524,20 @@ class MasterController extends Controller {
             $password = trim($_POST['password'] ?? '');
             $userIsActive = isset($_POST['user_is_active']) ? (int)$_POST['user_is_active'] : 1;
             $selectedRoles = $_POST['roles'] ?? [];
+
+            // Cegah Operator Sekolah meng-assign peran Direktur / Yayasan
+            $isYayasanUser = Auth::hasAnyRole(['operator_yayasan', 'direktur_pendidikan', 'deputi_pendidikan', 'pembina_yayasan']);
+            if (!$isYayasanUser && !empty($selectedRoles) && is_array($selectedRoles)) {
+                $forbiddenRoles = ['direktur_pendidikan', 'deputi_pendidikan', 'pembina_yayasan', 'operator_yayasan', 'operator_sekolah', 'direktur_pengadaan', 'direktur_sarpras'];
+                $filteredRoles = [];
+                foreach ($selectedRoles as $rId) {
+                    $r = Database::fetch("SELECT name FROM roles WHERE id = ?", [(int)$rId]);
+                    if ($r && !in_array($r['name'], $forbiddenRoles, true)) {
+                        $filteredRoles[] = (int)$rId;
+                    }
+                }
+                $selectedRoles = $filteredRoles;
+            }
 
             if ($id > 0) {
                 $old = $this->assertUnitOwnership('employees', $id);
@@ -861,6 +880,8 @@ class MasterController extends Controller {
             $excludedRoles[] = 'operator_yayasan';
             $excludedRoles[] = 'deputi_pendidikan';
             $excludedRoles[] = 'operator_sekolah';
+            $excludedRoles[] = 'direktur_pengadaan';
+            $excludedRoles[] = 'direktur_sarpras';
         } else {
             $excludedRoles[] = 'operator_yayasan';
         }
@@ -1030,14 +1051,17 @@ class MasterController extends Controller {
         // Cache all roles and prepare normalized mapping & aliases
         $rolesRaw = Database::fetchAll("SELECT id, name, display_name FROM roles");
         $roleMap = [];
+        $roleById = [];
         $fallbackRoleId = null;
         foreach ($rolesRaw as $r) {
+            $rId = (int)$r['id'];
+            $roleById[$rId] = $r;
             $normName = strtolower(trim($r['name']));
             $normDisp = strtolower(trim($r['display_name']));
-            $roleMap[$normName] = (int)$r['id'];
-            $roleMap[$normDisp] = (int)$r['id'];
+            $roleMap[$normName] = $rId;
+            $roleMap[$normDisp] = $rId;
             if ($normName === 'guru_mapel') {
-                $fallbackRoleId = (int)$r['id'];
+                $fallbackRoleId = $rId;
             }
         }
         if (!$fallbackRoleId && !empty($rolesRaw)) {
@@ -1056,6 +1080,15 @@ class MasterController extends Controller {
             'tahfidz' => $roleMap['guru_tahfidz'] ?? $fallbackRoleId,
             'guru diniyah' => $roleMap['guru_diniyah'] ?? $fallbackRoleId,
             'diniyah' => $roleMap['guru_diniyah'] ?? $fallbackRoleId,
+            'guru tk/kb' => $roleMap['guru_tk'] ?? ($roleMap['guru_mapel_kbtk'] ?? $fallbackRoleId),
+            'guru tk' => $roleMap['guru_tk'] ?? ($roleMap['guru_mapel_kbtk'] ?? $fallbackRoleId),
+            'guru kb' => $roleMap['guru_tk'] ?? ($roleMap['guru_mapel_kbtk'] ?? $fallbackRoleId),
+            'guru kbtk' => $roleMap['guru_tk'] ?? ($roleMap['guru_mapel_kbtk'] ?? $fallbackRoleId),
+            'guru kb/tk' => $roleMap['guru_tk'] ?? ($roleMap['guru_mapel_kbtk'] ?? $fallbackRoleId),
+            'guru kelas tk' => $roleMap['guru_tk'] ?? ($roleMap['guru_mapel_kbtk'] ?? $fallbackRoleId),
+            'guru kelas kb' => $roleMap['guru_tk'] ?? ($roleMap['guru_mapel_kbtk'] ?? $fallbackRoleId),
+            'guru mapel kb/tk' => $roleMap['guru_mapel_kbtk'] ?? ($roleMap['guru_tk'] ?? $fallbackRoleId),
+            'guru mapel kbtk' => $roleMap['guru_mapel_kbtk'] ?? ($roleMap['guru_tk'] ?? $fallbackRoleId),
             'kepala sekolah' => $roleMap['kepala_sekolah'] ?? $fallbackRoleId,
             'kepsek' => $roleMap['kepala_sekolah'] ?? $fallbackRoleId,
             'tata usaha' => $roleMap['tata_usaha'] ?? $fallbackRoleId,
@@ -1071,6 +1104,8 @@ class MasterController extends Controller {
             'cs' => $roleMap['cleaning_service'] ?? $fallbackRoleId,
             'kebersihan' => $roleMap['cleaning_service'] ?? $fallbackRoleId,
             'sarpras' => $roleMap['sarpras'] ?? $fallbackRoleId,
+            'direktur pengadaan' => $roleMap['direktur_pengadaan'] ?? null,
+            'direktur sarpras' => $roleMap['direktur_sarpras'] ?? null,
         ];
 
         try {
@@ -1261,6 +1296,16 @@ class MasterController extends Controller {
                 $skipped++;
                 $errors[] = "Baris {$row} ({$nama}): Peran '{$roleRaw}' tidak valid / tidak ada dalam daftar dropdown pilihan peran sistem.";
                 continue;
+            }
+
+            // Larang Operator Sekolah meng-assign peran yayasan/direktur melalui import
+            if (!$isYayasan) {
+                $checkRoleName = $roleById[$roleId]['name'] ?? '';
+                if (in_array($checkRoleName, ['operator_yayasan', 'direktur_pendidikan', 'deputi_pendidikan', 'pembina_yayasan', 'direktur_pengadaan', 'direktur_sarpras'], true)) {
+                    $skipped++;
+                    $errors[] = "Baris {$row} ({$nama}): Operator Sekolah tidak diizinkan menetapkan peran '{$roleRaw}'. Hak menetapkan peran Direktur/Yayasan hanya dimiliki oleh Operator Yayasan.";
+                    continue;
+                }
             }
 
             // Tentukan level_posisi secara otomatis dan konsisten dari Peran Sistem resmi
@@ -2845,7 +2890,7 @@ class MasterController extends Controller {
 
         // Jangan tampilkan akun yayasan ke Operator Sekolah
         if (!$isYayasan) {
-            $query .= "AND r.name NOT IN ('operator_yayasan', 'direktur_pendidikan', 'deputi_pendidikan', 'pembina_yayasan') ";
+            $query .= "AND r.name NOT IN ('operator_yayasan', 'direktur_pendidikan', 'deputi_pendidikan', 'pembina_yayasan', 'direktur_pengadaan', 'direktur_sarpras') ";
         }
 
         $query .= "GROUP BY u.id, u.username, u.full_name, u.email, u.phone, u.unit_id, u.is_active, u.last_login_at, e.id, e.level_posisi, e.nipy, u_unit.name, e_unit.name, e.unit_id ORDER BY actual_unit_id ASC, u.full_name ASC";
@@ -2855,7 +2900,7 @@ class MasterController extends Controller {
         if ($isYayasan) {
             $roles = Database::fetchAll("SELECT * FROM roles WHERE name NOT IN ('operator_yayasan', 'direktur_pendidikan', 'pembina_yayasan') ORDER BY display_name ASC");
         } else {
-            $roles = Database::fetchAll("SELECT * FROM roles WHERE name NOT IN ('operator_yayasan', 'direktur_pendidikan', 'deputi_pendidikan', 'pembina_yayasan', 'operator_sekolah') ORDER BY display_name ASC");
+            $roles = Database::fetchAll("SELECT * FROM roles WHERE name NOT IN ('operator_yayasan', 'direktur_pendidikan', 'deputi_pendidikan', 'pembina_yayasan', 'operator_sekolah', 'direktur_pengadaan', 'direktur_sarpras') ORDER BY display_name ASC");
         }
 
         // Ambil daftar pegawai yang sudah ada untuk pembuatan akun tanpa input nama baru
@@ -3253,7 +3298,7 @@ class MasterController extends Controller {
             if (isset($_POST['roles']) && is_array($_POST['roles'])) {
                 $forbiddenRoles = $isYayasan 
                     ? ['direktur_pendidikan', 'pembina_yayasan'] 
-                    : ['direktur_pendidikan', 'deputi_pendidikan', 'pembina_yayasan', 'operator_yayasan', 'operator_sekolah'];
+                    : ['direktur_pendidikan', 'deputi_pendidikan', 'pembina_yayasan', 'operator_yayasan', 'operator_sekolah', 'direktur_pengadaan', 'direktur_sarpras'];
 
                 $selectedRoles = $_POST['roles'];
                 $validRoleIds = [];

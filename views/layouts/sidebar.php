@@ -533,7 +533,7 @@ if (!function_exists('isNavActive')) {
                 </a>
             </div>
 
-        <?php elseif (in_array($role, ['guru_mapel', 'guru_diniyah', 'guru_mapel_kbtk'], true)): ?>
+        <?php elseif (in_array($role, ['guru_mapel', 'guru_diniyah', 'guru_mapel_kbtk', 'guru_tk'], true)): ?>
             <div class="nav-section-title">GURU MATA PELAJARAN</div>
             <div class="nav-item">
                 <a href="<?= $baseUrl ?>/nilai/bulanan" class="nav-link <?= isNavActive('/nilai/bulanan', $currentPath) ?>">

@@ -111,4 +111,21 @@ try {
     echo "[SKIP] Cleanup draft KS: " . $e->getMessage() . "\n";
 }
 
+// 7. Role Guru TK/KB
+try {
+    $exists = Database::fetch("SELECT id FROM roles WHERE name = 'guru_tk'");
+    if (!$exists) {
+        Database::execute(
+            "INSERT INTO roles (name, display_name, description) VALUES (?, ?, ?)",
+            ['guru_tk', 'Guru TK/KB', 'Guru Satuan Pendidikan TK dan KB Al-Kahfi']
+        );
+        echo "[OK] Role guru_tk (Guru TK/KB) berhasil ditambahkan ke tabel roles.\n";
+    } else {
+        Database::execute("UPDATE roles SET display_name = 'Guru TK/KB' WHERE name = 'guru_tk'");
+        echo "[SKIP] Role guru_tk sudah ada di tabel roles.\n";
+    }
+} catch (\Throwable $e) {
+    echo "[SKIP] Role guru_tk: " . $e->getMessage() . "\n";
+}
+
 echo "=== MIGRASI SELESAI DENGAN SUKSES! ===\n";

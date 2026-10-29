@@ -696,35 +696,98 @@ class AkfiController extends Controller {
         $this->requireRole(['direktur_pendidikan', 'deputi_pendidikan', 'operator_yayasan', 'pembina_yayasan']);
         $taId = Auth::academicYearId();
 
+        // 1. Rekapitulasi per Satuan Pendidikan (Unit)
         $unitsSummary = Database::fetchAll(
-            "SELECT u.id, u.name, COUNT(a.id) as total_pegawai,
+            "SELECT 
+                u.id, 
+                u.name,
+                (SELECT COUNT(*) FROM employees e WHERE e.unit_id = u.id AND (e.status = 'Aktif' OR e.status IS NULL) AND e.is_deleted = 0) as total_pegawai,
+                COUNT(a.id) as total_dinilai,
+                SUM(CASE WHEN a.status = 'Final' THEN 1 ELSE 0 END) as total_final,
+                SUM(CASE WHEN a.status = 'Disetujui_Atasan' THEN 1 ELSE 0 END) as total_disetujui,
+                SUM(CASE WHEN a.status = 'Draft' THEN 1 ELSE 0 END) as total_draft,
+                AVG(a.total_score) as avg_score,
+                SUM(CASE WHEN a.letter_grade = 'A' THEN 1 ELSE 0 END) as grade_a,
+                SUM(CASE WHEN a.letter_grade = 'B' THEN 1 ELSE 0 END) as grade_b,
+                SUM(CASE WHEN a.letter_grade = 'C' THEN 1 ELSE 0 END) as grade_c,
+                SUM(CASE WHEN a.letter_grade IN ('D', 'E') THEN 1 ELSE 0 END) as grade_de
+             FROM units u
+             LEFT JOIN akfi_assessments a ON u.id = a.unit_id AND a.academic_year_id = ?
+             GROUP BY u.id, u.name
+             ORDER BY u.id ASC",
+            [$taId]
+        );
+
+        // Tambahkan rekap Kantor Yayasan / Pusat (unit_id IS NULL) jika terdapat pegawai
+        $pusatEmpCount = (int)(Database::fetch(
+            "SELECT COUNT(*) as c FROM employees WHERE unit_id IS NULL AND (status = 'Aktif' OR status IS NULL) AND is_deleted = 0"
+        )['c'] ?? 0);
+
+        if ($pusatEmpCount > 0) {
+            $pusatAkfi = Database::fetch(
+                "SELECT 
+                    COUNT(a.id) as total_dinilai,
+                    SUM(CASE WHEN a.status = 'Final' THEN 1 ELSE 0 END) as total_final,
+                    SUM(CASE WHEN a.status = 'Disetujui_Atasan' THEN 1 ELSE 0 END) as total_disetujui,
+                    SUM(CASE WHEN a.status = 'Draft' THEN 1 ELSE 0 END) as total_draft,
                     AVG(a.total_score) as avg_score,
                     SUM(CASE WHEN a.letter_grade = 'A' THEN 1 ELSE 0 END) as grade_a,
                     SUM(CASE WHEN a.letter_grade = 'B' THEN 1 ELSE 0 END) as grade_b,
                     SUM(CASE WHEN a.letter_grade = 'C' THEN 1 ELSE 0 END) as grade_c,
-                    SUM(CASE WHEN a.letter_grade IN ('D', 'E') THEN 1 ELSE 0 END) as grade_de,
-                    SUM(CASE WHEN a.status = 'Final' THEN 1 ELSE 0 END) as total_final 
-             FROM units u 
-             LEFT JOIN akfi_assessments a ON u.id = a.unit_id AND a.academic_year_id = ? 
-             GROUP BY u.id ORDER BY u.id ASC",
-            [$taId]
-        );
+                    SUM(CASE WHEN a.letter_grade IN ('D', 'E') THEN 1 ELSE 0 END) as grade_de
+                 FROM akfi_assessments a
+                 JOIN employees e ON a.employee_id = e.id
+                 WHERE e.unit_id IS NULL AND a.academic_year_id = ?",
+                [$taId]
+            );
 
-        $allAssessments = Database::fetchAll(
-            "SELECT a.*, e.nama, e.nipy, e.position, u.name as unit_name, t.position_name 
-             FROM akfi_assessments a 
-             JOIN employees e ON a.employee_id = e.id 
-             JOIN units u ON a.unit_id = u.id 
-             JOIN akfi_templates t ON a.template_id = t.id 
-             WHERE a.academic_year_id = ? 
-             ORDER BY u.name ASC, a.total_score DESC",
+            $unitsSummary[] = [
+                'id'              => 0,
+                'name'            => 'KANTOR PUSAT & YAYASAN',
+                'total_pegawai'   => $pusatEmpCount,
+                'total_dinilai'   => (int)($pusatAkfi['total_dinilai'] ?? 0),
+                'total_final'     => (int)($pusatAkfi['total_final'] ?? 0),
+                'total_disetujui' => (int)($pusatAkfi['total_disetujui'] ?? 0),
+                'total_draft'     => (int)($pusatAkfi['total_draft'] ?? 0),
+                'avg_score'       => $pusatAkfi['avg_score'] ?? null,
+                'grade_a'         => (int)($pusatAkfi['grade_a'] ?? 0),
+                'grade_b'         => (int)($pusatAkfi['grade_b'] ?? 0),
+                'grade_c'         => (int)($pusatAkfi['grade_c'] ?? 0),
+                'grade_de'        => (int)($pusatAkfi['grade_de'] ?? 0),
+            ];
+        }
+
+        // 2. Daftar Seluruh Pegawai Aktif Beserta Status Rapor AKFI
+        $allEmployees = Database::fetchAll(
+            "SELECT 
+                e.id as employee_id,
+                e.nama,
+                e.nipy,
+                e.level_posisi,
+                e.unit_id,
+                COALESCE(u.name, 'Kantor Yayasan') as unit_name,
+                a.id as assessment_id,
+                a.kinerja_score,
+                a.sikap_score,
+                a.absensi_score,
+                a.total_score,
+                a.letter_grade,
+                a.status as assessment_status,
+                COALESCE(t.position_name, e.level_posisi) as position_name
+             FROM employees e
+             LEFT JOIN units u ON e.unit_id = u.id
+             LEFT JOIN akfi_assessments a ON e.id = a.employee_id AND a.academic_year_id = ?
+             LEFT JOIN akfi_templates t ON a.template_id = t.id
+             WHERE e.is_deleted = 0 AND (e.status = 'Aktif' OR e.status IS NULL)
+             ORDER BY COALESCE(u.id, 0) ASC, e.nama ASC",
             [$taId]
         );
 
         $this->view('akfi/rekap_yayasan', [
             'pageTitle'      => 'Rekapitulasi Kinerja AKFI Seluruh Unit Yayasan',
             'unitsSummary'   => $unitsSummary,
-            'allAssessments' => $allAssessments
+            'allEmployees'   => $allEmployees,
+            'taId'           => $taId
         ]);
     }
 
@@ -734,23 +797,29 @@ class AkfiController extends Controller {
         $unitId = Auth::unitId();
         $role = Auth::activeRoleName();
 
-        $query = "SELECT e.nama, e.nipy, u.name as unit_name, t.position_name, 
-                         a.kinerja_score, a.sikap_score, a.absensi_score, a.total_score, a.letter_grade, a.status 
-                  FROM akfi_assessments a 
-                  JOIN employees e ON a.employee_id = e.id 
-                  JOIN units u ON a.unit_id = u.id 
-                  JOIN akfi_templates t ON a.template_id = t.id 
-                  WHERE a.academic_year_id = ? ";
+        $query = "SELECT e.nama, e.nipy, COALESCE(u.name, 'Kantor Yayasan') as unit_name, 
+                         COALESCE(t.position_name, e.level_posisi) as position_name, 
+                         COALESCE(a.kinerja_score, 0) as kinerja_score, 
+                         COALESCE(a.sikap_score, 0) as sikap_score, 
+                         COALESCE(a.absensi_score, 0) as absensi_score, 
+                         COALESCE(a.total_score, 0) as total_score, 
+                         COALESCE(a.letter_grade, '-') as letter_grade, 
+                         COALESCE(a.status, 'Belum Dinilai') as status 
+                  FROM employees e 
+                  LEFT JOIN units u ON e.unit_id = u.id 
+                  LEFT JOIN akfi_assessments a ON e.id = a.employee_id AND a.academic_year_id = ? 
+                  LEFT JOIN akfi_templates t ON a.template_id = t.id 
+                  WHERE e.is_deleted = 0 AND (e.status = 'Aktif' OR e.status IS NULL) ";
         $params = [$taId];
 
         if ($role === 'kepala_sekolah') {
-            $query .= "AND a.unit_id = ? ";
+            $query .= "AND e.unit_id = ? ";
             $params[] = $unitId;
         }
-        $query .= "ORDER BY u.name ASC, a.total_score DESC";
+        $query .= "ORDER BY COALESCE(u.id, 0) ASC, e.nama ASC";
 
         $rows = Database::fetchAll($query, $params);
-        $headers = ['Nama Pegawai', 'NIPY', 'Unit Sekolah', 'Posisi AKFI', 'Skor Kinerja', 'Skor Sikap', 'Skor Absensi', 'Skor Total', 'Predikat', 'Status'];
+        $headers = ['Nama Pegawai', 'NIPY', 'Unit Sekolah', 'Posisi AKFI', 'Skor Kinerja', 'Skor Sikap', 'Skor Absensi', 'Skor Total', 'Predikat', 'Status AKFI'];
 
         ExportHelper::xlsx($headers, $rows, 'Rekap_AKFI_Yayasan_' . date('Ymd'));
     }
