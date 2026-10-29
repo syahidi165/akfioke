@@ -356,17 +356,23 @@ class AlumniController extends Controller {
         // Dropdown Validation: Kategori Tujuan (Column E)
         $valCat = $sheet->getDataValidation("E2:E{$maxRow}");
         $valCat->setType(DataValidation::TYPE_LIST);
-        $valCat->setErrorStyle(DataValidation::STYLE_INFORMATION);
+        $valCat->setErrorStyle(DataValidation::STYLE_STOP);
         $valCat->setAllowBlank(false);
         $valCat->setShowDropDown(true);
+        $valCat->setShowErrorMessage(true);
+        $valCat->setErrorTitle('Kategori Tidak Valid');
+        $valCat->setError('Pilih kategori tujuan dari daftar dropdown (Sekolah, Universitas, Kerja/Lainnya).');
         $valCat->setFormula1('"Sekolah,Universitas,Kerja/Lainnya"');
 
         // Dropdown Validation: Favorit (Column H)
         $valFav = $sheet->getDataValidation("H2:H{$maxRow}");
         $valFav->setType(DataValidation::TYPE_LIST);
-        $valFav->setErrorStyle(DataValidation::STYLE_INFORMATION);
+        $valFav->setErrorStyle(DataValidation::STYLE_STOP);
         $valFav->setAllowBlank(false);
         $valFav->setShowDropDown(true);
+        $valFav->setShowErrorMessage(true);
+        $valFav->setErrorTitle('Pilihan Tidak Valid');
+        $valFav->setError('Pilih Ya atau Tidak dari daftar dropdown.');
         $valFav->setFormula1('"Ya,Tidak"');
 
         foreach (range('A', 'I') as $col) {
@@ -450,9 +456,32 @@ class AlumniController extends Controller {
             }
 
             $sId = (int)$student['id'];
-            if (empty($gradYear)) $gradYear = date('Y');
-            if (empty($destType)) $destType = 'Universitas';
-            $isFav = in_array($favText, ['ya', '1', 'true', 'y', 'favorit', 'ptn'], true) ? 1 : 0;
+            $destTypeRaw = trim((string)$sheet->getCell("E{$row}")->getValue());
+            $allowedDest = ['Sekolah', 'Universitas', 'Kerja/Lainnya'];
+            $destType = '';
+            if (!empty($destTypeRaw)) {
+                foreach ($allowedDest as $ad) {
+                    if (strcasecmp($ad, $destTypeRaw) === 0) {
+                        $destType = $ad;
+                        break;
+                    }
+                }
+                if (empty($destType)) {
+                    $skipped++;
+                    $errors[] = "Baris {$row} ({$nama}): Kategori Tujuan '{$destTypeRaw}' tidak valid (pilihan: Sekolah, Universitas, Kerja/Lainnya).";
+                    continue;
+                }
+            } else {
+                $destType = 'Universitas';
+            }
+
+            $favRaw = strtolower(trim((string)$sheet->getCell("H{$row}")->getValue()));
+            if (!empty($favRaw) && !in_array($favRaw, ['ya', 'tidak', '1', '0', 'true', 'false', 'y', 't', 'favorit', 'ptn'], true)) {
+                $skipped++;
+                $errors[] = "Baris {$row} ({$nama}): Kolom Favorit '{$favRaw}' tidak valid (wajib Ya atau Tidak dari dropdown).";
+                continue;
+            }
+            $isFav = in_array($favRaw, ['ya', '1', 'true', 'y', 'favorit', 'ptn'], true) ? 1 : 0;
 
             $existing = Database::fetch("SELECT id FROM alumni_tracking WHERE student_id = ?", [$sId]);
             if ($existing) {

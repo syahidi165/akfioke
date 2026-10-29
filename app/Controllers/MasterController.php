@@ -833,14 +833,13 @@ class MasterController extends Controller {
             'D1' => 'NIK (KTP)',
             'E1' => 'Jenis Kelamin (L/P) *',
             'F1' => 'Unit Satuan Tugas',
-            'G1' => 'Jabatan / Posisi',
-            'H1' => 'Tingkat Pendidikan',
-            'I1' => 'TMT (YYYY-MM-DD)',
-            'J1' => 'Peran Sistem (Role) *',
-            'K1' => 'Username Login',
-            'L1' => 'Password Awal',
-            'M1' => 'No. WhatsApp / HP',
-            'N1' => 'Email'
+            'G1' => 'Tingkat Pendidikan',
+            'H1' => 'TMT (YYYY-MM-DD)',
+            'I1' => 'Peran Sistem (Role) *',
+            'J1' => 'Username Login',
+            'K1' => 'Password Awal',
+            'L1' => 'No. WhatsApp / HP',
+            'M1' => 'Email'
         ];
 
         foreach ($headers as $cell => $text) {
@@ -848,7 +847,7 @@ class MasterController extends Controller {
         }
 
         // Style Headers
-        $sheet->getStyle('A1:N1')->applyFromArray([
+        $sheet->getStyle('A1:M1')->applyFromArray([
             'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF'], 'size' => 11],
             'fill' => ['fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, 'startColor' => ['rgb' => '1E3A8A']],
             'alignment' => ['horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER, 'vertical' => \PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER],
@@ -891,44 +890,50 @@ class MasterController extends Controller {
         $refUnits->setSheetState(\PhpOffice\PhpSpreadsheet\Worksheet\Worksheet::SHEETSTATE_HIDDEN);
 
         // Dropdown Validation: Gender (Column E)
-        $valGender = $sheet->getDataValidation('E2:E300');
+        $valGender = $sheet->getDataValidation('E2:E500');
         $valGender->setType(\PhpOffice\PhpSpreadsheet\Cell\DataValidation::TYPE_LIST);
         $valGender->setErrorStyle(\PhpOffice\PhpSpreadsheet\Cell\DataValidation::STYLE_STOP);
         $valGender->setAllowBlank(false);
         $valGender->setShowDropDown(true);
         $valGender->setShowErrorMessage(true);
         $valGender->setErrorTitle('Jenis Kelamin Tidak Valid');
-        $valGender->setError('Pilih L (Laki-laki) atau P (Perempuan).');
+        $valGender->setError('Nilai yang dimasukkan/dicopas tidak valid. Pilih L (Laki-laki) atau P (Perempuan) dari dropdown.');
         $valGender->setFormula1('"L,P"');
 
         // Dropdown Validation: Unit Satuan Tugas (Column F)
         $unitCount = max(1, count($units) + 1);
-        $valUnit = $sheet->getDataValidation('F2:F300');
+        $valUnit = $sheet->getDataValidation('F2:F500');
         $valUnit->setType(\PhpOffice\PhpSpreadsheet\Cell\DataValidation::TYPE_LIST);
-        $valUnit->setErrorStyle(\PhpOffice\PhpSpreadsheet\Cell\DataValidation::STYLE_INFORMATION);
+        $valUnit->setErrorStyle(\PhpOffice\PhpSpreadsheet\Cell\DataValidation::STYLE_STOP);
         $valUnit->setAllowBlank(true);
         $valUnit->setShowDropDown(true);
+        $valUnit->setShowErrorMessage(true);
+        $valUnit->setErrorTitle('Unit Tidak Valid');
+        $valUnit->setError('Nilai unit yang dimasukkan/dicopas tidak valid. Pilih salah satu unit dari daftar dropdown atau kosongkan.');
         $valUnit->setFormula1("_RefUnits!\$A\$1:\$A\${$unitCount}");
 
-        // Dropdown Validation: Tingkat Pendidikan (Column H)
-        $valEdu = $sheet->getDataValidation('H2:H300');
+        // Dropdown Validation: Tingkat Pendidikan (Column G)
+        $valEdu = $sheet->getDataValidation('G2:G500');
         $valEdu->setType(\PhpOffice\PhpSpreadsheet\Cell\DataValidation::TYPE_LIST);
         $valEdu->setErrorStyle(\PhpOffice\PhpSpreadsheet\Cell\DataValidation::STYLE_STOP);
         $valEdu->setAllowBlank(true);
         $valEdu->setShowDropDown(true);
+        $valEdu->setShowErrorMessage(true);
+        $valEdu->setErrorTitle('Pendidikan Tidak Valid');
+        $valEdu->setError('Pilih tingkat pendidikan dari daftar dropdown (S1, S2, S3, D3, SMA/SMK).');
         $valEdu->setFormula1('"S1,S2,S3,D3,SMA/SMK"');
 
-        // Dropdown Validation: Role (Column J)
+        // Dropdown Validation: Role (Column I)
         $roleCount = count($roles);
         if ($roleCount > 0) {
-            $valRole = $sheet->getDataValidation('J2:J300');
+            $valRole = $sheet->getDataValidation('I2:I500');
             $valRole->setType(\PhpOffice\PhpSpreadsheet\Cell\DataValidation::TYPE_LIST);
             $valRole->setErrorStyle(\PhpOffice\PhpSpreadsheet\Cell\DataValidation::STYLE_STOP);
             $valRole->setAllowBlank(false);
             $valRole->setShowDropDown(true);
             $valRole->setShowErrorMessage(true);
-            $valRole->setErrorTitle('Peran Tidak Valid');
-            $valRole->setError('Silakan pilih salah satu peran dari daftar dropdown.');
+            $valRole->setErrorTitle('Peran Sistem Tidak Valid');
+            $valRole->setError('Nilai peran yang dicopas/dimasukkan tidak ada di daftar. Wajib memilih peran resmi dari daftar dropdown.');
             $valRole->setFormula1("_RefRoles!\$A\$1:\$A\${$roleCount}");
         }
 
@@ -943,14 +948,13 @@ class MasterController extends Controller {
         $sheet->setCellValue('D2', '2171010101010001');
         $sheet->setCellValue('E2', 'L');
         $sheet->setCellValue('F2', $sampleUnit);
-        $sheet->setCellValue('G2', 'Guru Mapel Umum');
-        $sheet->setCellValue('H2', 'S1');
-        $sheet->setCellValue('I2', '2022-07-01');
-        $sheet->setCellValue('J2', $sampleRole1);
-        $sheet->setCellValue('K2', 'ahmad.fauzi');
-        $sheet->setCellValue('L2', 'password123');
-        $sheet->setCellValue('M2', '081234567890');
-        $sheet->setCellValue('N2', 'fauzi@alkahfi.sch.id');
+        $sheet->setCellValue('G2', 'S1');
+        $sheet->setCellValue('H2', '2022-07-01');
+        $sheet->setCellValue('I2', $sampleRole1);
+        $sheet->setCellValue('J2', 'ahmad.fauzi');
+        $sheet->setCellValue('K2', 'password123');
+        $sheet->setCellValue('L2', '081234567890');
+        $sheet->setCellValue('M2', 'fauzi@alkahfi.sch.id');
 
         $sheet->setCellValue('A3', 2);
         $sheet->setCellValue('B3', 'Siti Rahmah, S.Pd');
@@ -958,16 +962,15 @@ class MasterController extends Controller {
         $sheet->setCellValue('D3', '2171010101010002');
         $sheet->setCellValue('E3', 'P');
         $sheet->setCellValue('F3', $sampleUnit);
-        $sheet->setCellValue('G3', 'Guru Wali Kelas');
-        $sheet->setCellValue('H3', 'S1');
-        $sheet->setCellValue('I3', '2023-01-15');
-        $sheet->setCellValue('J3', $sampleRole2);
-        $sheet->setCellValue('K3', 'siti.rahmah');
-        $sheet->setCellValue('L3', 'password123');
-        $sheet->setCellValue('M3', '081298765432');
-        $sheet->setCellValue('N3', 'siti@alkahfi.sch.id');
+        $sheet->setCellValue('G3', 'S1');
+        $sheet->setCellValue('H3', '2023-01-15');
+        $sheet->setCellValue('I3', $sampleRole2);
+        $sheet->setCellValue('J3', 'siti.rahmah');
+        $sheet->setCellValue('K3', 'password123');
+        $sheet->setCellValue('L3', '081298765432');
+        $sheet->setCellValue('M3', 'siti@alkahfi.sch.id');
 
-        foreach (range('A', 'N') as $col) {
+        foreach (range('A', 'M') as $col) {
             $sheet->getColumnDimension($col)->setAutoSize(true);
         }
 
@@ -1125,19 +1128,20 @@ class MasterController extends Controller {
         }
 
         // Fallbacks if not scanned:
+        $hasPosisiInHeader = isset($colMap['posisi']);
         $colNama       = $colMap['nama'] ?? 'B';
         $colNipy       = $colMap['nipy'] ?? 'C';
         $colNik        = $colMap['nik'] ?? 'D';
         $colGender     = $colMap['gender'] ?? 'E';
-        $colUnit       = $colMap['unit'] ?? (isset($colMap['posisi']) ? ($colMap['unit'] ?? 'F') : null);
-        $colPosisi     = $colMap['posisi'] ?? (isset($colMap['unit']) ? 'G' : 'F');
-        $colPendidikan = $colMap['pendidikan'] ?? (isset($colMap['unit']) ? 'H' : null);
-        $colTmt        = $colMap['tmt'] ?? (isset($colMap['unit']) ? 'I' : null);
-        $colRole       = $colMap['role'] ?? (isset($colMap['unit']) ? 'J' : 'G');
-        $colUsername   = $colMap['username'] ?? (isset($colMap['unit']) ? 'K' : 'H');
-        $colPassword   = $colMap['password'] ?? (isset($colMap['unit']) ? 'L' : 'I');
-        $colPhone      = $colMap['phone'] ?? (isset($colMap['unit']) ? 'M' : 'J');
-        $colEmail      = $colMap['email'] ?? (isset($colMap['unit']) ? 'N' : 'K');
+        $colUnit       = $colMap['unit'] ?? 'F';
+        $colPosisi     = $colMap['posisi'] ?? null;
+        $colPendidikan = $colMap['pendidikan'] ?? ($hasPosisiInHeader ? 'H' : 'G');
+        $colTmt        = $colMap['tmt'] ?? ($hasPosisiInHeader ? 'I' : 'H');
+        $colRole       = $colMap['role'] ?? ($hasPosisiInHeader ? 'J' : 'I');
+        $colUsername   = $colMap['username'] ?? ($hasPosisiInHeader ? 'K' : 'J');
+        $colPassword   = $colMap['password'] ?? ($hasPosisiInHeader ? 'L' : 'K');
+        $colPhone      = $colMap['phone'] ?? ($hasPosisiInHeader ? 'M' : 'L');
+        $colEmail      = $colMap['email'] ?? ($hasPosisiInHeader ? 'N' : 'M');
 
         $imported = 0;
         $skipped = 0;
@@ -1151,11 +1155,21 @@ class MasterController extends Controller {
             $nipy = $colNipy ? trim((string)$sheet->getCell("{$colNipy}{$row}")->getValue()) : '';
             $nik  = $colNik ? trim((string)$sheet->getCell("{$colNik}{$row}")->getValue()) : '';
             
-            // Gender
-            $genderRaw = $colGender ? strtoupper(trim((string)$sheet->getCell("{$colGender}{$row}")->getValue())) : 'L';
-            $gender = (str_starts_with($genderRaw, 'P') || str_starts_with($genderRaw, 'W')) ? 'P' : 'L';
+            // Gender - Validasi tegas untuk copas tidak valid
+            $genderRaw = $colGender ? strtoupper(trim((string)$sheet->getCell("{$colGender}{$row}")->getValue())) : '';
+            if (empty($genderRaw)) {
+                $skipped++;
+                $errors[] = "Baris {$row} ({$nama}): Kolom Jenis Kelamin wajib diisi dari pilihan dropdown (L atau P).";
+                continue;
+            }
+            if (!in_array($genderRaw, ['L', 'P', 'LAKI-LAKI', 'PEREMPUAN'], true)) {
+                $skipped++;
+                $errors[] = "Baris {$row} ({$nama}): Jenis Kelamin '{$genderRaw}' tidak valid (pilihan dropdown: L atau P).";
+                continue;
+            }
+            $gender = (str_starts_with($genderRaw, 'P')) ? 'P' : 'L';
 
-            // Unit resolution
+            // Unit resolution - Validasi tegas jika dicopas unit yang tidak ada di daftar
             $targetUnitId = null;
             $uCode = 'YAY';
 
@@ -1163,7 +1177,7 @@ class MasterController extends Controller {
                 $unitVal = trim((string)$sheet->getCell("{$colUnit}{$row}")->getValue());
                 $unitNorm = strtolower($unitVal);
                 
-                if (!empty($unitNorm) && !in_array($unitNorm, ['-', '0', 'yayasan', 'kantor yayasan', 'lintas unit', 'pusat'])) {
+                if (!empty($unitNorm) && !in_array($unitNorm, ['-', '0', 'yayasan', 'kantor yayasan', 'lintas unit', 'pusat', 'kantor yayasan (lintas unit)'])) {
                     // Check by code
                     if (isset($unitByCode[$unitNorm])) {
                         $targetUnitId = $unitByCode[$unitNorm]['id'];
@@ -1184,6 +1198,12 @@ class MasterController extends Controller {
                             }
                         }
                     }
+
+                    if ($targetUnitId === null) {
+                        $skipped++;
+                        $errors[] = "Baris {$row} ({$nama}): Unit Satuan '{$unitVal}' tidak valid / tidak ada dalam daftar dropdown unit.";
+                        continue;
+                    }
                 }
             }
 
@@ -1193,12 +1213,15 @@ class MasterController extends Controller {
                 $uCode = $unitById[$defaultModalUnitId]['code'];
             }
 
-            // Posisi
-            $posisi = $colPosisi ? trim((string)$sheet->getCell("{$colPosisi}{$row}")->getValue()) : '';
-            if (empty($posisi)) $posisi = 'Guru Mapel Umum';
-
-            // Tingkat Pendidikan
-            $pendidikan = $colPendidikan ? strtoupper(trim((string)$sheet->getCell("{$colPendidikan}{$row}")->getValue())) : 'S1';
+            // Tingkat Pendidikan - Validasi tegas untuk copas tidak valid
+            $pendidikanRaw = $colPendidikan ? trim((string)$sheet->getCell("{$colPendidikan}{$row}")->getValue()) : '';
+            $pendidikan = strtoupper($pendidikanRaw);
+            $validEdu = ['S1', 'S2', 'S3', 'D3', 'D1', 'D2', 'D4', 'SMA/SMK', 'SMA', 'SMK', 'SMP', 'SD', 'MA', 'MTS'];
+            if (!empty($pendidikan) && !in_array($pendidikan, $validEdu, true)) {
+                $skipped++;
+                $errors[] = "Baris {$row} ({$nama}): Tingkat Pendidikan '{$pendidikanRaw}' tidak valid (pilihan dropdown: S1, S2, S3, D3, SMA/SMK).";
+                continue;
+            }
             if (empty($pendidikan)) $pendidikan = 'S1';
 
             // TMT (Tanggal Mulai Tugas)
@@ -1224,9 +1247,33 @@ class MasterController extends Controller {
                 }
             }
 
-            // Role
-            $roleText = $colRole ? strtolower(trim((string)$sheet->getCell("{$colRole}{$row}")->getValue())) : '';
-            $roleId = $roleAliases[$roleText] ?? ($roleMap[$roleText] ?? $fallbackRoleId);
+            // Peran Sistem (Role) - Validasi tegas: wajib dropdown, tolak copas asing
+            $roleRaw = $colRole ? trim((string)$sheet->getCell("{$colRole}{$row}")->getValue()) : '';
+            $roleText = strtolower($roleRaw);
+            if (empty($roleText)) {
+                $skipped++;
+                $errors[] = "Baris {$row} ({$nama}): Kolom Peran Sistem (Role) wajib diisi dari pilihan dropdown.";
+                continue;
+            }
+
+            $roleId = $roleAliases[$roleText] ?? ($roleMap[$roleText] ?? null);
+            if (!$roleId) {
+                $skipped++;
+                $errors[] = "Baris {$row} ({$nama}): Peran '{$roleRaw}' tidak valid / tidak ada dalam daftar dropdown pilihan peran sistem.";
+                continue;
+            }
+
+            // Tentukan level_posisi secara otomatis dan konsisten dari Peran Sistem resmi
+            $roleObj = Database::fetch("SELECT display_name FROM roles WHERE id = ?", [$roleId]);
+            $defaultPosisi = $roleObj['display_name'] ?? 'Guru Mapel Umum';
+
+            $posisi = '';
+            if ($colPosisi) {
+                $posisi = trim((string)$sheet->getCell("{$colPosisi}{$row}")->getValue());
+            }
+            if (empty($posisi)) {
+                $posisi = $defaultPosisi;
+            }
 
             // NIPY Check / Generation
             $isRestore = false;
@@ -2154,8 +2201,14 @@ class MasterController extends Controller {
             $nis = trim((string)$sheet->getCell("C{$row}")->getValue());
             $nisn = trim((string)$sheet->getCell("D{$row}")->getValue());
             $nik = trim((string)$sheet->getCell("E{$row}")->getValue());
-            $gender = strtoupper(trim((string)$sheet->getCell("F{$row}")->getValue()));
-            if (!in_array($gender, ['L', 'P'])) $gender = 'L';
+            // Gender - Validasi tegas untuk copas tidak valid
+            $genderRaw = strtoupper(trim((string)$sheet->getCell("F{$row}")->getValue()));
+            if (empty($genderRaw) || !in_array($genderRaw, ['L', 'P', 'LAKI-LAKI', 'PEREMPUAN'], true)) {
+                $skipped++;
+                $errors[] = "Baris {$row} ({$nama}): Jenis Kelamin '{$genderRaw}' tidak valid (wajib pilih L atau P dari dropdown).";
+                continue;
+            }
+            $gender = str_starts_with($genderRaw, 'P') ? 'P' : 'L';
 
             $birthplace = trim((string)$sheet->getCell("G{$row}")->getValue());
             $birthdate = trim((string)$sheet->getCell("H{$row}")->getValue());
@@ -2168,7 +2221,17 @@ class MasterController extends Controller {
             $noKk = trim((string)$sheet->getCell("I{$row}")->getValue());
             $fatherName = trim((string)$sheet->getCell("J{$row}")->getValue());
             $parentPhone = trim((string)$sheet->getCell("K{$row}")->getValue());
-            $className = strtolower(trim((string)$sheet->getCell("L{$row}")->getValue()));
+            
+            // Kelas Penempatan - Validasi tegas untuk copas yang tidak ada di dropdown kelas
+            $classNameRaw = trim((string)$sheet->getCell("L{$row}")->getValue());
+            $className = strtolower($classNameRaw);
+            if (!empty($className)) {
+                if (!isset($classMap[$className])) {
+                    $skipped++;
+                    $errors[] = "Baris {$row} ({$nama}): Kelas '{$classNameRaw}' tidak valid / tidak ada dalam daftar dropdown kelas aktif di unit ini.";
+                    continue;
+                }
+            }
 
             if (empty($nis)) {
                 $skipped++;

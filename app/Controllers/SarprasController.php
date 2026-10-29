@@ -359,6 +359,28 @@ class SarprasController extends Controller {
             $rowIdx++;
         }
 
+        // Data Validation Dropdown: Kondisi (Column E)
+        $valCond = $sheet->getDataValidation('E2:E500');
+        $valCond->setType(\PhpOffice\PhpSpreadsheet\Cell\DataValidation::TYPE_LIST);
+        $valCond->setErrorStyle(\PhpOffice\PhpSpreadsheet\Cell\DataValidation::STYLE_STOP);
+        $valCond->setAllowBlank(false);
+        $valCond->setShowDropDown(true);
+        $valCond->setShowErrorMessage(true);
+        $valCond->setErrorTitle('Kondisi Tidak Valid');
+        $valCond->setError('Pilih kondisi aset dari daftar dropdown (Baik, Rusak Ringan, Rusak Berat, Afkir/Scrap).');
+        $valCond->setFormula1('"Baik,Rusak Ringan,Rusak Berat,Afkir/Scrap"');
+
+        // Data Validation Dropdown: Habis Pakai / ATK (Column I)
+        $valAtk = $sheet->getDataValidation('I2:I500');
+        $valAtk->setType(\PhpOffice\PhpSpreadsheet\Cell\DataValidation::TYPE_LIST);
+        $valAtk->setErrorStyle(\PhpOffice\PhpSpreadsheet\Cell\DataValidation::STYLE_STOP);
+        $valAtk->setAllowBlank(false);
+        $valAtk->setShowDropDown(true);
+        $valAtk->setShowErrorMessage(true);
+        $valAtk->setErrorTitle('Pilihan Tidak Valid');
+        $valAtk->setError('Pilih YA atau TIDAK dari daftar dropdown.');
+        $valAtk->setFormula1('"YA,TIDAK"');
+
         foreach (range(1, count($headers)) as $c) {
             $colLetter = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($c);
             $sheet->getColumnDimension($colLetter)->setAutoSize(true);
@@ -418,8 +440,22 @@ class SarprasController extends Controller {
                 $purchaseDate = date('Y-m-d');
             }
 
-            $condition = trim((string)$sheet->getCell("E{$row}")->getValue());
-            if (!in_array($condition, ['Baik', 'Rusak Ringan', 'Rusak Berat', 'Afkir/Scrap'])) {
+            $conditionRaw = trim((string)$sheet->getCell("E{$row}")->getValue());
+            $validConditions = ['Baik', 'Rusak Ringan', 'Rusak Berat', 'Afkir/Scrap'];
+            $condition = '';
+            if (!empty($conditionRaw)) {
+                foreach ($validConditions as $vc) {
+                    if (strcasecmp($vc, $conditionRaw) === 0) {
+                        $condition = $vc;
+                        break;
+                    }
+                }
+                if (empty($condition)) {
+                    $skipped++;
+                    $errors[] = "Baris {$row} ({$name}): Kondisi '{$conditionRaw}' tidak valid (wajib dipilih dari dropdown: Baik, Rusak Ringan, Rusak Berat, Afkir/Scrap).";
+                    continue;
+                }
+            } else {
                 $condition = 'Baik';
             }
 
@@ -427,8 +463,13 @@ class SarprasController extends Controller {
             $location = trim((string)$sheet->getCell("G{$row}")->getValue());
             $price = (float)preg_replace('/[^0-9.]/', '', (string)$sheet->getCell("H{$row}")->getValue());
             
-            $atkText = strtoupper(trim((string)$sheet->getCell("I{$row}")->getValue()));
-            $isConsumable = ($atkText === 'YA' || $atkText === '1' || $atkText === 'TRUE') ? 1 : 0;
+            $atkRaw = strtoupper(trim((string)$sheet->getCell("I{$row}")->getValue()));
+            if (!empty($atkRaw) && !in_array($atkRaw, ['YA', 'TIDAK', '1', '0', 'TRUE', 'FALSE'], true)) {
+                $skipped++;
+                $errors[] = "Baris {$row} ({$name}): Kolom Habis Pakai / ATK '{$atkRaw}' tidak valid (wajib YA atau TIDAK dari dropdown).";
+                continue;
+            }
+            $isConsumable = ($atkRaw === 'YA' || $atkRaw === '1' || $atkRaw === 'TRUE') ? 1 : 0;
             
             $qty = max(1, (int)$sheet->getCell("J{$row}")->getValue());
             $notes = trim((string)$sheet->getCell("K{$row}")->getValue());
