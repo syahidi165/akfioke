@@ -496,238 +496,251 @@ class MasterController extends Controller {
 
     public function saveEmployee(): void {
         $this->requireRole('operator_yayasan');
-        $id = (int)($_POST['id'] ?? 0);
-        $nipy = trim($_POST['nipy'] ?? '');
-        $nik = trim($_POST['nik'] ?? '');
-        $nama = trim($_POST['nama'] ?? '');
-        $gender = $_POST['gender'] ?? 'L';
-        $tingkatPendidikan = trim($_POST['tingkat_pendidikan'] ?? 'S1');
-        $birthplace = trim($_POST['birthplace'] ?? '');
-        $birthdate = !empty($_POST['birthdate']) ? $_POST['birthdate'] : null;
-        $tmt = !empty($_POST['tmt']) ? $_POST['tmt'] : date('Y-m-d');
-        $levelPosisi = trim($_POST['level_posisi'] ?? 'Guru Mapel');
-        $unitId = !empty($_POST['unit_id']) ? (int)$_POST['unit_id'] : null;
-        $atasanId = !empty($_POST['atasan_langsung_id']) ? (int)$_POST['atasan_langsung_id'] : null;
-        $noTelpAtasan = trim($_POST['no_telp_atasan'] ?? '');
-        $contactPhone = trim($_POST['contact_phone'] ?? '');
-        $email = trim($_POST['email'] ?? '');
+        try {
+            $id = (int)($_POST['id'] ?? 0);
+            $nipy = trim($_POST['nipy'] ?? '');
+            $nik = trim($_POST['nik'] ?? '');
+            $nama = trim($_POST['nama'] ?? '');
+            $gender = $_POST['gender'] ?? 'L';
+            $tingkatPendidikan = trim($_POST['tingkat_pendidikan'] ?? 'S1');
+            $birthplace = trim($_POST['birthplace'] ?? '');
+            $birthdate = !empty($_POST['birthdate']) ? $_POST['birthdate'] : null;
+            $tmt = !empty($_POST['tmt']) ? $_POST['tmt'] : date('Y-m-d');
+            $levelPosisi = trim($_POST['level_posisi'] ?? 'Guru Mapel');
+            $unitId = !empty($_POST['unit_id']) ? (int)$_POST['unit_id'] : null;
+            $atasanId = !empty($_POST['atasan_langsung_id']) ? (int)$_POST['atasan_langsung_id'] : null;
+            $noTelpAtasan = trim($_POST['no_telp_atasan'] ?? '');
+            $contactPhone = trim($_POST['contact_phone'] ?? '');
+            $email = trim($_POST['email'] ?? '');
 
-        // Auto-generate username dari NIPY (huruf kecil) untuk menjamin keunikan akun tanpa duplikasi nama
-        $generatedUsername = !empty($nipy) ? strtolower(trim($nipy)) : '';
-        $username = $generatedUsername ?: trim($_POST['username'] ?? '');
-        $password = trim($_POST['password'] ?? '');
-        $userIsActive = isset($_POST['user_is_active']) ? (int)$_POST['user_is_active'] : 1;
-        $selectedRoles = $_POST['roles'] ?? [];
+            // Auto-generate username dari NIPY (huruf kecil) untuk menjamin keunikan akun tanpa duplikasi nama
+            $generatedUsername = !empty($nipy) ? strtolower(trim($nipy)) : '';
+            $username = $generatedUsername ?: trim($_POST['username'] ?? '');
+            $password = trim($_POST['password'] ?? '');
+            $userIsActive = isset($_POST['user_is_active']) ? (int)$_POST['user_is_active'] : 1;
+            $selectedRoles = $_POST['roles'] ?? [];
 
-        if ($id > 0) {
-            $old = $this->assertUnitOwnership('employees', $id);
-            $oldUnitId = (int)($old['unit_id'] ?? 0);
+            if ($id > 0) {
+                $old = $this->assertUnitOwnership('employees', $id);
+                $oldUnitId = (int)($old['unit_id'] ?? 0);
 
-            // Validasi keunikan NIPY jika diubah
-            if (!empty($nipy)) {
-                $checkNipy = Database::fetch("SELECT id, nama FROM employees WHERE nipy = ? AND id != ?", [$nipy, $id]);
-                if ($checkNipy) {
-                    $this->setFlash('danger', "NIPY '{$nipy}' sudah digunakan oleh pegawai lain ({$checkNipy['nama']}).");
-                    $this->redirect(Auth::baseUrl() . '/master/employees');
-                    return;
-                }
-            }
-
-            // Deteksi jika unit sekolah dipindahkan secara manual oleh operator yayasan
-            if ($oldUnitId > 0 && $oldUnitId !== $unitId) {
-                // Otomatis bersihkan jadwal supervisi, mapel pengampu, dan walas kelas di unit lama
-                $this->cleanupEmployeeFormerUnitData($id, $oldUnitId);
-
-                // Update unit_id akun user ke sekolah baru dan reset role unit lama jika role tidak dipilih ulang
-                $oldUserId = (int)($old['user_id'] ?? 0);
-                if ($oldUserId > 0 && empty($selectedRoles)) {
-                    Database::execute("DELETE FROM user_roles WHERE user_id = ?", [$oldUserId]);
-                }
-
-                // Pindahkan draft AKFI berjalan ke unit baru
-                Database::execute(
-                    "UPDATE akfi_assessments SET unit_id = ? WHERE employee_id = ? AND status IN ('Draft', 'Diajukan')",
-                    [$unitId, $id]
-                );
-            }
-
-            Database::execute(
-                "UPDATE employees SET nipy = ?, nik = ?, nama = ?, gender = ?, tingkat_pendidikan = ?, birthplace = ?, birthdate = ?, tmt = ?, level_posisi = ?, unit_id = ?, atasan_langsung_id = ?, no_telp_atasan = ?, contact_phone = ?, email = ?, updated_at = NOW() WHERE id = ?",
-                [$nipy, $nik, $nama, $gender, $tingkatPendidikan, $birthplace, $birthdate, $tmt, $levelPosisi, $unitId, $atasanId, $noTelpAtasan, $contactPhone, $email, $id]
-            );
-
-            // Jika ada akun terkait atau username diisi
-            $userId = (int)($old['user_id'] ?? 0);
-            if ($userId > 0) {
-                // Update akun user yang sudah ada (username disinkronkan dengan NIPY)
-                if (!empty($username)) {
-                    $uCheck = Database::fetch("SELECT id FROM users WHERE username = ? AND id != ?", [$username, $userId]);
-                    if ($uCheck) {
-                        $this->setFlash('warning', "Data pegawai diperbarui, namun username '{$username}' sudah dipakai akun lain.");
+                // Validasi keunikan NIPY jika diubah
+                if (!empty($nipy)) {
+                    $checkNipy = Database::fetch("SELECT id, nama FROM employees WHERE nipy = ? AND id != ?", [$nipy, $id]);
+                    if ($checkNipy) {
+                        $this->setFlash('danger', "NIPY '{$nipy}' sudah digunakan oleh pegawai lain ({$checkNipy['nama']}).");
                         $this->redirect(Auth::baseUrl() . '/master/employees');
                         return;
                     }
                 }
 
-                $passSql = "";
-                $userParams = [$nama, $email ?: null, $contactPhone ?: null, $unitId, $userIsActive];
-                if (!empty($username)) {
-                    $passSql .= ", username = ?";
-                    $userParams[] = $username;
-                }
-                if (!empty($password)) {
-                    $passSql .= ", password_hash = ?";
-                    $userParams[] = password_hash($password, PASSWORD_DEFAULT);
-                }
-                $userParams[] = $userId;
+                // Deteksi jika unit sekolah dipindahkan secara manual oleh operator yayasan
+                if ($oldUnitId > 0 && $oldUnitId !== $unitId) {
+                    // Otomatis bersihkan jadwal supervisi, mapel pengampu, dan walas kelas di unit lama
+                    $this->cleanupEmployeeFormerUnitData($id, $oldUnitId);
 
-                Database::execute(
-                    "UPDATE users SET full_name = ?, email = ?, phone = ?, unit_id = ?, is_active = ? {$passSql}, updated_at = NOW() WHERE id = ?",
-                    $userParams
-                );
-
-                // Update roles jika ada yang dipilih
-                if (!empty($selectedRoles) && is_array($selectedRoles)) {
-                    Database::execute("DELETE FROM user_roles WHERE user_id = ?", [$userId]);
-                    foreach ($selectedRoles as $idx => $rId) {
-                        $isPri = $idx === 0 ? 1 : 0;
-                        Database::execute("INSERT IGNORE INTO user_roles (user_id, role_id, is_primary) VALUES (?, ?, ?)", [$userId, (int)$rId, $isPri]);
+                    // Update unit_id akun user ke sekolah baru dan reset role unit lama jika role tidak dipilih ulang
+                    $oldUserId = (int)($old['user_id'] ?? 0);
+                    if ($oldUserId > 0 && empty($selectedRoles)) {
+                        Database::execute("DELETE FROM user_roles WHERE user_id = ?", [$oldUserId]);
                     }
-                }
-            } elseif (!empty($username)) {
-                // Pegawai belum punya akun, buatkan akun baru otomatis dari NIPY
-                $uCheck = Database::fetch("SELECT id FROM users WHERE username = ?", [$username]);
-                if ($uCheck) {
-                    $this->setFlash('warning', "Pegawai diperbarui, namun username '{$username}' sudah digunakan.");
-                    $this->redirect(Auth::baseUrl() . '/master/employees');
-                    return;
-                }
 
-                $pwd = !empty($password) ? $password : 'password123';
-                $passHash = password_hash($pwd, PASSWORD_DEFAULT);
-                Database::execute(
-                    "INSERT INTO users (username, password_hash, full_name, email, phone, unit_id, is_active, force_change_password) 
-                     VALUES (?, ?, ?, ?, ?, ?, ?, 0)",
-                    [$username, $passHash, $nama, $email ?: null, $contactPhone ?: null, $unitId, $userIsActive]
-                );
-                $newUserId = (int)Database::lastInsertId();
-                Database::execute("UPDATE employees SET user_id = ? WHERE id = ?", [$newUserId, $id]);
-
-                // Assign roles
-                if (!empty($selectedRoles) && is_array($selectedRoles)) {
-                    foreach ($selectedRoles as $idx => $rId) {
-                        $isPri = $idx === 0 ? 1 : 0;
-                        Database::execute("INSERT IGNORE INTO user_roles (user_id, role_id, is_primary) VALUES (?, ?, ?)", [$newUserId, (int)$rId, $isPri]);
-                    }
-                }
-            }
-
-            AuditLog::log('UPDATE_EMPLOYEE', 'employees', $id, $old, $_POST);
-            $this->setFlash('success', 'Data pegawai dan akun login berhasil diperbarui.');
-        } else {
-            // Pegawai baru - periksa keunikan NIPY
-            if (!empty($nipy)) {
-                $checkNipy = Database::fetch("SELECT id, user_id, nama, is_deleted FROM employees WHERE nipy = ?", [$nipy]);
-                if ($checkNipy) {
-                    if ((int)$checkNipy['is_deleted'] === 0) {
-                        $this->setFlash('danger', "NIPY '{$nipy}' sudah terdaftar untuk pegawai {$checkNipy['nama']}.");
-                        $this->redirect(Auth::baseUrl() . '/master/employees');
-                        return;
-                    } else {
-                        // Pulihkan (restore) dan perbarui pegawai yang sebelumnya dinonaktifkan
-                        $resId = (int)$checkNipy['id'];
-                        $resUserId = (int)($checkNipy['user_id'] ?? 0);
-
-                        if ($resUserId > 0) {
-                            $uCheck = Database::fetch("SELECT id FROM users WHERE username = ? AND id != ?", [$username, $resUserId]);
-                            if ($uCheck) {
-                                $this->setFlash('danger', "Username auto-generated '{$username}' sudah digunakan akun lain.");
-                                $this->redirect(Auth::baseUrl() . '/master/employees');
-                                return;
-                            }
-                            $pwd = !empty($password) ? $password : 'password123';
-                            $passHash = password_hash($pwd, PASSWORD_DEFAULT);
-                            Database::execute(
-                                "UPDATE users SET username = ?, password_hash = ?, full_name = ?, email = ?, phone = ?, unit_id = ?, is_active = ?, updated_at = NOW() WHERE id = ?",
-                                [$username, $passHash, $nama, $email ?: null, $contactPhone ?: null, $unitId, $userIsActive, $resUserId]
-                            );
-                            $newUserId = $resUserId;
-                        } elseif (!empty($username)) {
-                            $uCheck = Database::fetch("SELECT id FROM users WHERE username = ?", [$username]);
-                            if ($uCheck) {
-                                $this->setFlash('danger', "Username auto-generated '{$username}' sudah digunakan akun lain.");
-                                $this->redirect(Auth::baseUrl() . '/master/employees');
-                                return;
-                            }
-                            $pwd = !empty($password) ? $password : 'password123';
-                            $passHash = password_hash($pwd, PASSWORD_DEFAULT);
-                            Database::execute(
-                                "INSERT INTO users (username, password_hash, full_name, email, phone, unit_id, is_active, force_change_password) 
-                                 VALUES (?, ?, ?, ?, ?, ?, ?, 0)",
-                                [$username, $passHash, $nama, $email ?: null, $contactPhone ?: null, $unitId, $userIsActive]
-                            );
-                            $newUserId = (int)Database::lastInsertId();
-                        } else {
-                            $newUserId = null;
-                        }
-
-                        if ($newUserId > 0 && !empty($selectedRoles) && is_array($selectedRoles)) {
-                            Database::execute("DELETE FROM user_roles WHERE user_id = ?", [$newUserId]);
-                            foreach ($selectedRoles as $idx => $rId) {
-                                $isPri = $idx === 0 ? 1 : 0;
-                                Database::execute("INSERT IGNORE INTO user_roles (user_id, role_id, is_primary) VALUES (?, ?, ?)", [$newUserId, (int)$rId, $isPri]);
-                            }
-                        }
-
+                    // Pindahkan draft AKFI jika unit baru adalah sekolah (unit_id > 0), atau hapus draft jika pindah ke kantor yayasan (unit_id = null)
+                    if ($unitId !== null && $unitId > 0) {
                         Database::execute(
-                            "UPDATE employees SET user_id = ?, nipy = ?, nik = ?, nama = ?, gender = ?, tingkat_pendidikan = ?, birthplace = ?, birthdate = ?, tmt = ?, level_posisi = ?, unit_id = ?, atasan_langsung_id = ?, no_telp_atasan = ?, contact_phone = ?, email = ?, status = 'Aktif', is_deleted = 0, updated_at = NOW() WHERE id = ?",
-                            [$newUserId, $nipy, $nik, $nama, $gender, $tingkatPendidikan, $birthplace, $birthdate, $tmt, $levelPosisi, $unitId, $atasanId, $noTelpAtasan, $contactPhone, $email, $resId]
+                            "UPDATE akfi_assessments SET unit_id = ? WHERE employee_id = ? AND status IN ('Draft', 'Diajukan')",
+                            [$unitId, $id]
                         );
-                        AuditLog::log('RESTORE_EMPLOYEE', 'employees', $resId, null, $_POST);
-                        $this->setFlash('success', 'Data pegawai berhasil dipulihkan kembali dan diperbarui.');
+                    } else {
+                        Database::execute(
+                            "DELETE FROM akfi_assessments WHERE employee_id = ? AND status IN ('Draft', 'Diajukan')",
+                            [$id]
+                        );
+                    }
+                }
+
+                Database::execute(
+                    "UPDATE employees SET nipy = ?, nik = ?, nama = ?, gender = ?, tingkat_pendidikan = ?, birthplace = ?, birthdate = ?, tmt = ?, level_posisi = ?, unit_id = ?, atasan_langsung_id = ?, no_telp_atasan = ?, contact_phone = ?, email = ?, updated_at = NOW() WHERE id = ?",
+                    [$nipy, $nik, $nama, $gender, $tingkatPendidikan, $birthplace, $birthdate, $tmt, $levelPosisi, $unitId, $atasanId, $noTelpAtasan, $contactPhone, $email, $id]
+                );
+
+                // Jika ada akun terkait atau username diisi
+                $userId = (int)($old['user_id'] ?? 0);
+                if ($userId > 0) {
+                    // Update akun user yang sudah ada (username disinkronkan dengan NIPY)
+                    if (!empty($username)) {
+                        $uCheck = Database::fetch("SELECT id FROM users WHERE username = ? AND id != ?", [$username, $userId]);
+                        if ($uCheck) {
+                            $this->setFlash('warning', "Data pegawai diperbarui, namun username '{$username}' sudah dipakai akun lain.");
+                            $this->redirect(Auth::baseUrl() . '/master/employees');
+                            return;
+                        }
+                    }
+
+                    $passSql = "";
+                    $userParams = [$nama, $email ?: null, $contactPhone ?: null, $unitId, $userIsActive];
+                    if (!empty($username)) {
+                        $passSql .= ", username = ?";
+                        $userParams[] = $username;
+                    }
+                    if (!empty($password)) {
+                        $passSql .= ", password_hash = ?";
+                        $userParams[] = password_hash($password, PASSWORD_DEFAULT);
+                    }
+                    $userParams[] = $userId;
+
+                    Database::execute(
+                        "UPDATE users SET full_name = ?, email = ?, phone = ?, unit_id = ?, is_active = ? {$passSql}, updated_at = NOW() WHERE id = ?",
+                        $userParams
+                    );
+
+                    // Update roles jika ada yang dipilih
+                    if (!empty($selectedRoles) && is_array($selectedRoles)) {
+                        Database::execute("DELETE FROM user_roles WHERE user_id = ?", [$userId]);
+                        foreach ($selectedRoles as $idx => $rId) {
+                            $isPri = $idx === 0 ? 1 : 0;
+                            Database::execute("INSERT IGNORE INTO user_roles (user_id, role_id, is_primary) VALUES (?, ?, ?)", [$userId, (int)$rId, $isPri]);
+                        }
+                    }
+                } elseif (!empty($username)) {
+                    // Pegawai belum punya akun, buatkan akun baru otomatis dari NIPY
+                    $uCheck = Database::fetch("SELECT id FROM users WHERE username = ?", [$username]);
+                    if ($uCheck) {
+                        $this->setFlash('warning', "Pegawai diperbarui, namun username '{$username}' sudah digunakan.");
                         $this->redirect(Auth::baseUrl() . '/master/employees');
                         return;
                     }
-                }
-            }
 
-            // Pegawai baru - Akun login otomatis dibuat dari NIPY
-            $newUserId = null;
-            if (!empty($username)) {
-                $uCheck = Database::fetch("SELECT id FROM users WHERE username = ?", [$username]);
-                if ($uCheck) {
-                    $this->setFlash('danger', "Username auto-generated '{$username}' sudah digunakan akun lain. Mohon periksa kembali NIPY.");
-                    $this->redirect(Auth::baseUrl() . '/master/employees');
-                    return;
-                }
+                    $pwd = !empty($password) ? $password : 'password123';
+                    $passHash = password_hash($pwd, PASSWORD_DEFAULT);
+                    Database::execute(
+                        "INSERT INTO users (username, password_hash, full_name, email, phone, unit_id, is_active, force_change_password) 
+                         VALUES (?, ?, ?, ?, ?, ?, ?, 0)",
+                        [$username, $passHash, $nama, $email ?: null, $contactPhone ?: null, $unitId, $userIsActive]
+                    );
+                    $newUserId = (int)Database::lastInsertId();
+                    Database::execute("UPDATE employees SET user_id = ? WHERE id = ?", [$newUserId, $id]);
 
-                $pwd = !empty($password) ? $password : 'password123';
-                $passHash = password_hash($pwd, PASSWORD_DEFAULT);
-                Database::execute(
-                    "INSERT INTO users (username, password_hash, full_name, email, phone, unit_id, is_active, force_change_password) 
-                     VALUES (?, ?, ?, ?, ?, ?, ?, 0)",
-                    [$username, $passHash, $nama, $email ?: null, $contactPhone ?: null, $unitId, $userIsActive]
-                );
-                $newUserId = (int)Database::lastInsertId();
-
-                if (!empty($selectedRoles) && is_array($selectedRoles)) {
-                    foreach ($selectedRoles as $idx => $rId) {
-                        $isPri = $idx === 0 ? 1 : 0;
-                        Database::execute("INSERT IGNORE INTO user_roles (user_id, role_id, is_primary) VALUES (?, ?, ?)", [$newUserId, (int)$rId, $isPri]);
+                    // Assign roles
+                    if (!empty($selectedRoles) && is_array($selectedRoles)) {
+                        foreach ($selectedRoles as $idx => $rId) {
+                            $isPri = $idx === 0 ? 1 : 0;
+                            Database::execute("INSERT IGNORE INTO user_roles (user_id, role_id, is_primary) VALUES (?, ?, ?)", [$newUserId, (int)$rId, $isPri]);
+                        }
                     }
                 }
-            }
 
-            Database::execute(
-                "INSERT INTO employees (user_id, nipy, nik, nama, gender, tingkat_pendidikan, birthplace, birthdate, tmt, level_posisi, unit_id, atasan_langsung_id, no_telp_atasan, contact_phone, email, status) 
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Aktif')",
-                [$newUserId, $nipy, $nik, $nama, $gender, $tingkatPendidikan, $birthplace, $birthdate, $tmt, $levelPosisi, $unitId, $atasanId, $noTelpAtasan, $contactPhone, $email]
-            );
-            $newId = Database::lastInsertId();
-            AuditLog::log('CREATE_EMPLOYEE', 'employees', $newId, null, $_POST);
-            $this->setFlash('success', 'Pegawai baru beserta akun auto-generated dari NIPY berhasil ditambahkan.');
+                AuditLog::log('UPDATE_EMPLOYEE', 'employees', $id, $old, $_POST);
+                $this->setFlash('success', 'Data pegawai dan akun login berhasil diperbarui.');
+            } else {
+                // Pegawai baru - periksa keunikan NIPY
+                if (!empty($nipy)) {
+                    $checkNipy = Database::fetch("SELECT id, user_id, nama, is_deleted FROM employees WHERE nipy = ?", [$nipy]);
+                    if ($checkNipy) {
+                        if ((int)$checkNipy['is_deleted'] === 0) {
+                            $this->setFlash('danger', "NIPY '{$nipy}' sudah terdaftar untuk pegawai {$checkNipy['nama']}.");
+                            $this->redirect(Auth::baseUrl() . '/master/employees');
+                            return;
+                        } else {
+                            // Pulihkan (restore) dan perbarui pegawai yang sebelumnya dinonaktifkan
+                            $resId = (int)$checkNipy['id'];
+                            $resUserId = (int)($checkNipy['user_id'] ?? 0);
+
+                            if ($resUserId > 0) {
+                                $uCheck = Database::fetch("SELECT id FROM users WHERE username = ? AND id != ?", [$username, $resUserId]);
+                                if ($uCheck) {
+                                    $this->setFlash('danger', "Username auto-generated '{$username}' sudah digunakan akun lain.");
+                                    $this->redirect(Auth::baseUrl() . '/master/employees');
+                                    return;
+                                }
+                                $pwd = !empty($password) ? $password : 'password123';
+                                $passHash = password_hash($pwd, PASSWORD_DEFAULT);
+                                Database::execute(
+                                    "UPDATE users SET username = ?, password_hash = ?, full_name = ?, email = ?, phone = ?, unit_id = ?, is_active = ?, updated_at = NOW() WHERE id = ?",
+                                    [$username, $passHash, $nama, $email ?: null, $contactPhone ?: null, $unitId, $userIsActive, $resUserId]
+                                );
+                                $newUserId = $resUserId;
+                            } elseif (!empty($username)) {
+                                $uCheck = Database::fetch("SELECT id FROM users WHERE username = ?", [$username]);
+                                if ($uCheck) {
+                                    $this->setFlash('danger', "Username auto-generated '{$username}' sudah digunakan akun lain.");
+                                    $this->redirect(Auth::baseUrl() . '/master/employees');
+                                    return;
+                                }
+                                $pwd = !empty($password) ? $password : 'password123';
+                                $passHash = password_hash($pwd, PASSWORD_DEFAULT);
+                                Database::execute(
+                                    "INSERT INTO users (username, password_hash, full_name, email, phone, unit_id, is_active, force_change_password) 
+                                     VALUES (?, ?, ?, ?, ?, ?, ?, 0)",
+                                    [$username, $passHash, $nama, $email ?: null, $contactPhone ?: null, $unitId, $userIsActive]
+                                );
+                                $newUserId = (int)Database::lastInsertId();
+                            } else {
+                                $newUserId = null;
+                            }
+
+                            if ($newUserId > 0 && !empty($selectedRoles) && is_array($selectedRoles)) {
+                                Database::execute("DELETE FROM user_roles WHERE user_id = ?", [$newUserId]);
+                                foreach ($selectedRoles as $idx => $rId) {
+                                    $isPri = $idx === 0 ? 1 : 0;
+                                    Database::execute("INSERT IGNORE INTO user_roles (user_id, role_id, is_primary) VALUES (?, ?, ?)", [$newUserId, (int)$rId, $isPri]);
+                                }
+                            }
+
+                            Database::execute(
+                                "UPDATE employees SET user_id = ?, nipy = ?, nik = ?, nama = ?, gender = ?, tingkat_pendidikan = ?, birthplace = ?, birthdate = ?, tmt = ?, level_posisi = ?, unit_id = ?, atasan_langsung_id = ?, no_telp_atasan = ?, contact_phone = ?, email = ?, status = 'Aktif', is_deleted = 0, updated_at = NOW() WHERE id = ?",
+                                [$newUserId, $nipy, $nik, $nama, $gender, $tingkatPendidikan, $birthplace, $birthdate, $tmt, $levelPosisi, $unitId, $atasanId, $noTelpAtasan, $contactPhone, $email, $resId]
+                            );
+                            AuditLog::log('RESTORE_EMPLOYEE', 'employees', $resId, null, $_POST);
+                            $this->setFlash('success', 'Data pegawai berhasil dipulihkan kembali dan diperbarui.');
+                            $this->redirect(Auth::baseUrl() . '/master/employees');
+                            return;
+                        }
+                    }
+                }
+
+                // Pegawai baru - Akun login otomatis dibuat dari NIPY
+                $newUserId = null;
+                if (!empty($username)) {
+                    $uCheck = Database::fetch("SELECT id FROM users WHERE username = ?", [$username]);
+                    if ($uCheck) {
+                        $this->setFlash('danger', "Username auto-generated '{$username}' sudah digunakan akun lain. Mohon periksa kembali NIPY.");
+                        $this->redirect(Auth::baseUrl() . '/master/employees');
+                        return;
+                    }
+
+                    $pwd = !empty($password) ? $password : 'password123';
+                    $passHash = password_hash($pwd, PASSWORD_DEFAULT);
+                    Database::execute(
+                        "INSERT INTO users (username, password_hash, full_name, email, phone, unit_id, is_active, force_change_password) 
+                         VALUES (?, ?, ?, ?, ?, ?, ?, 0)",
+                        [$username, $passHash, $nama, $email ?: null, $contactPhone ?: null, $unitId, $userIsActive]
+                    );
+                    $newUserId = (int)Database::lastInsertId();
+
+                    if (!empty($selectedRoles) && is_array($selectedRoles)) {
+                        foreach ($selectedRoles as $idx => $rId) {
+                            $isPri = $idx === 0 ? 1 : 0;
+                            Database::execute("INSERT IGNORE INTO user_roles (user_id, role_id, is_primary) VALUES (?, ?, ?)", [$newUserId, (int)$rId, $isPri]);
+                        }
+                    }
+                }
+
+                Database::execute(
+                    "INSERT INTO employees (user_id, nipy, nik, nama, gender, tingkat_pendidikan, birthplace, birthdate, tmt, level_posisi, unit_id, atasan_langsung_id, no_telp_atasan, contact_phone, email, status) 
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Aktif')",
+                    [$newUserId, $nipy, $nik, $nama, $gender, $tingkatPendidikan, $birthplace, $birthdate, $tmt, $levelPosisi, $unitId, $atasanId, $noTelpAtasan, $contactPhone, $email]
+                );
+                $newId = Database::lastInsertId();
+                AuditLog::log('CREATE_EMPLOYEE', 'employees', $newId, null, $_POST);
+                $this->setFlash('success', 'Pegawai baru beserta akun auto-generated dari NIPY berhasil ditambahkan.');
+            }
+            $this->redirect(Auth::baseUrl() . '/master/employees');
+        } catch (\Throwable $e) {
+            error_log("Error saveEmployee: " . $e->getMessage());
+            $this->setFlash('danger', 'Terjadi kesalahan sistem saat menyimpan data: ' . $e->getMessage());
+            $this->redirect(Auth::baseUrl() . '/master/employees');
         }
-        $this->redirect(Auth::baseUrl() . '/master/employees');
     }
 
     public function deleteEmployee(): void {
@@ -1449,11 +1462,18 @@ class MasterController extends Controller {
                 // Otomatis bersihkan jadwal supervisi, mapel pengampu, dan walas kelas di unit lama
                 $this->cleanupEmployeeFormerUnitData($employeeId, $fromUnitId);
 
-                // Pindahkan draft AKFI berjalan ke unit baru agar tidak membebani unit lama
-                Database::execute(
-                    "UPDATE akfi_assessments SET unit_id = ? WHERE employee_id = ? AND status IN ('Draft', 'Diajukan')",
-                    [$toUnitId, $employeeId]
-                );
+                // Pindahkan draft AKFI berjalan ke unit baru agar tidak membebani unit lama, atau hapus jika mutasi ke yayasan/non-unit
+                if ($toUnitId !== null && $toUnitId > 0) {
+                    Database::execute(
+                        "UPDATE akfi_assessments SET unit_id = ? WHERE employee_id = ? AND status IN ('Draft', 'Diajukan')",
+                        [$toUnitId, $employeeId]
+                    );
+                } else {
+                    Database::execute(
+                        "DELETE FROM akfi_assessments WHERE employee_id = ? AND status IN ('Draft', 'Diajukan')",
+                        [$employeeId]
+                    );
+                }
             } elseif (in_array($actionType, ['Resign', 'Diberhentikan', 'Pensiun'])) {
                 Database::execute("UPDATE employees SET status = ?, is_deleted = 1 WHERE id = ?", [$actionType, $employeeId]);
                 
@@ -1483,65 +1503,82 @@ class MasterController extends Controller {
         if ($employeeId <= 0) return;
 
         // 1. Keluarkan dari Jabatan Wali Kelas (classes) sehingga status rombel menjadi 'Wali kelas belum dipilih'
-        if ($formerUnitId !== null && $formerUnitId > 0) {
-            Database::execute(
-                "UPDATE classes SET walas_id = NULL, walas_employee_id = NULL 
-                 WHERE unit_id = ? AND (walas_employee_id = ? OR walas_id = ?)",
-                [$formerUnitId, $employeeId, $employeeId]
-            );
-        } else {
-            Database::execute(
-                "UPDATE classes SET walas_id = NULL, walas_employee_id = NULL 
-                 WHERE walas_employee_id = ? OR walas_id = ?",
-                [$employeeId, $employeeId]
-            );
+        try {
+            if ($formerUnitId !== null && $formerUnitId > 0) {
+                Database::execute(
+                    "UPDATE classes SET walas_id = NULL 
+                     WHERE unit_id = ? AND (walas_employee_id = ? OR walas_id = ?)",
+                    [$formerUnitId, $employeeId, $employeeId]
+                );
+            } else {
+                Database::execute(
+                    "UPDATE classes SET walas_id = NULL 
+                     WHERE walas_employee_id = ? OR walas_id = ?",
+                    [$employeeId, $employeeId]
+                );
+            }
+        } catch (\Throwable $e) {
+            error_log("cleanup walas error: " . $e->getMessage());
         }
 
         // 2. Hapus dari Jadwal Supervisi Mengajar (supervisi_sessions) di mana guru menjadi peserta maupun supervisor
-        if ($formerUnitId !== null && $formerUnitId > 0) {
-            Database::execute(
-                "DELETE FROM supervisi_rubric_scores 
-                 WHERE supervisi_id IN (SELECT id FROM supervisi_sessions WHERE unit_id = ? AND (teacher_id = ? OR supervisor_id = ?))",
-                [$formerUnitId, $employeeId, $employeeId]
-            );
-            Database::execute(
-                "DELETE FROM supervisi_sessions WHERE unit_id = ? AND (teacher_id = ? OR supervisor_id = ?)",
-                [$formerUnitId, $employeeId, $employeeId]
-            );
-        } else {
-            Database::execute(
-                "DELETE FROM supervisi_rubric_scores 
-                 WHERE supervisi_id IN (SELECT id FROM supervisi_sessions WHERE teacher_id = ? OR supervisor_id = ?)",
-                [$employeeId, $employeeId]
-            );
-            Database::execute(
-                "DELETE FROM supervisi_sessions WHERE teacher_id = ? OR supervisor_id = ?",
-                [$employeeId, $employeeId]
-            );
+        try {
+            if ($formerUnitId !== null && $formerUnitId > 0) {
+                Database::execute(
+                    "DELETE FROM supervisi_rubric_scores 
+                     WHERE supervisi_id IN (SELECT id FROM supervisi_sessions WHERE unit_id = ? AND (teacher_id = ? OR supervisor_id = ?))",
+                    [$formerUnitId, $employeeId, $employeeId]
+                );
+                Database::execute(
+                    "DELETE FROM supervisi_sessions WHERE unit_id = ? AND (teacher_id = ? OR supervisor_id = ?)",
+                    [$formerUnitId, $employeeId, $employeeId]
+                );
+            } else {
+                Database::execute(
+                    "DELETE FROM supervisi_rubric_scores 
+                     WHERE supervisi_id IN (SELECT id FROM supervisi_sessions WHERE teacher_id = ? OR supervisor_id = ?)",
+                    [$employeeId, $employeeId]
+                );
+                Database::execute(
+                    "DELETE FROM supervisi_sessions WHERE teacher_id = ? OR supervisor_id = ?",
+                    [$employeeId, $employeeId]
+                );
+            }
+        } catch (\Throwable $e) {
+            error_log("cleanup supervisi error: " . $e->getMessage());
         }
 
         // 3. Hapus Penugasan Pengampu Mata Pelajaran (teacher_subjects) di unit lama
-        if ($formerUnitId !== null && $formerUnitId > 0) {
-            Database::execute(
-                "DELETE FROM teacher_subjects 
-                 WHERE employee_id = ? AND class_id IN (SELECT id FROM classes WHERE unit_id = ?)",
-                [$employeeId, $formerUnitId]
-            );
-        } else {
-            Database::execute("DELETE FROM teacher_subjects WHERE employee_id = ?", [$employeeId]);
+        try {
+            if ($formerUnitId !== null && $formerUnitId > 0) {
+                Database::execute(
+                    "DELETE FROM teacher_subjects 
+                     WHERE employee_id = ? AND class_id IN (SELECT id FROM classes WHERE unit_id = ?)",
+                    [$employeeId, $formerUnitId]
+                );
+            } else {
+                Database::execute("DELETE FROM teacher_subjects WHERE employee_id = ?", [$employeeId]);
+            }
+        } catch (\Throwable $e) {
+            error_log("cleanup subjects error: " . $e->getMessage());
         }
 
         // 4. Lepaskan Penugasan Tutor Halaqah Tahfidz (tahfidz_halaqah)
-        if ($formerUnitId !== null && $formerUnitId > 0) {
-            Database::execute(
-                "UPDATE tahfidz_halaqah SET tutor_employee_id = NULL WHERE tutor_employee_id = ? AND unit_id = ?",
-                [$employeeId, $formerUnitId]
-            );
-        } else {
-            Database::execute(
-                "UPDATE tahfidz_halaqah SET tutor_employee_id = NULL WHERE tutor_employee_id = ?",
-                [$employeeId]
-            );
+        try {
+            if ($formerUnitId !== null && $formerUnitId > 0) {
+                Database::execute(
+                    "UPDATE tahfidz_halaqah SET tutor_employee_id = NULL WHERE tutor_employee_id = ? AND unit_id = ?",
+                    [$employeeId, $formerUnitId]
+                );
+            } else {
+                Database::execute(
+                    "UPDATE tahfidz_halaqah SET tutor_employee_id = NULL WHERE tutor_employee_id = ?",
+                    [$employeeId]
+                );
+            }
+        } catch (\Throwable $e) {
+            // Jika kolom tutor_employee_id di database berstatus NOT NULL, tangkap error agar tidak 500
+            error_log("cleanup halaqah tutor note: " . $e->getMessage());
         }
     }
 

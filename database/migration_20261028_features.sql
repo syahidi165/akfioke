@@ -37,3 +37,6 @@ CREATE TABLE IF NOT EXISTS `smtp_settings` (
     PRIMARY KEY (`id`),
     KEY `idx_unit_id` (`unit_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 5. Tahfidz Halaqah Tutor Nullable
+ALTER TABLE `tahfidz_halaqah` MODIFY COLUMN `tutor_employee_id` INT(11) NULL;

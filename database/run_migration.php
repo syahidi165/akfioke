@@ -82,4 +82,12 @@ Database::execute(
 );
 echo "[OK] Tabel smtp_settings dipastikan tersedia.\n";
 
+// 5. tahfidz_halaqah tutor_employee_id nullable
+try {
+    Database::execute("ALTER TABLE `tahfidz_halaqah` MODIFY COLUMN `tutor_employee_id` INT(11) NULL");
+    echo "[OK] tahfidz_halaqah.tutor_employee_id dijadikan NULLABLE.\n";
+} catch (\Throwable $e) {
+    echo "[SKIP] tahfidz_halaqah.tutor_employee_id: " . $e->getMessage() . "\n";
+}
+
 echo "=== MIGRASI SELESAI DENGAN SUKSES! ===\n";
