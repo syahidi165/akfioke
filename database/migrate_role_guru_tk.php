@@ -21,3 +21,4 @@ if (!$exists) {
 
 $all = Database::fetchAll("SELECT id, name, display_name FROM roles WHERE name IN ('guru_tk', 'guru_mapel_kbtk')");
 print_r($all);
+

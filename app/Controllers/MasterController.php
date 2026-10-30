@@ -2453,6 +2453,87 @@ class MasterController extends Controller {
         $this->redirect(Auth::baseUrl() . '/classes');
     }
 
+    public function deleteClass(): void {
+        $this->requireRole(['operator_sekolah', 'operator_yayasan']);
+        $id = (int)($_POST['id'] ?? 0);
+        if ($id <= 0) {
+            $this->setFlash('danger', 'ID rombel/kelas tidak valid.');
+            $this->redirect(Auth::baseUrl() . '/classes');
+            return;
+        }
+
+        $class = Database::fetch("SELECT * FROM classes WHERE id = ?", [$id]);
+        if (!$class) {
+            $this->setFlash('danger', 'Data rombel/kelas tidak ditemukan.');
+            $this->redirect(Auth::baseUrl() . '/classes');
+            return;
+        }
+
+        // Validasi Otoritas Unit (Multi-Unit Isolation)
+        $isYayasan = Auth::hasRole('operator_yayasan');
+        $userUnitId = Auth::unitId();
+        if (!$isYayasan && (int)$class['unit_id'] !== (int)$userUnitId) {
+            $this->setFlash('danger', 'Akses Ditolak: Anda tidak diizinkan menghapus rombel/kelas dari unit sekolah lain.');
+            $this->redirect(Auth::baseUrl() . '/classes');
+            return;
+        }
+
+        try {
+            Database::beginTransaction();
+
+            // 1. Hapus relasi jadwal halaqah dari jadwal kelas ini (child of class_schedules)
+            Database::execute("
+                DELETE csh FROM class_schedule_halaqahs csh
+                JOIN class_schedules cs ON csh.schedule_id = cs.id
+                WHERE cs.class_id = ?
+            ", [$id]);
+
+            // 2. Hapus seluruh jadwal pelajaran kelas ini
+            Database::execute("DELETE FROM class_schedules WHERE class_id = ?", [$id]);
+
+            // 3. Hapus penugasan guru mata pelajaran pada kelas ini
+            Database::execute("DELETE FROM teacher_subjects WHERE class_id = ?", [$id]);
+
+            // 4. Hapus skor rubrik supervisi (child of supervisi_sessions)
+            Database::execute("
+                DELETE ssr FROM supervisi_rubric_scores ssr
+                JOIN supervisi_sessions ss ON ssr.supervisi_id = ss.id
+                WHERE ss.class_id = ?
+            ", [$id]);
+
+            // 5. Hapus sesi supervisi kelas ini
+            Database::execute("DELETE FROM supervisi_sessions WHERE class_id = ?", [$id]);
+
+            // 6. Hapus data absensi siswa pada kelas ini
+            Database::execute("DELETE FROM student_attendance WHERE class_id = ?", [$id]);
+
+            // 7. Hapus data nilai siswa pada kelas ini
+            Database::execute("DELETE FROM student_grades WHERE class_id = ?", [$id]);
+
+            // 8. Hapus riwayat penempatan siswa di kelas ini (class_students)
+            // Catatan: Data master siswa (tabel students) tetap aman & otomatis berstatus belum memiliki rombel
+            Database::execute("DELETE FROM class_students WHERE class_id = ?", [$id]);
+
+            // 9. Terakhir, hapus master data kelas
+            Database::execute("DELETE FROM classes WHERE id = ?", [$id]);
+
+            Database::commit();
+
+            AuditLog::log('DELETE_CLASS', 'classes', $id, $class, [
+                'name'     => $class['name'],
+                'level'    => $class['level'],
+                'unit_id'  => $class['unit_id']
+            ]);
+
+            $this->setFlash('success', "Rombel/Kelas '{$class['name']}' beserta seluruh data jadwal, penugasan guru, absensi, nilai, dan penempatan siswa berhasil dihapus secara bersih.");
+        } catch (\Throwable $e) {
+            Database::rollBack();
+            $this->setFlash('danger', 'Gagal menghapus rombel/kelas: ' . $e->getMessage());
+        }
+
+        $this->redirect(Auth::baseUrl() . '/classes');
+    }
+
     public function promoteClasses(): void {
         $this->requireRole(['operator_sekolah', 'operator_yayasan']);
         $unitId = Auth::hasRole('operator_sekolah') ? Auth::unitId() : (int)($_POST['unit_id'] ?? Auth::unitId());

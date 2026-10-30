@@ -223,6 +223,9 @@ function getLevelBadgeStyle(string $lvl): array {
                             <button type="button" class="btn btn-outline btn-sm" onclick='editClass(<?= json_encode($c) ?>)' title="Ubah data rombel">
                                 <i class="fa-solid fa-gear"></i>
                             </button>
+                            <button type="button" class="btn btn-outline btn-sm text-danger" onclick='confirmDeleteClass(<?= (int)$c['id'] ?>, <?= json_encode($c['name']) ?>, <?= (int)$c['student_count'] ?>)' title="Hapus rombel" style="color: #dc2626; border-color: #fca5a5;">
+                                <i class="fa-solid fa-trash-can"></i>
+                            </button>
                         <?php endif; ?>
                     </div>
                 </div>
@@ -286,6 +289,9 @@ function getLevelBadgeStyle(string $lvl): array {
                                         <?php if ($canEdit || $isYayasan): ?>
                                             <button type="button" class="btn btn-outline btn-sm" onclick='editClass(<?= json_encode($c) ?>)' title="Edit Rombel">
                                                 <i class="fa-solid fa-pen-to-square"></i> Edit
+                                            </button>
+                                            <button type="button" class="btn btn-outline btn-sm text-danger" onclick='confirmDeleteClass(<?= (int)$c['id'] ?>, <?= json_encode($c['name']) ?>, <?= (int)$c['student_count'] ?>)' title="Hapus Rombel" style="color: #dc2626; border-color: #fca5a5;">
+                                                <i class="fa-solid fa-trash-can"></i> Hapus
                                             </button>
                                         <?php endif; ?>
                                     </div>
@@ -448,7 +454,66 @@ function getLevelBadgeStyle(string $lvl): array {
     </div>
 </div>
 
+<!-- ========================================== -->
+<!-- 5. MODAL HAPUS KELAS / ROMBEL              -->
+<!-- ========================================== -->
+<?php if ($canEdit || $isYayasan): ?>
+<div class="modal-overlay" id="deleteClassModal">
+    <div class="modal-container" style="max-width: 520px;">
+        <form method="POST" action="<?= $baseUrl ?>/classes/delete">
+            <?= CSRF::inputField() ?>
+            <input type="hidden" name="id" id="del_cls_id" value="0">
+            
+            <div class="modal-header" style="background: #fef2f2; border-bottom: 1px solid #fee2e2;">
+                <h3 class="card-title" style="color: #b91c1c;">
+                    <i class="fa-solid fa-triangle-exclamation"></i> Hapus Rombongan Belajar (Kelas)
+                </h3>
+                <button type="button" class="btn btn-outline btn-sm" onclick="closeDeleteClassModal()">&times;</button>
+            </div>
+            
+            <div class="modal-body" style="padding: 20px;">
+                <p style="font-size: 14px; color: #1e293b; margin-bottom: 14px;">
+                    Apakah Anda yakin ingin menghapus kelas <strong id="del_cls_name" style="color: #b91c1c;"></strong>?
+                </p>
+                
+                <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px; margin-bottom: 16px;">
+                    <div style="font-size: 12px; font-weight: 700; color: #475569; margin-bottom: 8px; text-transform: uppercase;">
+                        <i class="fa-solid fa-shield-halved" style="color: var(--primary);"></i> Pembersihan Data Database Terintegrasi:
+                    </div>
+                    <ul style="font-size: 12px; color: #64748b; line-height: 1.6; margin: 0; padding-left: 18px;">
+                        <li>Penempatan siswa (<strong id="del_cls_student_count">0</strong> siswa) pada kelas ini akan dicabut. <em>Data master siswa tetap aman dan statusnya menjadi unassigned/siap ditempatkan kembali.</em></li>
+                        <li>Seluruh data terkait: <strong>jadwal pelajaran kelas</strong>, <strong>penugasan guru mapel</strong>, <strong>absensi</strong>, <strong>nilai</strong>, dan <strong>supervisi kelas</strong> ini akan dibersihkan secara tuntas dari SQL tanpa menyisakan data menggantung.</li>
+                    </ul>
+                </div>
+
+                <div class="alert alert-danger" style="font-size: 12px; margin-bottom: 0; padding: 10px 14px; border-radius: 6px; background: #fef2f2; border: 1px solid #fecaca; color: #991b1b;">
+                    <i class="fa-solid fa-circle-exclamation"></i> Tindakan ini permanen. Pastikan Anda telah memeriksa kembali rombel yang akan dihapus.
+                </div>
+            </div>
+            
+            <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 8px; border-top: 1px solid var(--border-color); padding: 12px 20px;">
+                <button type="button" class="btn btn-outline" onclick="closeDeleteClassModal()">Batal</button>
+                <button type="submit" class="btn btn-danger" style="background: #dc2626; border-color: #b91c1c; color: white;">
+                    <i class="fa-solid fa-trash-can"></i> Ya, Hapus Kelas Ini
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+<?php endif; ?>
+
 <script>
+// Modal Hapus Kelas
+function confirmDeleteClass(id, name, studentCount) {
+    document.getElementById('del_cls_id').value = id;
+    document.getElementById('del_cls_name').innerText = name;
+    document.getElementById('del_cls_student_count').innerText = studentCount;
+    document.getElementById('deleteClassModal').classList.add('active');
+}
+
+function closeDeleteClassModal() {
+    document.getElementById('deleteClassModal').classList.remove('active');
+}
 // Switcher tampilan Kartu / Tabel
 function switchView(mode) {
     var cardView = document.getElementById('classesCardView');

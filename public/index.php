@@ -104,6 +104,7 @@ Router::post('/students/import', [MasterController::class, 'importStudents']);
 Router::get('/students/print-parent-card/:id', [MasterController::class, 'printParentCard']);
 Router::get('/classes', [MasterController::class, 'classes']);
 Router::post('/classes/save', [MasterController::class, 'saveClass']);
+Router::post('/classes/delete', [MasterController::class, 'deleteClass']);
 Router::post('/classes/promote', [MasterController::class, 'promoteClasses']);
 Router::get('/classes/promote-preview', [MasterController::class, 'promotePreview']);
 Router::get('/classes/placement', [MasterController::class, 'classPlacement']);
