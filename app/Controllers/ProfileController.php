@@ -18,11 +18,35 @@ class ProfileController extends Controller {
         $activeRole = Auth::activeRole();
         $roles = Auth::roles();
 
-        // 1. Ambil data Pegawai terkait
+        // 1. Ambil data Pegawai terkait (Prioritaskan user_id, cegah fallback jika email atau username kosong)
         $employee = Database::fetch(
-            "SELECT * FROM employees WHERE (user_id = ? OR LOWER(email) = LOWER(?) OR LOWER(nipy) = LOWER(?)) AND is_deleted = 0 LIMIT 1",
-            [$userId, $user['email'] ?? '', $user['username'] ?? '']
+            "SELECT * FROM employees WHERE user_id = ? AND is_deleted = 0 LIMIT 1",
+            [$userId]
         );
+
+        if (!$employee) {
+            $userEmail = trim((string)($user['email'] ?? ''));
+            $username = trim((string)($user['username'] ?? ''));
+            $conds = [];
+            $params = [];
+
+            if (!empty($userEmail)) {
+                $conds[] = "(email IS NOT NULL AND email != '' AND LOWER(email) = LOWER(?))";
+                $params[] = $userEmail;
+            }
+
+            if (!empty($username)) {
+                $conds[] = "(nipy IS NOT NULL AND nipy != '' AND LOWER(nipy) = LOWER(?))";
+                $params[] = $username;
+            }
+
+            if (!empty($conds)) {
+                $employee = Database::fetch(
+                    "SELECT * FROM employees WHERE (" . implode(' OR ', $conds) . ") AND is_deleted = 0 LIMIT 1",
+                    $params
+                );
+            }
+        }
 
         // Satuan Pendidikan / Unit Kerja
         $isYayasan = Auth::hasAnyRole(['operator_yayasan', 'direktur_pendidikan', 'deputi_pendidikan', 'ketua_yayasan', 'pembina_yayasan'])
@@ -112,6 +136,7 @@ class ProfileController extends Controller {
         $this->requireAuth();
         $userId = Auth::id();
 
+        $fullName = trim($_POST['full_name'] ?? '');
         $phone = trim($_POST['phone'] ?? '');
         $email = trim($_POST['email'] ?? '');
 
@@ -121,21 +146,38 @@ class ProfileController extends Controller {
             return;
         }
 
+        $userUpdates = ["phone = ?", "email = ?", "updated_at = NOW()"];
+        $userParams = [$phone, $email];
+
+        if (!empty($fullName)) {
+            $userUpdates[] = "full_name = ?";
+            $userParams[] = $fullName;
+            $_SESSION['user_name'] = $fullName;
+        }
+        $userParams[] = $userId;
+
         Database::execute(
-            "UPDATE users SET phone = ?, email = ?, updated_at = NOW() WHERE id = ?",
-            [$phone, $email, $userId]
+            "UPDATE users SET " . implode(', ', $userUpdates) . " WHERE id = ?",
+            $userParams
         );
 
         $employee = Database::fetch("SELECT id FROM employees WHERE user_id = ? AND is_deleted = 0", [$userId]);
         if ($employee) {
+            $empUpdates = ["contact_phone = ?", "email = ?", "updated_at = NOW()"];
+            $empParams = [$phone, $email];
+            if (!empty($fullName)) {
+                $empUpdates[] = "nama = ?";
+                $empParams[] = $fullName;
+            }
+            $empParams[] = $employee['id'];
             Database::execute(
-                "UPDATE employees SET contact_phone = ?, email = ?, updated_at = NOW() WHERE id = ?",
-                [$phone, $email, $employee['id']]
+                "UPDATE employees SET " . implode(', ', $empUpdates) . " WHERE id = ?",
+                $empParams
             );
         }
 
-        AuditLog::log('UPDATE_PROFILE', 'users', $userId, null, ['phone' => $phone, 'email' => $email]);
-        $this->setFlash('success', 'Kontak profil berhasil diperbarui.');
+        AuditLog::log('UPDATE_PROFILE', 'users', $userId, null, ['full_name' => $fullName, 'phone' => $phone, 'email' => $email]);
+        $this->setFlash('success', 'Data profil & kontak berhasil diperbarui.');
         $this->redirect(Auth::baseUrl() . '/profile');
     }
 

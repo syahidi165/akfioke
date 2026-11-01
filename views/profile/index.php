@@ -445,16 +445,22 @@ if (strpos($waNumber, '0') === 0) {
             <div style="padding: 20px;">
                 <div class="form-group" style="margin-bottom: 16px;">
                     <label class="form-label" style="font-weight: 600; font-size: 13px; color: #334155; margin-bottom: 6px; display: block;">
-                        No. WhatsApp / Telepon <span class="text-danger">*</span>
+                        Nama Lengkap / Tampilan Akun <span class="text-danger">*</span>
                     </label>
-                    <input type="text" name="phone" class="form-control" value="<?= SecurityHelper::escape($phone) ?>" placeholder="Contoh: 081234567890" required>
+                    <input type="text" name="full_name" class="form-control" value="<?= SecurityHelper::escape($nama !== '-' ? $nama : '') ?>" placeholder="Nama lengkap atau nama operator" required>
+                </div>
+                <div class="form-group" style="margin-bottom: 16px;">
+                    <label class="form-label" style="font-weight: 600; font-size: 13px; color: #334155; margin-bottom: 6px; display: block;">
+                        No. WhatsApp / Telepon
+                    </label>
+                    <input type="text" name="phone" class="form-control" value="<?= SecurityHelper::escape($phone !== '-' ? $phone : '') ?>" placeholder="Contoh: 081234567890">
                     <small style="color: #64748b; font-size: 11px;">Gunakan nomor aktif untuk kemudahan koordinasi yayasan.</small>
                 </div>
                 <div class="form-group" style="margin-bottom: 8px;">
                     <label class="form-label" style="font-weight: 600; font-size: 13px; color: #334155; margin-bottom: 6px; display: block;">
-                        Alamat Email <span class="text-danger">*</span>
+                        Alamat Email
                     </label>
-                    <input type="email" name="email" class="form-control" value="<?= SecurityHelper::escape($email) ?>" placeholder="nama@alkahfi.sch.id" required>
+                    <input type="email" name="email" class="form-control" value="<?= SecurityHelper::escape($email !== '-' ? $email : '') ?>" placeholder="nama@alkahfi.sch.id">
                 </div>
             </div>
             <div style="padding: 12px 20px; background: #f8fafc; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end; gap: 8px;">
