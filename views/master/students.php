@@ -4,7 +4,7 @@ use Core\SecurityHelper;
 use Core\CSRF;
 use Core\Auth;
 
-$canEdit = Auth::hasRole('operator_sekolah');
+$canEdit = Auth::hasAnyRole(['operator_sekolah', 'operator_yayasan']);
 ?>
 <div class="page-header">
     <div>
@@ -415,7 +415,7 @@ $canEdit = Auth::hasRole('operator_sekolah');
         </div>
 
         <!-- Form Upload Berkas -->
-        <form method="POST" action="<?= $baseUrl ?>/students/verify-import" enctype="multipart/form-data" onsubmit="handleVerifyImport(event, this)" style="background: #f8fafc; border: 2px dashed #93c5fd; border-radius: 12px; padding: 32px 24px; text-align: center;">
+        <form method="POST" action="<?= $baseUrl ?>/students/verify-import" enctype="multipart/form-data" onsubmit="return handleVerifyImport(event, this);" style="background: #f8fafc; border: 2px dashed #93c5fd; border-radius: 12px; padding: 32px 24px; text-align: center;">
             <?= CSRF::inputField() ?>
             <input type="hidden" name="unit_id" value="<?= $unitId ?>">
 
@@ -444,7 +444,7 @@ $canEdit = Auth::hasRole('operator_sekolah');
 <!-- Modal: Import Siswa Excel (Sesuai app.css modal-overlay & modal-container) -->
 <div class="modal-overlay" id="modalImportStudents">
     <div class="modal-container" style="max-width: 580px; border-radius: 12px; overflow: hidden; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);">
-        <form method="POST" action="<?= $baseUrl ?>/students/verify-import" enctype="multipart/form-data" onsubmit="handleVerifyImport(event, this)">
+        <form method="POST" action="<?= $baseUrl ?>/students/verify-import" enctype="multipart/form-data" onsubmit="return handleVerifyImport(event, this);">
             <?= CSRF::inputField() ?>
             <input type="hidden" name="unit_id" value="<?= $unitId ?>">
             
@@ -591,7 +591,11 @@ function escapeHtml(text) {
 }
 
 function handleVerifyImport(event, formElement) {
-    event.preventDefault();
+    if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+    }
+
     const submitBtn = formElement.querySelector('button[type="submit"]');
     const originalBtnHtml = submitBtn ? submitBtn.innerHTML : '';
     if (submitBtn) {
@@ -643,6 +647,8 @@ function handleVerifyImport(event, formElement) {
         }
         alert('Terjadi kesalahan saat memproses unggahan: ' + err.message);
     });
+
+    return false;
 }
 
 function filterVerifyRows(type) {
@@ -883,5 +889,25 @@ function commitVerifiedImport() {
         alert('Terjadi kesalahan koneksi saat menyimpan data: ' + err.message);
     });
 }
+
+// Inisialisasi jika ada data verifikasi hasil submit non-AJAX / sesi
+document.addEventListener('DOMContentLoaded', function() {
+    <?php if (!empty($pendingImport) && !empty($pendingImport['rows'])): ?>
+        const initialImport = <?= json_encode($pendingImport) ?>;
+        if (initialImport && initialImport.rows && initialImport.rows.length > 0) {
+            verifiedRows = initialImport.rows;
+            if (initialImport.unit_id) {
+                verifyUnitId = initialImport.unit_id;
+            }
+            const card = document.getElementById('verifyImportCard');
+            if (card) {
+                card.style.display = 'block';
+                currentVerifyFilter = 'all';
+                renderVerifyTable();
+                card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        }
+    <?php endif; ?>
+});
 </script>
 <?php endif; ?>

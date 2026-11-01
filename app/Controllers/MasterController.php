@@ -1860,6 +1860,9 @@ class MasterController extends Controller {
         $classes = Database::fetchAll("SELECT * FROM classes WHERE unit_id = ? AND academic_year_id = ? ORDER BY name ASC", [$unitId, $taId]);
         $units = Database::fetchAll("SELECT * FROM units ORDER BY id ASC");
 
+        $pendingImport = $_SESSION['pending_student_import'] ?? null;
+        unset($_SESSION['pending_student_import']);
+
         $this->view('master/students', [
             'pageTitle'     => 'Data Siswa Aktif & Akun Orang Tua Berbasis No. KK',
             'students'      => $students,
@@ -1869,7 +1872,8 @@ class MasterController extends Controller {
             'inactiveCount' => $inactiveCount,
             'filterClassId' => $filterClassId,
             'filterNoKk'    => $filterNoKk,
-            'filterQuery'   => $filterQuery
+            'filterQuery'   => $filterQuery,
+            'pendingImport' => $pendingImport
         ]);
     }
 
@@ -2443,29 +2447,59 @@ class MasterController extends Controller {
 
     // --- VERIFIKASI PRA-IMPOR SISWA (KARTU VERIFIKASI PREVIEW) ---
     public function verifyImportStudents(): void {
-        header('Content-Type: application/json; charset=utf-8');
         $this->requireRole(['operator_sekolah', 'operator_yayasan']);
         $isYayasan = Auth::hasRole('operator_yayasan');
         $unitId = $isYayasan ? (int)($_POST['unit_id'] ?? Auth::unitId()) : Auth::unitId();
         $taId = Auth::academicYearId();
 
+        $isAjax = (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') 
+            || (isset($_SERVER['HTTP_ACCEPT']) && strpos($_SERVER['HTTP_ACCEPT'], 'application/json') !== false);
+
         if (!isset($_FILES['file']) || $_FILES['file']['error'] !== UPLOAD_ERR_OK) {
-            echo json_encode(['success' => false, 'message' => 'Berkas Excel tidak valid atau gagal diunggah.']);
+            $msg = 'Berkas Excel tidak valid atau gagal diunggah.';
+            if ($isAjax) {
+                header('Content-Type: application/json; charset=utf-8');
+                echo json_encode(['success' => false, 'message' => $msg]);
+            } else {
+                $this->setFlash('danger', $msg);
+                $this->redirect(Auth::baseUrl() . "/students?unit_id={$unitId}");
+            }
             return;
         }
 
         $tmpFile = $_FILES['file']['tmp_name'];
         $ext = strtolower(pathinfo($_FILES['file']['name'], PATHINFO_EXTENSION));
         if (!in_array($ext, ['xlsx', 'xls'], true)) {
-            echo json_encode(['success' => false, 'message' => 'Hanya berkas Excel dengan ekstensi .xlsx atau .xls yang diperbolehkan.']);
+            $msg = 'Hanya berkas Excel dengan ekstensi .xlsx atau .xls yang diperbolehkan.';
+            if ($isAjax) {
+                header('Content-Type: application/json; charset=utf-8');
+                echo json_encode(['success' => false, 'message' => $msg]);
+            } else {
+                $this->setFlash('danger', $msg);
+                $this->redirect(Auth::baseUrl() . "/students?unit_id={$unitId}");
+            }
             return;
         }
 
-        // Classes map
+        // Classes map with normalization
         $classesRaw = Database::fetchAll("SELECT id, name FROM classes WHERE unit_id = ? AND academic_year_id = ?", [$unitId, $taId]);
         $classMap = [];
+        $normalizedClassMap = [];
+        $normalize = function($str) {
+            $str = strtolower(trim((string)$str));
+            $str = preg_replace('/^(kelas|kls)\s+/i', '', $str);
+            $str = preg_replace('/\s+/', ' ', $str);
+            return trim($str);
+        };
+
         foreach ($classesRaw as $c) {
-            $classMap[strtolower(trim($c['name']))] = [
+            $rawKey = strtolower(trim($c['name']));
+            $classMap[$rawKey] = [
+                'id' => (int)$c['id'],
+                'name' => $c['name']
+            ];
+            $normKey = $normalize($c['name']);
+            $normalizedClassMap[$normKey] = [
                 'id' => (int)$c['id'],
                 'name' => $c['name']
             ];
@@ -2486,7 +2520,14 @@ class MasterController extends Controller {
             $sheet = $spreadsheet->getActiveSheet();
             $highestRow = $sheet->getHighestRow();
         } catch (\Throwable $e) {
-            echo json_encode(['success' => false, 'message' => 'Gagal membaca berkas Excel: ' . $e->getMessage()]);
+            $msg = 'Gagal membaca berkas Excel: ' . $e->getMessage();
+            if ($isAjax) {
+                header('Content-Type: application/json; charset=utf-8');
+                echo json_encode(['success' => false, 'message' => $msg]);
+            } else {
+                $this->setFlash('danger', $msg);
+                $this->redirect(Auth::baseUrl() . "/students?unit_id={$unitId}");
+            }
             return;
         }
 
@@ -2573,7 +2614,7 @@ class MasterController extends Controller {
                 $parentEmail = $colLVal;
                 $classNameRaw = $colMVal;
             } else {
-                if (isset($classMap[strtolower($colLVal)])) {
+                if (isset($classMap[strtolower($colLVal)]) || isset($normalizedClassMap[$normalize($colLVal)])) {
                     $classNameRaw = $colLVal;
                 } else {
                     $parentEmail = $colLVal;
@@ -2585,14 +2626,18 @@ class MasterController extends Controller {
                 $errors[] = "Format email orang tua '{$parentEmail}' tidak valid.";
             }
 
-            // 6. Validasi Kelas
+            // 6. Validasi Kelas dengan normalisasi toleran
             $targetClassId = null;
             $targetClassName = $classNameRaw;
             if (!empty($classNameRaw)) {
                 $classKey = strtolower($classNameRaw);
+                $normClassKey = $normalize($classNameRaw);
                 if (isset($classMap[$classKey])) {
                     $targetClassId = $classMap[$classKey]['id'];
                     $targetClassName = $classMap[$classKey]['name'];
+                } elseif (isset($normalizedClassMap[$normClassKey])) {
+                    $targetClassId = $normalizedClassMap[$normClassKey]['id'];
+                    $targetClassName = $normalizedClassMap[$normClassKey]['name'];
                 } else {
                     $errors[] = "Kelas '{$classNameRaw}' tidak ditemukan di unit ini.";
                 }
@@ -2630,7 +2675,7 @@ class MasterController extends Controller {
             ];
         }
 
-        echo json_encode([
+        $responseData = [
             'success'       => true,
             'unit_id'       => $unitId,
             'unit_name'     => $unitName,
@@ -2638,7 +2683,17 @@ class MasterController extends Controller {
             'valid_count'   => $validCount,
             'invalid_count' => $invalidCount,
             'rows'          => $parsedRows
-        ]);
+        ];
+
+        if ($isAjax) {
+            header('Content-Type: application/json; charset=utf-8');
+            echo json_encode($responseData);
+            return;
+        } else {
+            $_SESSION['pending_student_import'] = $responseData;
+            $this->redirect(Auth::baseUrl() . "/students?unit_id={$unitId}");
+            return;
+        }
     }
 
     // --- KONFIRMASI SIMPAN DATA SISWA HASIL VERIFIKASI ---
