@@ -54,7 +54,7 @@ if (!$isYayasanOfficer && !empty($currentUnit['logo_path'])) {
             <select name="academic_year_id" id="taSelectDesktop" class="header-select" onchange="this.form.submit()">
                 <?php foreach ($globalAcademicYears as $ta): ?>
                     <option value="<?= $ta['id'] ?>" <?= ((int)$ta['id'] === $currentTaId) ? 'selected' : '' ?>>
-                        <?= SecurityHelper::escape($ta['name']) ?> - <?= SecurityHelper::escape($ta['semester']) ?> <?= $ta['is_active'] ? '★' : '(Arsip)' ?>
+                        <?= SecurityHelper::escape($ta['name']) ?> (Sem. <?= SecurityHelper::escape($ta['semester']) ?>) <?= $ta['is_active'] ? '★ (Aktif)' : '(Arsip)' ?>
                     </option>
                 <?php endforeach; ?>
             </select>
@@ -180,7 +180,7 @@ if (!$isYayasanOfficer && !empty($currentUnit['logo_path'])) {
             <select name="academic_year_id" class="mobile-ctx-select" onchange="this.form.submit()">
                 <?php foreach ($globalAcademicYears as $ta): ?>
                     <option value="<?= $ta['id'] ?>" <?= ((int)$ta['id'] === $currentTaId) ? 'selected' : '' ?>>
-                        <?= SecurityHelper::escape($ta['name']) ?> <?= SecurityHelper::escape($ta['semester']) ?> <?= $ta['is_active'] ? '★' : '' ?>
+                        <?= SecurityHelper::escape($ta['name']) ?> (Sem. <?= SecurityHelper::escape($ta['semester']) ?>) <?= $ta['is_active'] ? '★' : '' ?>
                     </option>
                 <?php endforeach; ?>
             </select>

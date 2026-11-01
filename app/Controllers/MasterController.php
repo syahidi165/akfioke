@@ -243,6 +243,14 @@ class MasterController extends Controller {
         $semester = trim($_POST['semester'] ?? 'Ganjil');
 
         if (!empty($name)) {
+            // Dalam Opsi B: 1 Tahun Ajaran menaungi Ganjil & Genap dalam 1 entitas TA
+            $exists = Database::fetch("SELECT id, semester FROM academic_years WHERE name = ?", [$name]);
+            if ($exists) {
+                $this->setFlash('danger', "Tahun Ajaran {$name} sudah terdaftar. Dalam struktur Opsi B, 1 Tahun Ajaran terdiri dari 2 Semester. Anda dapat menggunakan tombol 'Alihkan Semester' pada tahun ajaran yang sedang aktif.");
+                $this->redirect(Auth::baseUrl() . '/master/academic-years');
+                return;
+            }
+
             Database::execute("INSERT INTO academic_years (name, semester, is_active) VALUES (?, ?, 0)", [$name, $semester]);
             $newId = Database::lastInsertId();
             
@@ -255,8 +263,44 @@ class MasterController extends Controller {
                 );
             }
             AuditLog::log('CREATE_ACADEMIC_YEAR', 'academic_years', $newId, null, ['name' => $name, 'semester' => $semester]);
-            $this->setFlash('success', 'Tahun ajaran baru diajukan. Menunggu persetujuan seluruh operator unit.');
+            $this->setFlash('success', "Tahun ajaran baru {$name} berhasil diajukan untuk 1 tahun penuh. Menunggu persetujuan seluruh operator unit.");
         }
+        $this->redirect(Auth::baseUrl() . '/master/academic-years');
+    }
+
+    public function switchSemester(): void {
+        $this->requireRole('operator_yayasan');
+        $taId = (int)($_POST['ta_id'] ?? 0);
+        $targetSemester = trim($_POST['target_semester'] ?? 'Genap');
+
+        if (!in_array($targetSemester, ['Ganjil', 'Genap'], true)) {
+            $this->setFlash('danger', 'Pilihan semester tidak valid.');
+            $this->redirect(Auth::baseUrl() . '/master/academic-years');
+            return;
+        }
+
+        $ta = Database::fetch("SELECT * FROM academic_years WHERE id = ?", [$taId]);
+        if (!$ta) {
+            $this->setFlash('danger', 'Tahun ajaran tidak ditemukan.');
+            $this->redirect(Auth::baseUrl() . '/master/academic-years');
+            return;
+        }
+
+        Database::execute(
+            "UPDATE academic_years SET semester = ?, updated_at = NOW() WHERE id = ?",
+            [$targetSemester, $taId]
+        );
+
+        // Update session Auth
+        Auth::setAcademicYear($taId);
+
+        AuditLog::log('SWITCH_SEMESTER_TA', 'academic_years', $taId, $ta, [
+            'previous_semester' => $ta['semester'],
+            'new_semester'      => $targetSemester
+        ]);
+
+        $semDesc = ($targetSemester === 'Ganjil') ? 'Semester 1 (Ganjil: Juli - Desember)' : 'Semester 2 (Genap: Januari - Juni)';
+        $this->setFlash('success', "Sub-Semester aktif untuk Tahun Ajaran {$ta['name']} berhasil dialihkan ke {$semDesc}. Seluruh data tahunan (AKFI Guru, Pegawai, Matriks 12 Bulan) tetap tersimpan utuh di Tahun Ajaran ini.");
         $this->redirect(Auth::baseUrl() . '/master/academic-years');
     }
 

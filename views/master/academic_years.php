@@ -235,17 +235,22 @@ foreach ($approvals as $ap) {
     </div>
     <div class="card-body" style="padding: 18px 20px;">
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px;">
-            <!-- Kolom 1: Periode & Semester -->
+            <!-- Kolom 1: Periode & Semester (Struktur Opsi B: 1 TA = 2 Semester) -->
             <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px 16px;">
                 <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px;">
-                    <span style="font-size: 0.75rem; text-transform: uppercase; font-weight: 700; color: #64748b; letter-spacing: 0.5px;">Periode Akademik</span>
+                    <span style="font-size: 0.75rem; text-transform: uppercase; font-weight: 700; color: #64748b; letter-spacing: 0.5px;">Tahun Ajaran (1 TA Penuh)</span>
                     <span style="font-size: 1.1rem; color: #0d9488;"><i class="fa-solid fa-calendar-check"></i></span>
                 </div>
                 <div style="font-size: 1.35rem; font-weight: 800; color: #0f172a; line-height: 1.2;">
-                    <?= SecurityHelper::escape($activeTa['name'] ?? Auth::academicYearName() ?? '-') ?>
+                    <?= SecurityHelper::escape($activeTa['name'] ?? Auth::academicYearOnlyName()) ?>
                 </div>
-                <div style="font-size: 0.8125rem; color: #0d9488; font-weight: 600; margin-top: 4px;">
-                    Semester <?= SecurityHelper::escape($activeTa['semester'] ?? 'Ganjil') ?>
+                <div style="font-size: 0.8125rem; color: #0d9488; font-weight: 700; margin-top: 4px;">
+                    <i class="fa-solid fa-calendar-days"></i> Siklus 1 Tahun: Juli s.d. Juni
+                </div>
+                <div style="margin-top: 6px;">
+                    <span class="badge <?= ($activeTa['semester'] ?? 'Ganjil') === 'Ganjil' ? 'badge-primary' : 'badge-info' ?>" style="font-size: 0.75rem; padding: 4px 8px; font-weight: 600;">
+                        <i class="fa-solid fa-clock"></i> Sub-Semester: <?= ($activeTa['semester'] ?? 'Ganjil') === 'Ganjil' ? '1 (Ganjil: Jul - Des)' : '2 (Genap: Jan - Jun)' ?>
+                    </span>
                 </div>
             </div>
 
@@ -291,6 +296,32 @@ foreach ($approvals as $ap) {
                 </div>
             </div>
         </div>
+
+        <?php if ($isOperatorYayasan && $activeTa): ?>
+            <!-- Card Pengalihan Sub-Semester Cepat (Khusus Operator Yayasan) -->
+            <div style="margin-top: 16px; padding: 12px 18px; background: #ffffff; border: 1px solid #bfdbfe; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <div style="width: 38px; height: 38px; border-radius: 8px; background: #eff6ff; color: #2563eb; display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0;">
+                        <i class="fa-solid fa-arrows-split-up-and-left"></i>
+                    </div>
+                    <div>
+                        <strong style="color: #1e3a8a; font-size: 13px;">Pengalihan Sub-Semester (Struktur Opsi B: 1 TA = 2 Semester)</strong>
+                        <div style="font-size: 11.5px; color: #475569; margin-top: 2px;">
+                            Saat ini berjalan: <strong>Semester <?= SecurityHelper::escape($activeTa['semester']) ?> (<?= $activeTa['semester'] === 'Ganjil' ? 'Juli - Desember' : 'Januari - Juni' ?>)</strong>.
+                            Pengalihan semester <u>tidak mereset penempatan kelas</u> dan seluruh akumulasi AKFI tahunan tetap tersimpan utuh di Tahun Ajaran ini.
+                        </div>
+                    </div>
+                </div>
+                <form method="POST" action="<?= $baseUrl ?>/master/academic-years/switch-semester" onsubmit="return confirm('Alihkan semester aktif Tahun Ajaran <?= SecurityHelper::escape($activeTa['name']) ?> ke Semester <?= $activeTa['semester'] === 'Ganjil' ? '2 (Genap: Jan - Jun)' : '1 (Ganjil: Jul - Des)' ?>?\n\nCatatan Opsi B: Seluruh data akumulasi AKFI guru, matriks 12 bulan, dan pegawai tetap tersimpan utuh di tahun ajaran ini.')">
+                    <?= CSRF::inputField() ?>
+                    <input type="hidden" name="ta_id" value="<?= (int)$activeTa['id'] ?>">
+                    <input type="hidden" name="target_semester" value="<?= $activeTa['semester'] === 'Ganjil' ? 'Genap' : 'Ganjil' ?>">
+                    <button type="submit" class="btn btn-primary" style="display: inline-flex; align-items: center; gap: 8px; background: #2563eb; border-color: #2563eb; font-weight: 600; font-size: 12.5px; padding: 8px 14px;">
+                        <i class="fa-solid fa-arrow-right-arrow-left"></i> Alihkan ke Semester <?= $activeTa['semester'] === 'Ganjil' ? '2 (Genap: Jan-Jun)' : '1 (Ganjil: Jul-Des)' ?>
+                    </button>
+                </form>
+            </div>
+        <?php endif; ?>
     </div>
 </div>
 <?php endif; ?>
@@ -322,12 +353,20 @@ foreach ($approvals as $ap) {
                             <tr>
                                 <td>
                                     <strong style="color: var(--text-main, #0f172a); font-size: 0.95rem;"><?= SecurityHelper::escape($ta['name']) ?></strong>
-                                    <div style="font-size: 0.75rem; color: var(--text-muted, #64748b);">
+                                    <div style="font-size: 0.75rem; color: #0d9488; font-weight: 600;">
+                                        <i class="fa-solid fa-calendar-day"></i> 1 TA (Juli – Juni)
+                                    </div>
+                                    <div style="font-size: 0.72rem; color: var(--text-muted, #64748b);">
                                         Target: <?= (int)($ta['target_workdays'] ?? 264) ?> Hari Kerja | <?= (int)($ta['target_kajian'] ?? 48) ?> Kajian
                                     </div>
                                 </td>
                                 <td style="text-align: center;">
-                                    <span class="badge badge-secondary"><?= SecurityHelper::escape($ta['semester']) ?></span>
+                                    <span class="badge <?= $ta['semester'] === 'Ganjil' ? 'badge-primary' : 'badge-info' ?>" style="font-size: 11px; padding: 3px 6px;">
+                                        Sem. <?= SecurityHelper::escape($ta['semester']) ?>
+                                    </span>
+                                    <div style="font-size: 9.5px; color: #64748b; margin-top: 2px;">
+                                        <?= $ta['semester'] === 'Ganjil' ? 'Jul - Des' : 'Jan - Jun' ?>
+                                    </div>
                                 </td>
                                 <td>
                                     <?php if ($ta['is_active']): ?>
@@ -539,24 +578,20 @@ foreach ($approvals as $ap) {
             </div>
             <div class="modal-body">
                 <div class="form-group" style="margin-bottom: 16px;">
-                    <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Tahun Ajaran <span style="color: #ef4444;">*</span></label>
-                    <input type="text" name="name" class="form-control" required placeholder="Contoh: 2025/2026">
+                    <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Tahun Ajaran (1 TA Penuh) <span style="color: #ef4444;">*</span></label>
+                    <input type="text" name="name" class="form-control" required placeholder="Contoh: 2028/2029">
+                    <small style="color: #64748b; font-size: 11px;">Mencakup 1 tahun ajaran penuh (Siklus Juli s.d. Juni).</small>
                 </div>
                 <div class="form-group" style="margin-bottom: 16px;">
-                    <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Semester <span style="color: #ef4444;">*</span></label>
+                    <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Semester Awal Pembukaan <span style="color: #ef4444;">*</span></label>
                     <select name="semester" class="form-control" required>
-                        <option value="Ganjil">Semester Ganjil</option>
-                        <option value="Genap">Semester Genap</option>
+                        <option value="Ganjil" selected>Semester 1 (Ganjil: Juli - Desember)</option>
+                        <option value="Genap">Semester 2 (Genap: Januari - Juni)</option>
                     </select>
                 </div>
                 <div class="alert alert-info" style="font-size: 0.8125rem; line-height: 1.4; background: #f0f9ff; border: 1px solid #bae6fd; padding: 12px; border-radius: 6px; color: #0369a1;">
-                    <?php 
-                    $uCount = count($units ?? []);
-                    $uNames = !empty($units) ? implode(', ', array_map(function($u) {
-                        return preg_replace('/ Islam Al Kahfi Batam| ALKAHFI ISLAMIC SCHOOL/i', '', $u['name']);
-                    }, $units)) : 'seluruh unit';
-                    ?>
-                    <i class="fa-solid fa-circle-info"></i> Pengajuan ini otomatis mengirim permintaan persetujuan ke seluruh <strong><?= $uCount ?> satuan unit sekolah</strong> (<?= SecurityHelper::escape($uNames) ?>).
+                    <div style="font-weight: 700; margin-bottom: 4px;"><i class="fa-solid fa-circle-info"></i> Ketentuan Struktur Opsi B (1 TA = 2 Semester):</div>
+                    Satu Tahun Ajaran menaungi Semester 1 dan 2 sekaligus. Ketika beralih ke Semester Genap, data tahunan (AKFI Guru &amp; Pegawai) tidak ter-reset. Pengajuan Tahun Ajaran Baru ini otomatis mengirim permintaan persetujuan ke seluruh <strong><?= count($units ?? []) ?> satuan unit sekolah</strong>.
                 </div>
             </div>
             <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 10px;">

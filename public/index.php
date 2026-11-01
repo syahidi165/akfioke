@@ -69,6 +69,7 @@ Router::post('/master/units/upload-logo', [MasterController::class, 'uploadUnitL
 Router::get('/master/academic-years', [MasterController::class, 'academicYears']);
 Router::post('/master/academic-years/save', [MasterController::class, 'saveAcademicYear']);
 Router::post('/master/academic-years/switch-active', [MasterController::class, 'switchActiveYear']);
+Router::post('/master/academic-years/switch-semester', [MasterController::class, 'switchSemester']);
 Router::post('/master/academic-years/approve', [MasterController::class, 'approveAcademicYear']);
 Router::post('/master/academic-years/archive-to-nas', [MasterController::class, 'archiveTaToNas']);
 Router::post('/master/academic-years/rehydrate-from-nas', [MasterController::class, 'rehydrateTaFromNas']);

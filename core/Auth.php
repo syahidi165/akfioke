@@ -151,8 +151,11 @@ class Auth {
         $_SESSION['active_role'] = $roles[0]; // Set primary role as initial active role
         $_SESSION['created_time'] = time();
         $_SESSION['last_activity'] = time();
+        $semDesc = ($activeTa && $activeTa['semester'] === 'Genap') ? 'Semester 2 (Genap)' : 'Semester 1 (Ganjil)';
         $_SESSION['academic_year_id'] = $activeTa ? (int)$activeTa['id'] : 1;
-        $_SESSION['academic_year_name'] = $activeTa ? "{$activeTa['name']} ({$activeTa['semester']})" : '2024/2025 (Genap)';
+        $_SESSION['academic_year_name'] = $activeTa ? "{$activeTa['name']} - {$semDesc}" : '2027/2028 - Semester 1 (Ganjil)';
+        $_SESSION['academic_year_only_name'] = $activeTa ? $activeTa['name'] : '2027/2028';
+        $_SESSION['academic_year_semester'] = $activeTa ? $activeTa['semester'] : 'Ganjil';
 
         $primaryRole = $roles[0]['name'] ?? '';
         $isYayasanRole = in_array($primaryRole, ['operator_yayasan', 'direktur_pendidikan', 'deputi_pendidikan', 'ketua_yayasan', 'pembina_yayasan'], true);
@@ -306,10 +309,35 @@ class Auth {
         $taId = self::academicYearId();
         $ta = Database::fetch("SELECT * FROM academic_years WHERE id = ?", [$taId]);
         if ($ta) {
-            $_SESSION['academic_year_name'] = "{$ta['name']} ({$ta['semester']})";
+            $semDesc = ($ta['semester'] === 'Ganjil') ? 'Semester 1 (Ganjil)' : 'Semester 2 (Genap)';
+            $_SESSION['academic_year_name'] = "{$ta['name']} - {$semDesc}";
+            $_SESSION['academic_year_only_name'] = $ta['name'];
+            $_SESSION['academic_year_semester'] = $ta['semester'];
             return $_SESSION['academic_year_name'];
         }
         return 'Tahun Ajaran Aktif';
+    }
+
+    public static function academicYearOnlyName(): string {
+        self::startSession();
+        if (!empty($_SESSION['academic_year_only_name'])) {
+            return $_SESSION['academic_year_only_name'];
+        }
+        $taId = self::academicYearId();
+        $ta = Database::fetch("SELECT name FROM academic_years WHERE id = ?", [$taId]);
+        $_SESSION['academic_year_only_name'] = $ta['name'] ?? '2027/2028';
+        return $_SESSION['academic_year_only_name'];
+    }
+
+    public static function semester(): string {
+        self::startSession();
+        if (!empty($_SESSION['academic_year_semester'])) {
+            return $_SESSION['academic_year_semester'];
+        }
+        $taId = self::academicYearId();
+        $ta = Database::fetch("SELECT semester FROM academic_years WHERE id = ?", [$taId]);
+        $_SESSION['academic_year_semester'] = $ta['semester'] ?? 'Ganjil';
+        return $_SESSION['academic_year_semester'];
     }
 
     public static function setAcademicYear(int $taId): void {
@@ -317,7 +345,10 @@ class Auth {
         $ta = Database::fetch("SELECT * FROM academic_years WHERE id = ?", [$taId]);
         if ($ta) {
             $_SESSION['academic_year_id'] = (int)$ta['id'];
-            $_SESSION['academic_year_name'] = "{$ta['name']} ({$ta['semester']})";
+            $semDesc = ($ta['semester'] === 'Ganjil') ? 'Semester 1 (Ganjil)' : 'Semester 2 (Genap)';
+            $_SESSION['academic_year_name'] = "{$ta['name']} - {$semDesc}";
+            $_SESSION['academic_year_only_name'] = $ta['name'];
+            $_SESSION['academic_year_semester'] = $ta['semester'];
         }
     }
 
