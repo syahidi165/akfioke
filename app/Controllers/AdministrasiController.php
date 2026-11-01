@@ -405,14 +405,18 @@ class AdministrasiController extends Controller {
             unset($mRef);
 
             // Matriks Bulanan (12 Bulan)
+            $eduOrder = [7 => 1, 8 => 2, 9 => 3, 10 => 4, 11 => 5, 12 => 6, 1 => 7, 2 => 8, 3 => 9, 4 => 10, 5 => 11, 6 => 12];
+            $currentOrder = $eduOrder[$currentMonth] ?? 1;
+
             $monthsSummary = [];
             for ($m = 1; $m <= 12; $m++) {
+                $mOrder = $eduOrder[$m] ?? 1;
                 $monthsSummary[$m] = [
                     'month_num'      => $m,
                     'month_name'     => $monthNames[$m],
-                    'is_past'        => ($m < $currentMonth),
-                    'is_current'     => ($m === $currentMonth),
-                    'is_future'      => ($m > $currentMonth),
+                    'is_past'        => ($mOrder < $currentOrder),
+                    'is_current'     => ($mOrder === $currentOrder),
+                    'is_future'      => ($mOrder > $currentOrder),
                     'expected_count' => count($monthlyMasterItems),
                     'uploaded_count' => 0,
                     'approved_count' => 0,
@@ -446,8 +450,9 @@ class AdministrasiController extends Controller {
 
                 for ($m = 1; $m <= 12; $m++) {
                     $up = $uploadsByJenisAndMonth[$jId][$m] ?? null;
-                    $isPast = ($m < $currentMonth);
-                    $isCurrent = ($m === $currentMonth);
+                    $mOrder = $eduOrder[$m] ?? 1;
+                    $isPast = ($mOrder < $currentOrder);
+                    $isCurrent = ($mOrder === $currentOrder);
 
                     if ($up) {
                         $monthsSummary[$m]['uploaded_count']++;
@@ -819,15 +824,18 @@ class AdministrasiController extends Controller {
             $monthlyMatrix = [];
             $pastMissingMonthly = 0;
             $currentMissingMonthly = 0;
+            $eduOrder = [7 => 1, 8 => 2, 9 => 3, 10 => 4, 11 => 5, 12 => 6, 1 => 7, 2 => 8, 3 => 9, 4 => 10, 5 => 11, 6 => 12];
+            $currentOrder = $eduOrder[$currentMonth] ?? 1;
             $monthsSummary = [];
 
             for ($m = 1; $m <= 12; $m++) {
+                $mOrder = $eduOrder[$m] ?? 1;
                 $monthsSummary[$m] = [
                     'month_num'      => $m,
                     'month_name'     => $monthNames[$m],
-                    'is_past'        => ($m < $currentMonth),
-                    'is_current'     => ($m === $currentMonth),
-                    'is_future'      => ($m > $currentMonth),
+                    'is_past'        => ($mOrder < $currentOrder),
+                    'is_current'     => ($mOrder === $currentOrder),
+                    'is_future'      => ($mOrder > $currentOrder),
                     'expected_count' => count($monthlyMasterItems),
                     'uploaded_count' => 0,
                     'approved_count' => 0,
@@ -857,9 +865,10 @@ class AdministrasiController extends Controller {
                 ];
 
                 for ($m = 1; $m <= 12; $m++) {
-                    $isPast = ($m < $currentMonth);
-                    $isCurrent = ($m === $currentMonth);
-                    $isFuture = ($m > $currentMonth);
+                    $mOrder = $eduOrder[$m] ?? 1;
+                    $isPast = ($mOrder < $currentOrder);
+                    $isCurrent = ($mOrder === $currentOrder);
+                    $isFuture = ($mOrder > $currentOrder);
                     $up = $uploadsByJenisAndMonth[$jId][$m] ?? null;
 
                     if ($up) {

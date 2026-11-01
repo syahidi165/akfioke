@@ -456,7 +456,7 @@ class MasterController extends Controller {
 
     // --- 3. PEGAWAI (GURU & KARYAWAN) & TURNOVER ---
     public function employees(): void {
-        $this->requireRole(['operator_yayasan', 'operator_sekolah', 'direktur_pendidikan']);
+        $this->requireRole(['operator_yayasan', 'operator_sekolah', 'direktur_pendidikan', 'hrd']);
         $unitFilter = (int)($_GET['unit_id'] ?? (Auth::hasRole('operator_sekolah') ? Auth::unitId() : 0));
         
         $sql = "SELECT e.*, u.name as unit_name, sup.nama as atasan_nama,
@@ -486,7 +486,7 @@ class MasterController extends Controller {
         if ($isYayasan) {
             $roles = Database::fetchAll("SELECT * FROM roles WHERE name NOT IN ('operator_yayasan', 'direktur_pendidikan', 'pembina_yayasan') ORDER BY display_name ASC");
         } else {
-            $roles = Database::fetchAll("SELECT * FROM roles WHERE name NOT IN ('operator_yayasan', 'direktur_pendidikan', 'deputi_pendidikan', 'pembina_yayasan', 'operator_sekolah', 'direktur_pengadaan', 'direktur_sarpras') ORDER BY display_name ASC");
+            $roles = Database::fetchAll("SELECT * FROM roles WHERE name NOT IN ('operator_yayasan', 'direktur_pendidikan', 'deputi_pendidikan', 'pembina_yayasan', 'operator_sekolah', 'direktur_pengadaan', 'direktur_sarpras', 'hrd') ORDER BY display_name ASC");
         }
 
         $this->view('master/employees', [
@@ -528,7 +528,7 @@ class MasterController extends Controller {
             // Cegah Operator Sekolah meng-assign peran Direktur / Yayasan
             $isYayasanUser = Auth::hasAnyRole(['operator_yayasan', 'direktur_pendidikan', 'deputi_pendidikan', 'pembina_yayasan']);
             if (!$isYayasanUser && !empty($selectedRoles) && is_array($selectedRoles)) {
-                $forbiddenRoles = ['direktur_pendidikan', 'deputi_pendidikan', 'pembina_yayasan', 'operator_yayasan', 'operator_sekolah', 'direktur_pengadaan', 'direktur_sarpras'];
+                $forbiddenRoles = ['direktur_pendidikan', 'deputi_pendidikan', 'pembina_yayasan', 'operator_yayasan', 'operator_sekolah', 'direktur_pengadaan', 'direktur_sarpras', 'hrd'];
                 $filteredRoles = [];
                 foreach ($selectedRoles as $rId) {
                     $r = Database::fetch("SELECT name FROM roles WHERE id = ?", [(int)$rId]);
@@ -882,6 +882,7 @@ class MasterController extends Controller {
             $excludedRoles[] = 'operator_sekolah';
             $excludedRoles[] = 'direktur_pengadaan';
             $excludedRoles[] = 'direktur_sarpras';
+            $excludedRoles[] = 'hrd';
         } else {
             $excludedRoles[] = 'operator_yayasan';
         }
@@ -1106,6 +1107,8 @@ class MasterController extends Controller {
             'sarpras' => $roleMap['sarpras'] ?? $fallbackRoleId,
             'direktur pengadaan' => $roleMap['direktur_pengadaan'] ?? null,
             'direktur sarpras' => $roleMap['direktur_sarpras'] ?? null,
+            'hrd' => $roleMap['hrd'] ?? null,
+            'hrd yayasan' => $roleMap['hrd'] ?? null,
         ];
 
         try {
@@ -1301,9 +1304,9 @@ class MasterController extends Controller {
             // Larang Operator Sekolah meng-assign peran yayasan/direktur melalui import
             if (!$isYayasan) {
                 $checkRoleName = $roleById[$roleId]['name'] ?? '';
-                if (in_array($checkRoleName, ['operator_yayasan', 'direktur_pendidikan', 'deputi_pendidikan', 'pembina_yayasan', 'direktur_pengadaan', 'direktur_sarpras'], true)) {
+                if (in_array($checkRoleName, ['operator_yayasan', 'direktur_pendidikan', 'deputi_pendidikan', 'pembina_yayasan', 'direktur_pengadaan', 'direktur_sarpras', 'hrd'], true)) {
                     $skipped++;
-                    $errors[] = "Baris {$row} ({$nama}): Operator Sekolah tidak diizinkan menetapkan peran '{$roleRaw}'. Hak menetapkan peran Direktur/Yayasan hanya dimiliki oleh Operator Yayasan.";
+                    $errors[] = "Baris {$row} ({$nama}): Operator Sekolah tidak diizinkan menetapkan peran '{$roleRaw}'. Hak menetapkan peran Direktur/HRD/Yayasan hanya dimiliki oleh Operator Yayasan.";
                     continue;
                 }
             }
@@ -2113,7 +2116,8 @@ class MasterController extends Controller {
             'I1' => 'Nomor Kartu Keluarga (No. KK - Username Ortu) *',
             'J1' => 'Nama Ayah / Wali *',
             'K1' => 'No. WhatsApp Orang Tua',
-            'L1' => 'Kelas Penempatan (Pilih Dropdown)'
+            'L1' => 'Email Orang Tua / Wali',
+            'M1' => 'Kelas Penempatan (Pilih Dropdown)'
         ];
 
         foreach ($headers as $cell => $text) {
@@ -2121,7 +2125,7 @@ class MasterController extends Controller {
         }
 
         // Style Headers
-        $sheet->getStyle('A1:L1')->applyFromArray([
+        $sheet->getStyle('A1:M1')->applyFromArray([
             'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
             'fill' => ['fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, 'startColor' => ['rgb' => '047857']], // Dark Emerald Green
             'alignment' => ['horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER, 'vertical' => \PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER],
@@ -2154,7 +2158,8 @@ class MasterController extends Controller {
         $sheet->setCellValue('I2', '2171010101010000');
         $sheet->setCellValue('J2', 'Fauzi Rahmat');
         $sheet->setCellValue('K2', '081234567890');
-        $sheet->setCellValue('L2', $sampleClass);
+        $sheet->setCellValue('L2', 'fauzi.ortu@gmail.com');
+        $sheet->setCellValue('M2', $sampleClass);
 
         // Validation: Gender (Column F)
         $valGender = $sheet->getDataValidation('F2:F500');
@@ -2167,9 +2172,9 @@ class MasterController extends Controller {
         $valGender->setError('Pilih L (Laki-laki) atau P (Perempuan).');
         $valGender->setFormula1('"L,P"');
 
-        // Validation: Classes (Column L)
+        // Validation: Classes (Column M)
         if ($classCount > 0) {
-            $valClass = $sheet->getDataValidation('L2:L500');
+            $valClass = $sheet->getDataValidation('M2:M500');
             $valClass->setType(\PhpOffice\PhpSpreadsheet\Cell\DataValidation::TYPE_LIST);
             $valClass->setErrorStyle(\PhpOffice\PhpSpreadsheet\Cell\DataValidation::STYLE_STOP);
             $valClass->setAllowBlank(true);
@@ -2181,7 +2186,7 @@ class MasterController extends Controller {
         }
 
         // Auto width
-        foreach (range('A', 'L') as $col) {
+        foreach (range('A', 'M') as $col) {
             $sheet->getColumnDimension($col)->setAutoSize(true);
         }
 
@@ -2267,8 +2272,37 @@ class MasterController extends Controller {
             $fatherName = trim((string)$sheet->getCell("J{$row}")->getValue());
             $parentPhone = trim((string)$sheet->getCell("K{$row}")->getValue());
             
+            // Email Orang Tua (Kolom L)
+            $colLVal = trim((string)$sheet->getCell("L{$row}")->getValue());
+            $colMVal = trim((string)$sheet->getCell("M{$row}")->getValue());
+            
+            // Cek backward compatibility jika user memakai template lama (tanpa kolom Email)
+            $parentEmail = '';
+            $classNameRaw = '';
+            if (filter_var($colLVal, FILTER_VALIDATE_EMAIL)) {
+                $parentEmail = $colLVal;
+                $classNameRaw = $colMVal;
+            } elseif (!empty($colMVal)) {
+                $parentEmail = $colLVal;
+                $classNameRaw = $colMVal;
+            } else {
+                // Jika kolom M kosong dan kolom L cocok dengan nama kelas, anggap template lama
+                if (isset($classMap[strtolower($colLVal)])) {
+                    $classNameRaw = $colLVal;
+                } else {
+                    $parentEmail = $colLVal;
+                    $classNameRaw = $colMVal;
+                }
+            }
+
+            // Validasi format email jika diisi
+            if (!empty($parentEmail) && !filter_var($parentEmail, FILTER_VALIDATE_EMAIL)) {
+                $skipped++;
+                $errors[] = "Baris {$row} ({$nama}): Format email orang tua '{$parentEmail}' tidak valid.";
+                continue;
+            }
+            
             // Kelas Penempatan - Validasi tegas untuk copas yang tidak ada di dropdown kelas
-            $classNameRaw = trim((string)$sheet->getCell("L{$row}")->getValue());
             $className = strtolower($classNameRaw);
             if (!empty($className)) {
                 if (!isset($classMap[$className])) {
@@ -2295,28 +2329,41 @@ class MasterController extends Controller {
                 $noKk = 'KK-' . $nis;
             }
 
-            $parentUser = Database::fetch("SELECT id FROM users WHERE username = ?", [$noKk]);
+            $parentUser = Database::fetch("SELECT id, email FROM users WHERE username = ?", [$noKk]);
             if (!$parentUser) {
                 $pHash = password_hash('password123', PASSWORD_DEFAULT);
                 $pName = !empty($fatherName) ? $fatherName : ('Orang Tua ' . $nama);
                 Database::execute(
-                    "INSERT INTO users (username, password_hash, full_name, phone, unit_id, is_active, force_change_password)
-                     VALUES (?, ?, ?, ?, ?, 1, 0)",
-                    [$noKk, $pHash, $pName, $parentPhone ?: null, $unitId]
+                    "INSERT INTO users (username, password_hash, full_name, email, phone, unit_id, is_active, force_change_password)
+                     VALUES (?, ?, ?, ?, ?, ?, 1, 0)",
+                    [$noKk, $pHash, $pName, $parentEmail ?: null, $parentPhone ?: null, $unitId]
                 );
                 $parentUserId = (int)Database::lastInsertId();
                 Database::execute("INSERT IGNORE INTO user_roles (user_id, role_id, is_primary) VALUES (?, ?, 1)", [$parentUserId, $parentRoleId]);
             } else {
                 $parentUserId = (int)$parentUser['id'];
+                $updateUserSql = "UPDATE users SET ";
+                $updateUserParams = [];
+                $updates = [];
                 if (!empty($parentPhone)) {
-                    Database::execute("UPDATE users SET phone = ? WHERE id = ? AND (phone IS NULL OR phone = '')", [$parentPhone, $parentUserId]);
+                    $updates[] = "phone = COALESCE(NULLIF(phone, ''), ?)";
+                    $updateUserParams[] = $parentPhone;
+                }
+                if (!empty($parentEmail)) {
+                    $updates[] = "email = COALESCE(NULLIF(email, ''), ?)";
+                    $updateUserParams[] = $parentEmail;
+                }
+                if (!empty($updates)) {
+                    $updateUserSql .= implode(', ', $updates) . " WHERE id = ?";
+                    $updateUserParams[] = $parentUserId;
+                    Database::execute($updateUserSql, $updateUserParams);
                 }
             }
 
             Database::execute(
-                "INSERT INTO students (unit_id, parent_user_id, nis, nisn, nik, no_kk, nama, gender, birthplace, birthdate, father_name, parent_phone, status)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Aktif')",
-                [$unitId, $parentUserId, $nis, $nisn ?: null, $nik ?: null, $noKk, $nama, $gender, $birthplace ?: null, $birthdate, $fatherName ?: null, $parentPhone ?: null]
+                "INSERT INTO students (unit_id, parent_user_id, nis, nisn, nik, no_kk, nama, gender, birthplace, birthdate, father_name, parent_phone, parent_email, status)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Aktif')",
+                [$unitId, $parentUserId, $nis, $nisn ?: null, $nik ?: null, $noKk, $nama, $gender, $birthplace ?: null, $birthdate, $fatherName ?: null, $parentPhone ?: null, $parentEmail ?: null]
             );
             $newStudentId = (int)Database::lastInsertId();
 
@@ -2971,7 +3018,7 @@ class MasterController extends Controller {
 
         // Jangan tampilkan akun yayasan ke Operator Sekolah
         if (!$isYayasan) {
-            $query .= "AND r.name NOT IN ('operator_yayasan', 'direktur_pendidikan', 'deputi_pendidikan', 'pembina_yayasan', 'direktur_pengadaan', 'direktur_sarpras') ";
+            $query .= "AND r.name NOT IN ('operator_yayasan', 'direktur_pendidikan', 'deputi_pendidikan', 'pembina_yayasan', 'direktur_pengadaan', 'direktur_sarpras', 'hrd') ";
         }
 
         $query .= "GROUP BY u.id, u.username, u.full_name, u.email, u.phone, u.unit_id, u.is_active, u.last_login_at, e.id, e.level_posisi, e.nipy, u_unit.name, e_unit.name, e.unit_id ORDER BY actual_unit_id ASC, u.full_name ASC";
@@ -2981,7 +3028,7 @@ class MasterController extends Controller {
         if ($isYayasan) {
             $roles = Database::fetchAll("SELECT * FROM roles WHERE name NOT IN ('operator_yayasan', 'direktur_pendidikan', 'pembina_yayasan') ORDER BY display_name ASC");
         } else {
-            $roles = Database::fetchAll("SELECT * FROM roles WHERE name NOT IN ('operator_yayasan', 'direktur_pendidikan', 'deputi_pendidikan', 'pembina_yayasan', 'operator_sekolah', 'direktur_pengadaan', 'direktur_sarpras') ORDER BY display_name ASC");
+            $roles = Database::fetchAll("SELECT * FROM roles WHERE name NOT IN ('operator_yayasan', 'direktur_pendidikan', 'deputi_pendidikan', 'pembina_yayasan', 'operator_sekolah', 'direktur_pengadaan', 'direktur_sarpras', 'hrd') ORDER BY display_name ASC");
         }
 
         // Ambil daftar pegawai yang sudah ada untuk pembuatan akun tanpa input nama baru
@@ -3379,7 +3426,7 @@ class MasterController extends Controller {
             if (isset($_POST['roles']) && is_array($_POST['roles'])) {
                 $forbiddenRoles = $isYayasan 
                     ? ['direktur_pendidikan', 'pembina_yayasan'] 
-                    : ['direktur_pendidikan', 'deputi_pendidikan', 'pembina_yayasan', 'operator_yayasan', 'operator_sekolah', 'direktur_pengadaan', 'direktur_sarpras'];
+                    : ['direktur_pendidikan', 'deputi_pendidikan', 'pembina_yayasan', 'operator_yayasan', 'operator_sekolah', 'direktur_pengadaan', 'direktur_sarpras', 'hrd'];
 
                 $selectedRoles = $_POST['roles'];
                 $validRoleIds = [];

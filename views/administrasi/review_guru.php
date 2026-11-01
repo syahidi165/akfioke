@@ -298,7 +298,8 @@ $unitName = $unit['name'] ?? 'Unit Sekolah';
                             <div style="display: grid; grid-template-columns: repeat(12, 1fr); gap: 2px; text-align: center;">
                                 <?php 
                                 $mSummary = $t['months_summary'] ?? [];
-                                for ($m = 1; $m <= 12; $m++):
+                                $eduMonths = [7, 8, 9, 10, 11, 12, 1, 2, 3, 4, 5, 6];
+                                foreach ($eduMonths as $m):
                                     $st = $mSummary[$m]['status'] ?? 'upcoming';
                                     $mName = $mSummary[$m]['month_name'] ?? $m;
                                     $mTitle = "Bulan {$mName}: " . ($mSummary[$m]['uploaded_count'] ?? 0) . "/" . ($mSummary[$m]['expected_count'] ?? 0) . " berkas";
@@ -322,7 +323,7 @@ $unitName = $unit['name'] ?? 'Unit Sekolah';
                                     <div style="font-size: 9px; font-weight: 700; padding: 3px 0; border-radius: 4px; background: <?= $bg ?>; color: <?= $color ?>; border: <?= $border ?>;" title="<?= SecurityHelper::escape($mTitle) ?>">
                                         <?= $mName ?>
                                     </div>
-                                <?php endfor; ?>
+                                <?php endforeach; ?>
                             </div>
                         </div>
                     <?php endif; ?>
@@ -487,7 +488,7 @@ $unitName = $unit['name'] ?? 'Unit Sekolah';
                 </div>
             </div>
 
-            <!-- TAB 3: RIWAYAT BULANAN (12 BULAN: JAN - DES) -->
+            <!-- TAB 3: RIWAYAT BULANAN (12 BULAN: JULI - JUNI) -->
             <div id="detailTabMonthly" class="modal-tab-content">
                 <!-- Status Banner Kepatuhan Bulanan -->
                 <div id="monthlyAlertBanner" style="margin-bottom: 16px;"></div>
@@ -528,18 +529,18 @@ $unitName = $unit['name'] ?? 'Unit Sekolah';
                             <tr style="background: #f1f5f9;">
                                 <th style="width: 30px; text-align: center;">No</th>
                                 <th style="min-width: 170px;">Jenis Dokumen Bulanan</th>
-                                <th style="text-align: center; width: 48px;">Jan</th>
-                                <th style="text-align: center; width: 48px;">Feb</th>
-                                <th style="text-align: center; width: 48px;">Mar</th>
-                                <th style="text-align: center; width: 48px;">Apr</th>
-                                <th style="text-align: center; width: 48px;">Mei</th>
-                                <th style="text-align: center; width: 48px;">Jun</th>
                                 <th style="text-align: center; width: 48px;">Jul</th>
                                 <th style="text-align: center; width: 48px;">Agu</th>
                                 <th style="text-align: center; width: 48px;">Sep</th>
                                 <th style="text-align: center; width: 48px;">Okt</th>
                                 <th style="text-align: center; width: 48px;">Nov</th>
                                 <th style="text-align: center; width: 48px;">Des</th>
+                                <th style="text-align: center; width: 48px;">Jan</th>
+                                <th style="text-align: center; width: 48px;">Feb</th>
+                                <th style="text-align: center; width: 48px;">Mar</th>
+                                <th style="text-align: center; width: 48px;">Apr</th>
+                                <th style="text-align: center; width: 48px;">Mei</th>
+                                <th style="text-align: center; width: 48px;">Jun</th>
                             </tr>
                         </thead>
                         <tbody id="modalMonthlyTableBody">
@@ -1453,7 +1454,8 @@ function populateMonthlyTable(matrix, monthsSummary, pastMissing, currentMissing
             </td>
         `;
 
-        for (let m = 1; m <= 12; m++) {
+        const eduMonths = [7, 8, 9, 10, 11, 12, 1, 2, 3, 4, 5, 6];
+        for (let m of eduMonths) {
             const mData = row.months[m] || {};
             const state = mData.state || 'upcoming';
             const up = mData.upload;

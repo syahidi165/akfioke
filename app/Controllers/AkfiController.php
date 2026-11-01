@@ -135,7 +135,7 @@ class AkfiController extends Controller {
 
     // --- 2. PENILAIAN BAWAHAN (SUPERIOR DASHBOARD & FORM) ---
     public function penilaianBawahan(): void {
-        $this->requireRole(['kepala_sekolah', 'waka_kurikulum', 'waka_kesiswaan', 'deputi_pendidikan', 'direktur_pendidikan', 'tata_usaha']);
+        $this->requireRole(['kepala_sekolah', 'waka_kurikulum', 'waka_kesiswaan', 'deputi_pendidikan', 'direktur_pendidikan', 'hrd', 'tata_usaha']);
         $unitId = Auth::unitId();
         $taId = Auth::academicYearId();
         $role = Auth::activeRoleName();
@@ -187,7 +187,7 @@ class AkfiController extends Controller {
                        AND e.level_posisi NOT LIKE '%Direktur%' ";
             $params[] = $unitId;
             $params[] = $unitId;
-        } elseif ($role === 'deputi_pendidikan' || $role === 'direktur_pendidikan') {
+        } elseif ($role === 'deputi_pendidikan' || $role === 'direktur_pendidikan' || $role === 'hrd') {
             $query .= "AND e.is_deleted = 0 ";
             if (!empty($_GET['unit_id'])) {
                 $query .= "AND a.unit_id = ? AND e.unit_id = ? ";
@@ -196,12 +196,38 @@ class AkfiController extends Controller {
             }
         }
 
-        $query .= "ORDER BY FIELD(a.status, 'Diajukan', 'Draft', 'Disetujui_Atasan', 'Final'), e.nama ASC";
+        $sortSikap = trim($_GET['sort_sikap'] ?? '');
+        $filterStatus = trim($_GET['status'] ?? '');
+        $search = trim($_GET['q'] ?? '');
+
+        if ($filterStatus !== '') {
+            $query .= "AND a.status = ? ";
+            $params[] = $filterStatus;
+        }
+
+        if ($search !== '') {
+            $query .= "AND (e.nama LIKE ? OR e.nipy LIKE ? OR e.position LIKE ?) ";
+            $params[] = "%{$search}%";
+            $params[] = "%{$search}%";
+            $params[] = "%{$search}%";
+        }
+
+        if ($sortSikap === 'best' || $sortSikap === 'desc') {
+            $query .= "ORDER BY a.sikap_score DESC, e.nama ASC";
+        } elseif ($sortSikap === 'lowest' || $sortSikap === 'asc') {
+            $query .= "ORDER BY a.sikap_score ASC, e.nama ASC";
+        } else {
+            $query .= "ORDER BY FIELD(a.status, 'Diajukan', 'Draft', 'Disetujui_Atasan', 'Final'), e.nama ASC";
+        }
+
         $assessments = Database::fetchAll($query, $params);
 
         $this->view('akfi/penilaian_bawahan', [
-            'pageTitle'   => 'Daftar Penilaian AKFI Bawahan',
-            'assessments' => $assessments
+            'pageTitle'    => 'Daftar Penilaian AKFI Bawahan',
+            'assessments'  => $assessments,
+            'sortSikap'    => $sortSikap,
+            'filterStatus' => $filterStatus,
+            'search'       => $search
         ]);
     }
 
@@ -396,49 +422,60 @@ class AkfiController extends Controller {
         $this->redirect(Auth::baseUrl() . '/akfi/penilaian-bawahan');
     }
 
-    // --- 3. APPROVAL HR / DIREKTUR PENDIDIKAN ---
+    // --- 3. APPROVAL HR / DIREKTUR PENDIDIKAN / HRD YAYASAN ---
     public function approvalHr(): void {
-        $this->requireRole(['direktur_pendidikan', 'deputi_pendidikan']);
+        $this->requireRole(['direktur_pendidikan', 'deputi_pendidikan', 'hrd', 'operator_yayasan']);
         $taId = Auth::academicYearId();
 
         $assessments = Database::fetchAll(
-            "SELECT a.*, e.nama, e.nipy, e.position, u.name as unit_name, t.position_name, sup.full_name as superior_name 
+            "SELECT a.*, e.nama, e.nipy, e.position, u.name as unit_name, t.position_name, t.position_code,
+                    sup.full_name as superior_name, nsup.full_name as next_superior_name, hr.full_name as hr_name 
              FROM akfi_assessments a 
              JOIN employees e ON a.employee_id = e.id 
              JOIN units u ON a.unit_id = u.id 
              JOIN akfi_templates t ON a.template_id = t.id 
              LEFT JOIN users sup ON a.superior_signed_by = sup.id 
+             LEFT JOIN users nsup ON a.next_superior_signed_by = nsup.id 
+             LEFT JOIN users hr ON a.hr_signed_by = hr.id 
              WHERE a.academic_year_id = ? 
              ORDER BY FIELD(a.status, 'Disetujui_Atasan', 'Final', 'Diajukan', 'Draft'), e.nama ASC",
             [$taId]
         );
 
         $this->view('akfi/approval_hr', [
-            'pageTitle'   => 'Verifikasi & Pengesahan Akhir AKFI (Direktur Pendidikan)',
+            'pageTitle'   => 'Verifikasi & Pengesahan Akhir AKFI (HRD & Pimpinan Yayasan)',
             'assessments' => $assessments
         ]);
     }
 
     public function hrSign(): void {
-        $this->requireRole(['direktur_pendidikan', 'deputi_pendidikan']);
+        $this->requireRole(['direktur_pendidikan', 'deputi_pendidikan', 'hrd', 'operator_yayasan']);
         $id = (int)($_POST['id'] ?? 0);
         $userId = Auth::id();
+        $role = Auth::activeRoleName();
 
-        Database::execute(
-            "UPDATE akfi_assessments SET hr_signed_by = ?, hr_signed_at = NOW(), status = 'Final' WHERE id = ?",
-            [$userId, $id]
-        );
+        if ($role === 'deputi_pendidikan') {
+            Database::execute(
+                "UPDATE akfi_assessments SET next_superior_signed_by = ?, next_superior_signed_at = NOW() WHERE id = ?",
+                [$userId, $id]
+            );
+        } else {
+            Database::execute(
+                "UPDATE akfi_assessments SET hr_signed_by = ?, hr_signed_at = NOW(), status = 'Final' WHERE id = ?",
+                [$userId, $id]
+            );
+        }
 
         $assessment = Database::fetch("SELECT * FROM akfi_assessments WHERE id = ?", [$id]);
         if ($assessment) {
             $emp = Database::fetch("SELECT user_id FROM employees WHERE id = ?", [$assessment['employee_id']]);
             if ($emp && $emp['user_id']) {
-                Notification::send((int)$emp['user_id'], 'Rapor Kinerja AKFI Telah Disahkan', 'Rapor Kinerja AKFI Anda telah disahkan secara resmi oleh Direktur Pendidikan.', 'success', '/akfi/pribadi');
+                Notification::send((int)$emp['user_id'], 'Rapor Kinerja AKFI Telah Disahkan', 'Rapor Kinerja AKFI Anda telah disahkan secara resmi oleh HRD / Pimpinan Yayasan.', 'success', '/akfi/pribadi');
             }
         }
 
-        AuditLog::log('HR_SIGN_AKFI', 'akfi_assessments', $id, null, ['status' => 'Final']);
-        $this->setFlash('success', 'Rapor AKFI berhasil disahkan secara resmi oleh Direktur Pendidikan.');
+        AuditLog::log('HR_SIGN_AKFI', 'akfi_assessments', $id, null, ['status' => 'Final', 'signed_by_role' => $role]);
+        $this->setFlash('success', 'Rapor AKFI berhasil disahkan secara resmi.');
         $this->redirect(Auth::baseUrl() . '/akfi/approval-hr');
     }
 
@@ -693,7 +730,7 @@ class AkfiController extends Controller {
 
     // --- 6. REKAP YAYASAN & EXPORT XLSX ---
     public function rekapYayasan(): void {
-        $this->requireRole(['direktur_pendidikan', 'deputi_pendidikan', 'operator_yayasan', 'pembina_yayasan']);
+        $this->requireRole(['direktur_pendidikan', 'deputi_pendidikan', 'hrd', 'operator_yayasan', 'pembina_yayasan']);
         $taId = Auth::academicYearId();
 
         // 1. Rekapitulasi per Satuan Pendidikan (Unit)
@@ -792,7 +829,7 @@ class AkfiController extends Controller {
     }
 
     public function exportXlsx(): void {
-        $this->requireRole(['direktur_pendidikan', 'deputi_pendidikan', 'operator_yayasan', 'pembina_yayasan', 'kepala_sekolah']);
+        $this->requireRole(['direktur_pendidikan', 'deputi_pendidikan', 'hrd', 'operator_yayasan', 'pembina_yayasan', 'kepala_sekolah']);
         $taId = Auth::academicYearId();
         $unitId = Auth::unitId();
         $role = Auth::activeRoleName();
@@ -830,17 +867,21 @@ class AkfiController extends Controller {
         $assessmentId = (int)$id;
 
         $assessment = Database::fetch(
-            "SELECT a.*, e.nama, e.nipy, e.position, NULL as emp_sig, 
+            "SELECT a.*, e.nama, e.nipy, e.position, e.signature_path as emp_sig_path, u_emp.signature_path as user_emp_sig_path,
                     u.name as unit_name, u.code as unit_code, u.logo_path, u.kop_title, u.kop_subtitle, u.address, u.phone, u.email,
-                    t.position_name, t.bobot_kinerja, t.bobot_sikap, t.bobot_absensi,
+                    t.position_name, t.position_code, t.bobot_kinerja, t.bobot_sikap, t.bobot_absensi,
                     ay.name as academic_year_name,
-                    sup.full_name as superior_name, hr.full_name as hr_name 
+                    sup.full_name as superior_name, sup.signature_path as superior_sig_path,
+                    nsup.full_name as next_superior_name, nsup.signature_path as next_superior_sig_path,
+                    hr.full_name as hr_name, hr.signature_path as hr_sig_path 
              FROM akfi_assessments a 
              JOIN employees e ON a.employee_id = e.id 
+             LEFT JOIN users u_emp ON e.user_id = u_emp.id
              JOIN units u ON a.unit_id = u.id 
              JOIN akfi_templates t ON a.template_id = t.id 
              JOIN academic_years ay ON a.academic_year_id = ay.id 
              LEFT JOIN users sup ON a.superior_signed_by = sup.id 
+             LEFT JOIN users nsup ON a.next_superior_signed_by = nsup.id 
              LEFT JOIN users hr ON a.hr_signed_by = hr.id 
              WHERE a.id = ?",
             [$assessmentId]
@@ -868,6 +909,102 @@ class AkfiController extends Controller {
             default => 'Kurang (E)'
         };
 
+        // Fetch official signatories fallback
+        $kepsekUnit = Database::fetch(
+            "SELECT e.nama, e.nipy, COALESCE(e.signature_path, u.signature_path) as signature_path 
+             FROM employees e 
+             LEFT JOIN users u ON e.user_id = u.id 
+             LEFT JOIN user_roles ur ON u.id = ur.user_id 
+             LEFT JOIN roles r ON ur.role_id = r.id AND r.name = 'kepala_sekolah'
+             WHERE e.unit_id = ? AND e.is_deleted = 0 
+               AND (r.id IS NOT NULL OR e.position LIKE '%Kepala Sekolah%' OR e.level_posisi LIKE '%Kepala Sekolah%' OR e.level_posisi LIKE '%Kanit%')
+             ORDER BY r.id DESC LIMIT 1",
+            [$assessment['unit_id']]
+        );
+
+        $deputiUser = Database::fetch(
+            "SELECT u.full_name, COALESCE(e.signature_path, u.signature_path) as signature_path, e.nipy 
+             FROM users u 
+             JOIN user_roles ur ON u.id = ur.user_id 
+             JOIN roles r ON ur.role_id = r.id 
+             LEFT JOIN employees e ON u.id = e.user_id 
+             WHERE r.name = 'deputi_pendidikan' 
+             LIMIT 1"
+        );
+
+        $direkturUser = Database::fetch(
+            "SELECT u.full_name, COALESCE(e.signature_path, u.signature_path) as signature_path, e.nipy 
+             FROM users u 
+             JOIN user_roles ur ON u.id = ur.user_id 
+             JOIN roles r ON ur.role_id = r.id 
+             LEFT JOIN employees e ON u.id = e.user_id 
+             WHERE r.name = 'direktur_pendidikan' 
+             LIMIT 1"
+        );
+
+        $hrdUser = Database::fetch(
+            "SELECT u.full_name, COALESCE(e.signature_path, u.signature_path) as signature_path, e.nipy 
+             FROM users u 
+             JOIN user_roles ur ON u.id = ur.user_id 
+             JOIN roles r ON ur.role_id = r.id 
+             LEFT JOIN employees e ON u.id = e.user_id 
+             WHERE r.name = 'hrd' 
+             LIMIT 1"
+        );
+
+        // Check if employee is Kepala Sekolah
+        $posCode = strtoupper($assessment['position_code'] ?? '');
+        $posName = strtoupper($assessment['position_name'] ?? '');
+        $posTitle = strtoupper($assessment['position'] ?? '');
+        $isKs = str_contains($posCode, 'KANIT') 
+             || str_contains($posName, 'KEPALA') 
+             || str_contains($posTitle, 'KEPALA SEKOLAH') 
+             || str_contains($posTitle, 'KEPSEK');
+
+        // Helper to resolve and embed base64 signature image
+        $resolveSigImage = function(?string $sigPath): string {
+            if (empty($sigPath)) return '';
+            $sigPath = '/' . ltrim($sigPath, '/');
+            $fullPath = __DIR__ . '/../../public' . $sigPath;
+            if (file_exists($fullPath) && is_file($fullPath)) {
+                $ext = strtolower(pathinfo($fullPath, PATHINFO_EXTENSION));
+                $mime = match($ext) {
+                    'jpg', 'jpeg' => 'image/jpeg',
+                    'png' => 'image/png',
+                    'webp' => 'image/webp',
+                    default => 'image/png'
+                };
+                $data = base64_encode(file_get_contents($fullPath));
+                return "<div style='height: 52px; margin: 3px 0;'><img src='data:{$mime};base64,{$data}' style='max-height: 48px; max-width: 120px; object-fit: contain;' /></div>";
+            }
+            return '';
+        };
+
+        // Helper to render signature cell box
+        $renderSigCell = function(?string $sigPath, string $headerDate, string $title, string $name, ?string $nipy = null, ?string $subtitle = null) use ($resolveSigImage): string {
+            $sigHtml = $resolveSigImage($sigPath);
+            if (empty($sigHtml)) {
+                $sigHtml = "<div style='height: 52px;'></div>";
+            }
+
+            $dateHtml = !empty($headerDate) ? "<div style='font-size: 9.5px; margin-bottom: 2px;'>" . htmlspecialchars($headerDate) . "</div>" : "<div style='font-size: 9.5px; margin-bottom: 2px;'>&nbsp;</div>";
+            $nipyText = (!empty($nipy) && $nipy !== '-') ? "<br><span style='font-size: 9px;'>NIPY. " . htmlspecialchars($nipy) . "</span>" : "";
+            $subText = !empty($subtitle) ? "<div style='font-size: 8.5px; color: #475569;'>(" . htmlspecialchars($subtitle) . ")</div>" : "";
+
+            return "
+                <td class='sig-box'>
+                    {$dateHtml}
+                    <strong>" . htmlspecialchars($title) . "</strong>
+                    {$sigHtml}
+                    <div style='border-bottom: 1px solid #1e293b; display: inline-block; padding-bottom: 1px; font-weight: bold;'>
+                        " . htmlspecialchars($name) . "
+                    </div>
+                    {$nipyText}
+                    {$subText}
+                </td>
+            ";
+        };
+
         // Render HTML for Dompdf
         $html = "
         <html>
@@ -881,8 +1018,8 @@ class AkfiController extends Controller {
                 .table-data th, .table-data td { border: 1px solid #94a3b8; padding: 5px 6px; }
                 .table-data th { background: #f1f5f9; text-align: center; font-weight: bold; }
                 .section-header { background: #e2e8f0; font-weight: bold; text-transform: uppercase; }
-                .signatures { width: 100%; margin-top: 25px; border-collapse: collapse; page-break-inside: avoid; }
-                .sig-box { width: 33.33%; text-align: center; vertical-align: top; font-size: 11px; }
+                .signatures { width: 100%; margin-top: 20px; border-collapse: collapse; page-break-inside: avoid; }
+                .sig-box { width: 25%; text-align: center; vertical-align: top; font-size: 9.5px; line-height: 1.3; padding: 0 4px; }
                 .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-weight: bold; }
                 .badge-a { background: #dcfce7; color: #15803d; }
                 .badge-b { background: #e0f2fe; color: #0369a1; }
@@ -1004,28 +1141,53 @@ class AkfiController extends Controller {
             <div style='border: 1px solid #94a3b8; padding: 8px; border-radius: 4px; margin-top: 10px;'>
                 <strong>Catatan / Rekomendasi Atasan Langsung:</strong><br>
                 <em>" . nl2br(htmlspecialchars($assessment['superior_notes'] ?: 'Kinerja memenuhi kriteria standar yayasan. Terus pertahankan kedisiplinan dan inovasi pembelajaran.')) . "</em>
-            </div>
+            </div>";
 
-            <!-- Tanda Tangan 3 Kolom -->
+        // Generate 4-Signatures Block
+        $cityDate = "Batam, " . SecurityHelper::formatTanggalIndo($assessment['superior_signed_at'] ?: date('Y-m-d'));
+        $empSig = $assessment['emp_sig_path'] ?: $assessment['user_emp_sig_path'];
+
+        $cellsHtml = "";
+        if ($isKs) {
+            // ALUR TTD KEPALA SEKOLAH:
+            // 1. KS (Self) -> 2. Deputi Direktur -> 3. Direktur Pendidikan -> 4. HRD Yayasan
+            $deputiName = $assessment['superior_name'] ?: ($deputiUser['full_name'] ?? 'Yona Melinda, B.Eng., M.Ed');
+            $deputiSig = $assessment['superior_sig_path'] ?: ($deputiUser['signature_path'] ?? null);
+
+            $direkturName = $assessment['next_superior_name'] ?: ($direkturUser['full_name'] ?? 'Dr. H. Ahmad Dahlan, M.Pd');
+            $direkturSig = $assessment['next_superior_sig_path'] ?: ($direkturUser['signature_path'] ?? null);
+
+            $hrdName = $assessment['hr_name'] ?: ($hrdUser['full_name'] ?? 'HRD Yayasan Al-Kahfi');
+            $hrdSig = $assessment['hr_sig_path'] ?: ($hrdUser['signature_path'] ?? null);
+
+            $cellsHtml .= $renderSigCell($empSig, '', 'Kepala Sekolah yang Dinilai', $assessment['nama'], $assessment['nipy'], 'Kepala Satuan Pendidikan');
+            $cellsHtml .= $renderSigCell($deputiSig, $cityDate, 'Atasan Langsung / Penilai', $deputiName, null, 'Deputi Direktur Pendidikan');
+            $cellsHtml .= $renderSigCell($direkturSig, '', 'Mengetahui', $direkturName, null, 'Direktur Pendidikan Yayasan');
+            $cellsHtml .= $renderSigCell($hrdSig, '', 'Mengesahkan', $hrdName, null, 'HRD Yayasan');
+        } else {
+            // ALUR TTD GURU / STAF:
+            // 1. Guru (Self) -> 2. Kepala Sekolah -> 3. Deputi Direktur -> 4. HRD Yayasan
+            $ksName = $assessment['superior_name'] ?: ($kepsekUnit['nama'] ?? 'Kepala Sekolah');
+            $ksNipy = $kepsekUnit['nipy'] ?? null;
+            $ksSig = $assessment['superior_sig_path'] ?: ($kepsekUnit['signature_path'] ?? null);
+
+            $deputiName = $assessment['next_superior_name'] ?: ($deputiUser['full_name'] ?? 'Yona Melinda, B.Eng., M.Ed');
+            $deputiSig = $assessment['next_superior_sig_path'] ?: ($deputiUser['signature_path'] ?? null);
+
+            $hrdName = $assessment['hr_name'] ?: ($hrdUser['full_name'] ?? 'HRD Yayasan Al-Kahfi');
+            $hrdSig = $assessment['hr_sig_path'] ?: ($hrdUser['signature_path'] ?? null);
+
+            $cellsHtml .= $renderSigCell($empSig, '', 'Pegawai yang Dinilai', $assessment['nama'], $assessment['nipy'], $assessment['position_name']);
+            $cellsHtml .= $renderSigCell($ksSig, $cityDate, 'Atasan Langsung / Penilai', $ksName, $ksNipy, 'Kepala Satuan Pendidikan');
+            $cellsHtml .= $renderSigCell($deputiSig, '', 'Menyetujui', $deputiName, null, 'Deputi Direktur Pendidikan');
+            $cellsHtml .= $renderSigCell($hrdSig, '', 'Mengesahkan', $hrdName, null, 'HRD Yayasan');
+        }
+
+        $html .= "
+            <!-- Tanda Tangan 4 Kolom (Resmi Yayasan) -->
             <table class='signatures'>
                 <tr>
-                    <td class='sig-box'>
-                        Pegawai yang Dinilai,<br><br><br><br>
-                        <strong>{$assessment['nama']}</strong><br>
-                        NIPY. {$assessment['nipy']}
-                    </td>
-                    <td class='sig-box'>
-                        Batam, " . SecurityHelper::formatTanggalIndo($assessment['superior_signed_at'] ?: date('Y-m-d')) . "<br>
-                        Atasan Langsung / Penilai,<br><br><br><br>
-                        <strong>" . ($assessment['superior_name'] ?: 'Kepala Sekolah') . "</strong><br>
-                        Kepala Satuan Pendidikan
-                    </td>
-                    <td class='sig-box'>
-                        Mengetahui & Mengesahkan,<br>
-                        <strong>Direktur Pendidikan Yayasan</strong><br><br><br><br>
-                        <strong>" . ($assessment['hr_name'] ?: 'Dr. H. Ahmad Dahlan, M.Pd') . "</strong><br>
-                        Direktur Pendidikan Yayasan
-                    </td>
+                    {$cellsHtml}
                 </tr>
             </table>
         </body>

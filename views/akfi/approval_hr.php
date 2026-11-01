@@ -1,6 +1,6 @@
 <div class="card mb-4">
     <div class="card-header d-flex justify-content-between align-items-center">
-        <span><i class="fa fa-stamp text-emerald-600 me-2"></i> Pengesahan Akhir Rapor Kinerja AKFI Pegawai (Direktur Pendidikan)</span>
+        <span><i class="fa fa-stamp text-emerald-600 me-2"></i> Pengesahan Akhir Rapor Kinerja AKFI Pegawai (HRD &amp; Pimpinan Yayasan)</span>
         <span class="badge bg-secondary"><?= count($assessments) ?> Data Terverifikasi</span>
     </div>
     <div class="card-body p-0">
@@ -12,7 +12,7 @@
                         <th>Pegawai</th>
                         <th>Unit</th>
                         <th>Posisi</th>
-                        <th>Diverifikasi Oleh</th>
+                        <th>Verifikator Atasan</th>
                         <th>Skor Akhir</th>
                         <th>Predikat</th>
                         <th>Status</th>
@@ -21,7 +21,7 @@
                 </thead>
                 <tbody>
                     <?php if (empty($assessments)): ?>
-                        <tr><td colspan="9" class="text-center py-4 text-muted">Belum ada penilaian yang diajukan untuk pengesahan HR.</td></tr>
+                        <tr><td colspan="9" class="text-center py-4 text-muted">Belum ada penilaian yang diajukan untuk pengesahan HRD Yayasan.</td></tr>
                     <?php else: ?>
                         <?php foreach ($assessments as $idx => $a): ?>
                             <tr>
@@ -32,16 +32,21 @@
                                 </td>
                                 <td><?= htmlspecialchars($a['unit_name']) ?></td>
                                 <td><?= htmlspecialchars($a['position_name']) ?></td>
-                                <td><?= htmlspecialchars($a['superior_name'] ?: 'Atasan Langsung') ?></td>
+                                <td>
+                                    <div style="font-size: 12px; font-weight: 600;"><?= htmlspecialchars($a['superior_name'] ?: 'Atasan Langsung') ?></div>
+                                    <?php if (!empty($a['hr_name'])): ?>
+                                        <div style="font-size: 11px; color: #059669;"><i class="fa fa-stamp"></i> Sah: <?= htmlspecialchars($a['hr_name']) ?></div>
+                                    <?php endif; ?>
+                                </td>
                                 <td><strong class="text-emerald-700"><?= $a['total_score'] ?></strong></td>
                                 <td>
                                     <span class="badge bg-emerald-100 text-emerald-800 fs-7"><?= $a['letter_grade'] ?></span>
                                 </td>
                                 <td>
                                     <?php if ($a['status'] === 'Final'): ?>
-                                        <span class="badge bg-success"><i class="fa fa-check-double me-1"></i> Telah Disahkan</span>
+                                        <span class="badge bg-success"><i class="fa fa-check-double me-1"></i> Disahkan HRD</span>
                                     <?php elseif ($a['status'] === 'Disetujui_Atasan'): ?>
-                                        <span class="badge bg-warning text-dark"><i class="fa fa-hourglass-half me-1"></i> Menunggu Sah HR</span>
+                                        <span class="badge bg-warning text-dark"><i class="fa fa-hourglass-half me-1"></i> Menunggu Sah HRD</span>
                                     <?php else: ?>
                                         <span class="badge bg-secondary"><?= $a['status'] ?></span>
                                     <?php endif; ?>
@@ -52,13 +57,13 @@
                                             <?= \Core\CSRF::field() ?>
                                             <input type="hidden" name="id" value="<?= $a['id'] ?>">
                                             <button type="submit" class="btn btn-sm btn-emerald" onclick="return confirm('Sahkan penilaian kinerja pegawai ini secara resmi?')">
-                                                <i class="fa fa-stamp me-1"></i> Sahkan HR
+                                                <i class="fa fa-stamp me-1"></i> Sahkan HRD
                                             </button>
                                         </form>
                                     <?php endif; ?>
 
-                                    <a href="<?= \Core\Auth::baseUrl() ?>/akfi/print-rapor/<?= $a['id'] ?>" target="_blank" class="btn btn-sm btn-outline-secondary" title="Pratinjau PDF">
-                                        <i class="fa fa-file-pdf me-1"></i> PDF
+                                    <a href="<?= \Core\Auth::baseUrl() ?>/akfi/print-rapor/<?= $a['id'] ?>" target="_blank" class="btn btn-sm btn-outline-secondary" title="Pratinjau PDF Rapor Resmi">
+                                        <i class="fa fa-file-pdf me-1"></i> Rapor PDF
                                     </a>
                                 </td>
                             </tr>

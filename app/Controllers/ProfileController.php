@@ -138,4 +138,90 @@ class ProfileController extends Controller {
         $this->setFlash('success', 'Kontak profil berhasil diperbarui.');
         $this->redirect(Auth::baseUrl() . '/profile');
     }
+
+    public function uploadSignature(): void {
+        $this->requireAuth();
+        $userId = Auth::id();
+
+        if (!isset($_FILES['signature']) || $_FILES['signature']['error'] !== UPLOAD_ERR_OK) {
+            $this->setFlash('danger', 'Berkas gambar tanda tangan tidak valid atau gagal diunggah.');
+            $this->redirect(Auth::baseUrl() . '/profile');
+            return;
+        }
+
+        $file = $_FILES['signature'];
+        $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+        $allowedExts = ['png', 'jpg', 'jpeg', 'webp'];
+
+        if (!in_array($ext, $allowedExts, true)) {
+            $this->setFlash('danger', 'Hanya berkas gambar format PNG, JPG, JPEG, atau WEBP yang diperbolehkan.');
+            $this->redirect(Auth::baseUrl() . '/profile');
+            return;
+        }
+
+        if ($file['size'] > 3 * 1024 * 1024) {
+            $this->setFlash('danger', 'Ukuran berkas tanda tangan maksimal 3 MB.');
+            $this->redirect(Auth::baseUrl() . '/profile');
+            return;
+        }
+
+        $uploadDir = __DIR__ . '/../../public/uploads/signatures';
+        if (!is_dir($uploadDir)) {
+            mkdir($uploadDir, 0755, true);
+        }
+
+        $filename = 'sig_user_' . $userId . '_' . time() . '.' . $ext;
+        $destPath = $uploadDir . '/' . $filename;
+        $dbPath = '/uploads/signatures/' . $filename;
+
+        if (!move_uploaded_file($file['tmp_name'], $destPath)) {
+            $this->setFlash('danger', 'Gagal memindahkan berkas tanda tangan ke server.');
+            $this->redirect(Auth::baseUrl() . '/profile');
+            return;
+        }
+
+        // Hapus file tanda tangan lama jika ada
+        $oldUser = Database::fetch("SELECT signature_path FROM users WHERE id = ?", [$userId]);
+        if (!empty($oldUser['signature_path'])) {
+            $oldFilePath = __DIR__ . '/../../public' . $oldUser['signature_path'];
+            if (file_exists($oldFilePath) && is_file($oldFilePath)) {
+                @unlink($oldFilePath);
+            }
+        }
+
+        Database::execute("UPDATE users SET signature_path = ?, updated_at = NOW() WHERE id = ?", [$dbPath, $userId]);
+
+        $employee = Database::fetch("SELECT id FROM employees WHERE user_id = ? AND is_deleted = 0", [$userId]);
+        if ($employee) {
+            Database::execute("UPDATE employees SET signature_path = ?, updated_at = NOW() WHERE id = ?", [$dbPath, $employee['id']]);
+        }
+
+        AuditLog::log('UPLOAD_SIGNATURE', 'users', $userId, null, ['signature_path' => $dbPath]);
+        $this->setFlash('success', 'Tanda tangan digital berhasil disimpan dan siap digunakan pada seluruh dokumen cetak resmi.');
+        $this->redirect(Auth::baseUrl() . '/profile');
+    }
+
+    public function deleteSignature(): void {
+        $this->requireAuth();
+        $userId = Auth::id();
+
+        $user = Database::fetch("SELECT signature_path FROM users WHERE id = ?", [$userId]);
+        if (!empty($user['signature_path'])) {
+            $oldFilePath = __DIR__ . '/../../public' . $user['signature_path'];
+            if (file_exists($oldFilePath) && is_file($oldFilePath)) {
+                @unlink($oldFilePath);
+            }
+        }
+
+        Database::execute("UPDATE users SET signature_path = NULL, updated_at = NOW() WHERE id = ?", [$userId]);
+
+        $employee = Database::fetch("SELECT id FROM employees WHERE user_id = ? AND is_deleted = 0", [$userId]);
+        if ($employee) {
+            Database::execute("UPDATE employees SET signature_path = NULL, updated_at = NOW() WHERE id = ?", [$employee['id']]);
+        }
+
+        AuditLog::log('DELETE_SIGNATURE', 'users', $userId);
+        $this->setFlash('success', 'Tanda tangan digital berhasil dihapus.');
+        $this->redirect(Auth::baseUrl() . '/profile');
+    }
 }

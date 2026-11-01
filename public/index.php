@@ -353,6 +353,8 @@ Router::get('/rekap/deputi', [AuditBackupController::class, 'rekapDeputi']);
 // 17. Profil Pengguna Terpadu
 Router::get('/profile', [ProfileController::class, 'index']);
 Router::post('/profile/update', [ProfileController::class, 'update']);
+Router::post('/profile/upload-signature', [ProfileController::class, 'uploadSignature']);
+Router::post('/profile/delete-signature', [ProfileController::class, 'deleteSignature']);
 
 // 18. Modul Sarpras, Inventaris, PO & Berita Acara Scrap (F30)
 Router::get('/sarpras/categories', [SarprasController::class, 'categories']);

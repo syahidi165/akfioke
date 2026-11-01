@@ -1,7 +1,9 @@
 <?php
 // views/profile/index.php
 use Core\SecurityHelper;
+use Core\CSRF;
 
+$signaturePath = $employee['signature_path'] ?? ($user['signature_path'] ?? null);
 $nipy = $employee['nipy'] ?? '-';
 $nama = $employee['nama'] ?? ($user['full_name'] ?? '-');
 $isYayasanUser = empty($unit)
@@ -191,6 +193,55 @@ if (strpos($waNumber, '0') === 0) {
                 <i class="fa-solid fa-circle-info text-info me-1"></i> Butuh mengganti password akun? 
                 <a href="<?= $baseUrl ?>/change-password" style="color: #0284c7; font-weight: 600; text-decoration: none;">Klik di sini</a>.
             </div>
+        </div>
+    </div>
+
+    <!-- TANDA TANGAN DIGITAL PEGAWAI / GURU -->
+    <div class="card" style="box-shadow: 0 2px 8px rgba(0,0,0,0.05); border: 1px solid #e2e8f0; border-radius: 12px;">
+        <div class="card-header" style="background: #f8fafc; border-bottom: 1px solid #e2e8f0; padding: 14px 18px; display: flex; justify-content: space-between; align-items: center;">
+            <h3 class="card-title" style="margin: 0; font-size: 15px; font-weight: 700; color: #0f172a; display: flex; align-items: center; gap: 8px;">
+                <i class="fa-solid fa-signature" style="color: #0284c7;"></i> Tanda Tangan Digital
+            </h3>
+            <span class="badge" style="background: <?= !empty($signaturePath) ? '#dcfce7; color: #166534;' : '#fef3c7; color: #92400e;' ?> font-size: 11px;">
+                <?= !empty($signaturePath) ? 'Aktif' : 'Belum Ada' ?>
+            </span>
+        </div>
+        <div class="card-body" style="padding: 18px; text-align: center;">
+            <?php if (!empty($signaturePath)): ?>
+                <div style="background: #ffffff; border: 1px dashed #cbd5e1; border-radius: 8px; padding: 14px; margin-bottom: 14px; display: inline-block; min-width: 220px; box-shadow: inset 0 1px 3px rgba(0,0,0,0.03);">
+                    <img src="<?= $baseUrl . SecurityHelper::escape($signaturePath) ?>" alt="Tanda Tangan Digital" style="max-height: 80px; max-width: 100%; object-fit: contain;">
+                </div>
+                <div style="font-size: 12px; color: #15803d; font-weight: 600; margin-bottom: 12px;">
+                    <i class="fa-solid fa-circle-check"></i> Tanda tangan tersimpan untuk seluruh dokumen resmi
+                </div>
+                <div style="display: flex; gap: 8px; justify-content: center;">
+                    <button type="button" class="btn btn-outline btn-sm" onclick="document.getElementById('uploadSignatureInput').click()" style="font-size: 12px;">
+                        <i class="fa-solid fa-arrows-rotate"></i> Ganti TTD
+                    </button>
+                    <form method="POST" action="<?= $baseUrl ?>/profile/delete-signature" onsubmit="return confirm('Apakah Anda yakin ingin menghapus tanda tangan digital ini?')" style="display: inline;">
+                        <?= CSRF::inputField() ?>
+                        <button type="submit" class="btn btn-outline btn-sm text-danger" style="border-color: #fca5a5; font-size: 12px; color: #dc2626;">
+                            <i class="fa-solid fa-trash-can"></i> Hapus
+                        </button>
+                    </form>
+                </div>
+            <?php else: ?>
+                <div style="width: 50px; height: 50px; border-radius: 50%; background: #f0f9ff; color: #0284c7; display: inline-flex; align-items: center; justify-content: center; font-size: 22px; margin-bottom: 10px;">
+                    <i class="fa-solid fa-file-signature"></i>
+                </div>
+                <div style="font-weight: 700; color: #334155; font-size: 14px; margin-bottom: 4px;">Belum Ada Tanda Tangan</div>
+                <p style="font-size: 12px; color: #64748b; margin-bottom: 14px; line-height: 1.4;">
+                    Unggah tanda tangan digital (latar transparan disarankan) agar otomatis tertera saat mencetak Rapor AKFI & berkas resmi lainnya.
+                </p>
+                <button type="button" class="btn btn-primary btn-sm" onclick="document.getElementById('uploadSignatureInput').click()" style="display: inline-flex; align-items: center; gap: 6px; font-size: 12px; padding: 7px 16px;">
+                    <i class="fa-solid fa-upload"></i> Unggah Tanda Tangan
+                </button>
+            <?php endif; ?>
+
+            <form id="signatureForm" method="POST" action="<?= $baseUrl ?>/profile/upload-signature" enctype="multipart/form-data" style="display: none;">
+                <?= CSRF::inputField() ?>
+                <input type="file" id="uploadSignatureInput" name="signature" accept="image/png,image/jpeg,image/webp" onchange="document.getElementById('signatureForm').submit()">
+            </form>
         </div>
     </div>
 </div>

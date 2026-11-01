@@ -66,13 +66,65 @@ foreach ($assessments as $a) {
 
 <!-- DAFTAR PEGAWAI BAWAHAN -->
 <div class="card">
-    <div class="card-header">
-        <h3 class="card-title">
-            <i class="fa-solid fa-user-check" style="color: var(--primary-light); margin-right: 8px;"></i>
-            Daftar Penilaian Kinerja AKFI Pegawai
-        </h3>
-        <span class="badge badge-secondary"><?= $totalStaff ?> Pegawai Terdaftar</span>
+    <div class="card-header" style="flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+            <h3 class="card-title" style="margin: 0;">
+                <i class="fa-solid fa-user-check" style="color: var(--primary-light); margin-right: 8px;"></i>
+                Daftar Penilaian Kinerja AKFI Pegawai
+            </h3>
+            <span class="badge badge-secondary"><?= $totalStaff ?> Pegawai</span>
+        </div>
+
+        <!-- Filter & Sort Nilai Sikap Controls -->
+        <form method="GET" action="<?= Auth::baseUrl() ?>/akfi/penilaian-bawahan" style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 0;">
+            <?php if (!empty($_GET['unit_id'])): ?>
+                <input type="hidden" name="unit_id" value="<?= (int)$_GET['unit_id'] ?>">
+            <?php endif; ?>
+
+            <!-- Input Pencarian -->
+            <div style="position: relative;">
+                <input type="text" name="q" value="<?= SecurityHelper::escape($search ?? '') ?>" placeholder="Cari nama / NIPY..." class="form-control" style="font-size: 12px; padding: 6px 10px; width: 170px; border-radius: 6px;">
+            </div>
+
+            <!-- Filter Status -->
+            <select name="status" class="form-select" style="font-size: 12px; padding: 6px 10px; border-radius: 6px; width: 140px;" onchange="this.form.submit()">
+                <option value="">Semua Status</option>
+                <option value="Diajukan" <?= ($filterStatus ?? '') === 'Diajukan' ? 'selected' : '' ?>>Siap Dinilai</option>
+                <option value="Disetujui_Atasan" <?= ($filterStatus ?? '') === 'Disetujui_Atasan' ? 'selected' : '' ?>>Disetujui KS</option>
+                <option value="Final" <?= ($filterStatus ?? '') === 'Final' ? 'selected' : '' ?>>Final HR</option>
+                <option value="Draft" <?= ($filterStatus ?? '') === 'Draft' ? 'selected' : '' ?>>Draft Mandiri</option>
+            </select>
+
+            <!-- Filter & Sort Nilai Sikap Khusus Kepsek -->
+            <select name="sort_sikap" class="form-select" style="font-size: 12px; padding: 6px 10px; border-radius: 6px; min-width: 190px; background-color: #f0fdf4; border-color: #86efac; color: #166534; font-weight: 600;" onchange="this.form.submit()">
+                <option value="">Urutan Default</option>
+                <option value="best" <?= ($sortSikap ?? '') === 'best' ? 'selected' : '' ?>>★ Nilai Sikap: Tertinggi (Terbaik)</option>
+                <option value="lowest" <?= ($sortSikap ?? '') === 'lowest' ? 'selected' : '' ?>>⚠ Nilai Sikap: Terendah</option>
+            </select>
+
+            <button type="submit" class="btn btn-sm btn-primary" style="padding: 6px 12px;">
+                <i class="fa-solid fa-filter"></i> Terapkan
+            </button>
+            <?php if (!empty($search) || !empty($filterStatus) || !empty($sortSikap)): ?>
+                <a href="<?= Auth::baseUrl() ?>/akfi/penilaian-bawahan" class="btn btn-sm btn-secondary" style="padding: 6px 10px;" title="Reset Filter">
+                    <i class="fa-solid fa-rotate-left"></i>
+                </a>
+            <?php endif; ?>
+        </form>
     </div>
+
+    <!-- Active Filter Indicator Banner -->
+    <?php if (($sortSikap ?? '') === 'best'): ?>
+        <div style="background: #f0fdf4; border-bottom: 1px solid #bbf7d0; padding: 8px 16px; font-size: 12px; color: #166534; display: flex; align-items: center; gap: 8px;">
+            <i class="fa-solid fa-arrow-down-wide-short" style="color: #16a34a;"></i>
+            <strong>Mode Filter Aktif:</strong> Menampilkan guru/pegawai dengan <u>Nilai Sikap Tertinggi (Paling Baik)</u> di urutan paling atas.
+        </div>
+    <?php elseif (($sortSikap ?? '') === 'lowest'): ?>
+        <div style="background: #fef2f2; border-bottom: 1px solid #fecaca; padding: 8px 16px; font-size: 12px; color: #991b1b; display: flex; align-items: center; gap: 8px;">
+            <i class="fa-solid fa-arrow-up-wide-short" style="color: #dc2626;"></i>
+            <strong>Mode Filter Aktif:</strong> Menampilkan guru/pegawai dengan <u>Nilai Sikap Terendah</u> di urutan atas untuk pembinaan dan tindak lanjut.
+        </div>
+    <?php endif; ?>
     <div class="table-responsive">
         <table class="table">
             <thead>
@@ -82,7 +134,11 @@ foreach ($assessments as $a) {
                     <th>Unit & Posisi</th>
                     <th style="text-align: center;">Status Pengajuan</th>
                     <th style="text-align: center;">Kinerja</th>
-                    <th style="text-align: center;">Sikap</th>
+                    <th style="text-align: center; background: #f0fdf4;">
+                        <a href="<?= Auth::baseUrl() ?>/akfi/penilaian-bawahan?sort_sikap=<?= ($sortSikap ?? '') === 'best' ? 'lowest' : 'best' ?>" style="color: #166534; text-decoration: none;" title="Klik untuk mengurutkan berdasarkan nilai sikap">
+                            Sikap <i class="fa-solid <?= ($sortSikap ?? '') === 'best' ? 'fa-arrow-down-wide-short' : (($sortSikap ?? '') === 'lowest' ? 'fa-arrow-up-wide-short' : 'fa-sort') ?>" style="font-size: 11px;"></i>
+                        </a>
+                    </th>
                     <th style="text-align: center;">Absensi</th>
                     <th style="text-align: center;">Total & Predikat</th>
                     <th style="width: 140px; text-align: center;">Aksi</th>

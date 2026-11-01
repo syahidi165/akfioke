@@ -296,7 +296,8 @@ $activeAcademicYearName = Auth::academicYearName() ?? 'Tahun Ajaran Aktif';
                             <div style="display: grid; grid-template-columns: repeat(12, 1fr); gap: 2px; text-align: center;">
                                 <?php 
                                 $mSummary = $k['months_summary'] ?? [];
-                                for ($m = 1; $m <= 12; $m++):
+                                $eduMonths = [7, 8, 9, 10, 11, 12, 1, 2, 3, 4, 5, 6];
+                                foreach ($eduMonths as $m):
                                     $st = $mSummary[$m]['status'] ?? 'upcoming';
                                     $mName = $mSummary[$m]['month_name'] ?? $m;
                                     $mTitle = "Bulan {$mName}: " . ($mSummary[$m]['uploaded_count'] ?? 0) . "/" . ($mSummary[$m]['expected_count'] ?? 0) . " berkas";
@@ -320,7 +321,7 @@ $activeAcademicYearName = Auth::academicYearName() ?? 'Tahun Ajaran Aktif';
                                     <div style="font-size: 9px; font-weight: 700; padding: 3px 0; border-radius: 4px; background: <?= $bg ?>; color: <?= $color ?>; border: <?= $border ?>;" title="<?= SecurityHelper::escape($mTitle) ?>">
                                         <?= $mName ?>
                                     </div>
-                                <?php endfor; ?>
+                                <?php endforeach; ?>
                             </div>
                         </div>
                     <?php endif; ?>
@@ -425,7 +426,7 @@ $activeAcademicYearName = Auth::academicYearName() ?? 'Tahun Ajaran Aktif';
                 <div class="card" style="margin-bottom: 16px; border: 1px solid var(--border-color); padding: 12px 16px; background: #f8fafc;">
                     <div style="font-size: 12px; color: var(--text-muted); line-height: 1.5;">
                         <strong style="color: var(--text-main);">Matriks Verifikasi Laporan Bulanan Kepala Sekolah:</strong><br>
-                        Memeriksa kedisiplinan pelaporan berkas periode bulanan (Laporan Bulanan Unit &amp; Closing Laporan Keuangan CA) untuk masing-masing bulan (Januari - Desember).
+                        Memeriksa kedisiplinan pelaporan berkas periode bulanan (Laporan Bulanan Unit &amp; Closing Laporan Keuangan CA) untuk masing-masing bulan tahun ajaran (Juli - Juni).
                     </div>
                 </div>
 
@@ -434,11 +435,14 @@ $activeAcademicYearName = Auth::academicYearName() ?? 'Tahun Ajaran Aktif';
                         <thead style="background: #f1f5f9;">
                             <tr>
                                 <th style="width: 250px; text-align: left;">Nama Dokumen Administrasi</th>
-                                <?php for ($m = 1; $m <= 12; $m++): ?>
+                                <?php 
+                                $eduMonths = [7, 8, 9, 10, 11, 12, 1, 2, 3, 4, 5, 6];
+                                $shortNames = [1=>'Jan', 2=>'Feb', 3=>'Mar', 4=>'Apr', 5=>'Mei', 6=>'Jun', 7=>'Jul', 8=>'Agu', 9=>'Sep', 10=>'Okt', 11=>'Nov', 12=>'Des'];
+                                foreach ($eduMonths as $m): ?>
                                     <th style="width: 48px; text-align: center; padding: 6px 2px;">
-                                        <?= ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'][$m-1] ?>
+                                        <?= $shortNames[$m] ?>
                                     </th>
-                                <?php endfor; ?>
+                                <?php endforeach; ?>
                             </tr>
                         </thead>
                         <tbody id="modalMonthlyMatrixBody">
@@ -1053,7 +1057,8 @@ function renderMonthlyMatrix(matrixRows, currentMonthNum) {
             </td>
         `;
 
-        for (let m = 1; m <= 12; m++) {
+        const eduMonths = [7, 8, 9, 10, 11, 12, 1, 2, 3, 4, 5, 6];
+        for (let m of eduMonths) {
             const mData = row.months[m] || {};
             const state = mData.state || 'upcoming';
             const up = mData.upload;

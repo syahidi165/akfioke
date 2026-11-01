@@ -122,7 +122,7 @@ use Core\SecurityHelper;
     });
     </script>
 
-<?php elseif ($role === 'direktur_pendidikan'): ?>
+<?php elseif ($role === 'direktur_pendidikan' || $role === 'hrd'): ?>
     <!-- DASHBOARD EKSEKUTIF DIREKTUR PENDIDIKAN YAYASAN -->
     <div class="grid-cols-4" style="margin-bottom: 24px;">
         <div class="stat-card">

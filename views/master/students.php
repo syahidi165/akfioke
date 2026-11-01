@@ -273,22 +273,24 @@ $canEdit = Auth::hasRole('operator_sekolah');
 
 <?php if ($canEdit): ?>
 <!-- Bagian Bawah: Card Impor Data Santri dari Excel -->
-<div class="card" style="margin-top: 24px; border: 1px solid var(--border-color, #e2e8f0);">
-    <div class="card-header" style="border-bottom: 1px solid var(--border-color, #e2e8f0); padding: 16px 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; background: #f8fafc;">
-        <div style="display: flex; align-items: center; gap: 10px;">
-            <i class="fa-solid fa-file-import" style="color: #0284c7; font-size: 1.1rem;"></i>
+<div class="card" style="margin-top: 24px; border: 1px solid var(--border-color, #e2e8f0); border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
+    <div class="card-header" style="border-bottom: 1px solid var(--border-color, #e2e8f0); padding: 18px 24px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; background: #f8fafc;">
+        <div style="display: flex; align-items: center; gap: 12px;">
+            <div style="width: 40px; height: 40px; border-radius: 10px; background: #e0f2fe; color: #0284c7; display: flex; align-items: center; justify-content: center; font-size: 1.2rem;">
+                <i class="fa-solid fa-file-import"></i>
+            </div>
             <div>
-                <h3 class="card-title" style="margin: 0; font-size: 1rem; color: var(--text-main, #0f172a);">
-                    Impor Massal Data Santri &amp; Akun Orang Tua dari Excel
+                <h3 class="card-title" style="margin: 0; font-size: 1.05rem; color: var(--text-main, #0f172a); font-weight: 700;">
+                    Impor Massal Data Santri &amp; Akun Orang Tua
                 </h3>
                 <span style="font-size: 0.8125rem; color: var(--text-muted, #64748b);">
-                    Unggah data santri baru secara kolektif dengan validasi format kolom otomatis
+                    Unggah data santri baru secara kolektif dengan validasi format kolom Excel otomatis
                 </span>
             </div>
         </div>
         <div>
-            <a href="<?= $baseUrl ?>/students/template?unit_id=<?= $unitId ?>" class="btn btn-secondary" style="display: inline-flex; align-items: center; gap: 6px; font-size: 0.8125rem; padding: 7px 14px;">
-                <i class="fa-solid fa-download" style="color: #0284c7;"></i> Unduh Template Excel Resmi
+            <a href="<?= $baseUrl ?>/students/template?unit_id=<?= $unitId ?>" class="btn btn-outline" style="display: inline-flex; align-items: center; gap: 8px; font-size: 0.8125rem; padding: 8px 16px; border-color: #0284c7; color: #0284c7; background: #ffffff;">
+                <i class="fa-solid fa-download"></i> Unduh Format Template Excel (.xlsx)
             </a>
         </div>
     </div>
@@ -296,57 +298,57 @@ $canEdit = Auth::hasRole('operator_sekolah');
     <div class="card-body" style="padding: 24px;">
         <!-- 3 Step Info Cards -->
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; margin-bottom: 24px;">
-            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px 16px;">
-                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
-                    <span style="display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 50%; background: #0284c7; color: #fff; font-size: 0.75rem; font-weight: 700;">1</span>
+            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 16px;">
+                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+                    <span style="display: flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 50%; background: #0284c7; color: #fff; font-size: 0.8rem; font-weight: 700;">1</span>
                     <strong style="font-size: 0.875rem; color: var(--text-main, #0f172a);">Gunakan Template Resmi</strong>
                 </div>
-                <p style="font-size: 0.8125rem; color: var(--text-muted, #64748b); margin: 0; line-height: 1.4;">
-                    Format kolom Excel sudah terintegrasi dengan dropdown kelas aktif satuan unit Anda.
+                <p style="font-size: 0.8125rem; color: var(--text-muted, #64748b); margin: 0; line-height: 1.5;">
+                    Format kolom sudah terintegrasi dropdown kelas dan kolom email orang tua untuk tagihan digital.
                 </p>
             </div>
 
-            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px 16px;">
-                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
-                    <span style="display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 50%; background: #10b981; color: #fff; font-size: 0.75rem; font-weight: 700;">2</span>
+            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 16px;">
+                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+                    <span style="display: flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 50%; background: #10b981; color: #fff; font-size: 0.8rem; font-weight: 700;">2</span>
                     <strong style="font-size: 0.875rem; color: var(--text-main, #0f172a);">Otomatisasi Akun Ortu</strong>
                 </div>
-                <p style="font-size: 0.8125rem; color: var(--text-muted, #64748b); margin: 0; line-height: 1.4;">
+                <p style="font-size: 0.8125rem; color: var(--text-muted, #64748b); margin: 0; line-height: 1.5;">
                     Kolom <strong>Nomor KK</strong> otomatis menjadi username login Orang Tua (Password default: <code>password123</code>).
                 </p>
             </div>
 
-            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px 16px;">
-                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
-                    <span style="display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 50%; background: #f59e0b; color: #fff; font-size: 0.75rem; font-weight: 700;">3</span>
+            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 16px;">
+                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+                    <span style="display: flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 50%; background: #f59e0b; color: #fff; font-size: 0.8rem; font-weight: 700;">3</span>
                     <strong style="font-size: 0.875rem; color: var(--text-main, #0f172a);">Validasi &amp; Penempatan</strong>
                 </div>
-                <p style="font-size: 0.8125rem; color: var(--text-muted, #64748b); margin: 0; line-height: 1.4;">
-                    Sistem mendeteksi duplikasi NIS/NIK dan otomatis menempatkan santri ke kelas yang valid.
+                <p style="font-size: 0.8125rem; color: var(--text-muted, #64748b); margin: 0; line-height: 1.5;">
+                    Sistem otomatis mencegah duplikasi NIS dan langsung menempatkan santri ke rombel yang sesuai.
                 </p>
             </div>
         </div>
 
         <!-- Form Upload Berkas -->
-        <form method="POST" action="<?= $baseUrl ?>/students/import" enctype="multipart/form-data" style="background: #ffffff; border: 2px dashed #cbd5e1; border-radius: 10px; padding: 24px; text-align: center;">
+        <form method="POST" action="<?= $baseUrl ?>/students/import" enctype="multipart/form-data" style="background: #f8fafc; border: 2px dashed #93c5fd; border-radius: 12px; padding: 32px 24px; text-align: center;">
             <?= CSRF::inputField() ?>
             <input type="hidden" name="unit_id" value="<?= $unitId ?>">
 
             <div style="margin-bottom: 16px;">
-                <i class="fa-solid fa-cloud-arrow-up" style="font-size: 2.5rem; color: #0284c7; opacity: 0.8; margin-bottom: 8px; display: inline-block;"></i>
-                <h4 style="margin: 0 0 4px 0; font-size: 1rem; color: var(--text-main, #0f172a);">Pilih Berkas Excel Santri (.xlsx / .xls)</h4>
-                <p style="margin: 0; font-size: 0.8125rem; color: var(--text-muted, #64748b);">Pastikan data sesuai format template resmi sebelum diunggah.</p>
+                <i class="fa-solid fa-cloud-arrow-up" style="font-size: 3rem; color: #0284c7; opacity: 0.9; margin-bottom: 10px; display: inline-block;"></i>
+                <h4 style="margin: 0 0 6px 0; font-size: 1.1rem; color: var(--text-main, #0f172a); font-weight: 700;">Pilih Berkas Excel Santri (.xlsx / .xls)</h4>
+                <p style="margin: 0; font-size: 0.8125rem; color: var(--text-muted, #64748b);">Pastikan berkas telah diisi sesuai template resmi yayasan sebelum diunggah.</p>
             </div>
 
-            <div style="max-width: 440px; margin: 0 auto 16px auto;">
-                <input type="file" name="file" class="form-control" accept=".xlsx, .xls" required style="padding: 10px; background: #f8fafc; border: 1px solid #cbd5e1;">
+            <div style="max-width: 420px; margin: 0 auto 20px auto;">
+                <input type="file" name="file" class="form-control" accept=".xlsx, .xls" required style="padding: 10px; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px;">
             </div>
 
-            <div style="display: flex; gap: 10px; justify-content: center; align-items: center;">
-                <a href="<?= $baseUrl ?>/students/template?unit_id=<?= $unitId ?>" class="btn btn-secondary" style="display: inline-flex; align-items: center; gap: 6px;">
-                    <i class="fa-solid fa-download"></i> Unduh Template
+            <div style="display: flex; gap: 12px; justify-content: center; align-items: center; flex-wrap: wrap;">
+                <a href="<?= $baseUrl ?>/students/template?unit_id=<?= $unitId ?>" class="btn btn-outline" style="display: inline-flex; align-items: center; gap: 8px; padding: 10px 20px; background: #ffffff;">
+                    <i class="fa-solid fa-download"></i> Unduh Template Excel
                 </a>
-                <button type="submit" class="btn btn-primary" style="padding: 10px 24px; font-weight: 600; display: inline-flex; align-items: center; gap: 8px;">
+                <button type="submit" class="btn btn-primary" style="padding: 10px 26px; font-weight: 600; display: inline-flex; align-items: center; gap: 8px; background: #0284c7; border-color: #0284c7;">
                     <i class="fa-solid fa-upload"></i> Unggah &amp; Impor Data Santri
                 </button>
             </div>
@@ -356,34 +358,52 @@ $canEdit = Auth::hasRole('operator_sekolah');
 
 <!-- Modal: Import Siswa Excel (Sesuai app.css modal-overlay & modal-container) -->
 <div class="modal-overlay" id="modalImportStudents">
-    <div class="modal-container" style="max-width: 520px;">
+    <div class="modal-container" style="max-width: 580px; border-radius: 12px; overflow: hidden; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);">
         <form method="POST" action="<?= $baseUrl ?>/students/import" enctype="multipart/form-data">
             <?= CSRF::inputField() ?>
             <input type="hidden" name="unit_id" value="<?= $unitId ?>">
-            <div class="modal-header">
-                <h3 class="card-title" style="display: flex; align-items: center; gap: 8px; margin: 0; font-size: 1.05rem;">
-                    <i class="fa-solid fa-file-import" style="color: #0284c7;"></i> Impor Data Santri dari Excel
+            
+            <div class="modal-header" style="background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%); color: #ffffff; padding: 18px 24px;">
+                <h3 class="card-title" style="display: flex; align-items: center; gap: 10px; margin: 0; font-size: 1.1rem; color: #ffffff;">
+                    <i class="fa-solid fa-file-excel" style="font-size: 1.25rem;"></i> Impor Massal Data Santri dari Excel
                 </h3>
-                <button type="button" class="btn btn-outline btn-sm" onclick="closeImportModal()">&times;</button>
+                <button type="button" class="btn btn-outline btn-sm" onclick="closeImportModal()" style="color: #ffffff; border-color: rgba(255,255,255,0.4); background: rgba(255,255,255,0.1); font-size: 16px; line-height: 1;">&times;</button>
             </div>
-            <div class="modal-body">
-                <div class="alert alert-info" style="margin-bottom: 16px; font-size: 0.8125rem; line-height: 1.5; background: #f0f9ff; border: 1px solid #bae6fd; padding: 14px; border-radius: 8px; color: #0369a1;">
-                    <i class="fa-solid fa-shield-halved" style="color: #0284c7; margin-right: 4px;"></i> <strong>Sistem Validasi Aman Terproteksi:</strong><br>
-                    1. Unduh template resmi melalui tautan template Excel.<br>
-                    2. Kolom <strong>Jenis Kelamin</strong> dan <strong>Kelas Penempatan</strong> dilengkapi <em>dropdown otomatis</em> yang disesuaikan dengan kelas aktif unit ini.<br>
-                    3. Kolom <strong>Nomor KK</strong> otomatis dibuatkan akun Orang Tua santri (Password default: <code>password123</code>).
+            
+            <div class="modal-body" style="padding: 24px; background: #ffffff;">
+                <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 14px 16px; margin-bottom: 20px;">
+                    <div style="font-weight: 700; color: #166534; font-size: 0.875rem; margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
+                        <i class="fa-solid fa-shield-halved" style="color: #15803d;"></i> Ketentuan Format &amp; Validasi:
+                    </div>
+                    <ul style="margin: 0; padding-left: 18px; font-size: 0.8125rem; color: #15803d; line-height: 1.5;">
+                        <li>Unduh berkas template resmi yang sudah dilengkapi dropdown kelas aktif.</li>
+                        <li>Kolom <strong>Nomor KK</strong> otomatis menjadi akun login wali santri.</li>
+                        <li>Kolom <strong>Email Orang Tua</strong> otomatis tersimpan untuk pengiriman surat tagihan SPP digital.</li>
+                    </ul>
                 </div>
-                <div class="form-group" style="margin-bottom: 16px;">
-                    <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Pilih Berkas Excel (.xlsx / .xls) <span style="color:#ef4444;">*</span></label>
-                    <input type="file" name="file" class="form-control" accept=".xlsx, .xls" required style="padding: 10px;">
+
+                <div class="form-group" style="margin-bottom: 20px;">
+                    <label class="form-label" style="font-weight: 700; font-size: 0.875rem; color: #1e293b; margin-bottom: 8px; display: block;">
+                        Pilih Berkas Excel (.xlsx / .xls) <span style="color:#ef4444;">*</span>
+                    </label>
+                    <div style="border: 2px dashed #93c5fd; border-radius: 10px; padding: 20px; text-align: center; background: #f8fafc; transition: all 0.2s ease;">
+                        <i class="fa-solid fa-cloud-arrow-up" style="font-size: 2rem; color: #0284c7; margin-bottom: 8px; display: block;"></i>
+                        <input type="file" name="file" class="form-control" accept=".xlsx, .xls" required style="padding: 8px; background: #ffffff; border: 1px solid #cbd5e1; max-width: 360px; margin: 0 auto;">
+                        <span style="font-size: 0.75rem; color: #64748b; margin-top: 6px; display: block;">Maksimal ukuran berkas 10 MB</span>
+                    </div>
                 </div>
-                <div style="font-size: 0.75rem; color: var(--text-muted, #64748b);">
-                    Belum punya template? <a href="<?= $baseUrl ?>/students/template?unit_id=<?= $unitId ?>" style="color: #0284c7; font-weight: 600; text-decoration: underline;">Klik di sini untuk mengunduh template</a>.
+
+                <div style="display: flex; justify-content: space-between; align-items: center; background: #f1f5f9; padding: 10px 14px; border-radius: 8px;">
+                    <span style="font-size: 0.8125rem; color: #475569;">Belum memiliki format terbaru?</span>
+                    <a href="<?= $baseUrl ?>/students/template?unit_id=<?= $unitId ?>" class="btn btn-outline btn-sm" style="font-size: 0.8125rem; color: #0284c7; border-color: #0284c7; background: #ffffff;">
+                        <i class="fa-solid fa-download"></i> Unduh Template
+                    </a>
                 </div>
             </div>
-            <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 10px;">
-                <button type="button" class="btn btn-outline" onclick="closeImportModal()">Batal</button>
-                <button type="submit" class="btn btn-primary" style="display: inline-flex; align-items: center; gap: 6px;">
+
+            <div class="modal-footer" style="padding: 16px 24px; background: #f8fafc; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end; gap: 10px;">
+                <button type="button" class="btn btn-outline" onclick="closeImportModal()" style="padding: 8px 18px;">Batal</button>
+                <button type="submit" class="btn btn-primary" style="padding: 8px 20px; font-weight: 600; display: inline-flex; align-items: center; gap: 8px; background: #0284c7; border-color: #0284c7;">
                     <i class="fa-solid fa-upload"></i> Unggah &amp; Impor Santri
                 </button>
             </div>

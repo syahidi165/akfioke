@@ -167,6 +167,33 @@ if (!function_exists('isNavActive')) {
                 </a>
             </div>
 
+        <?php elseif ($role === 'hrd'): ?>
+            <div class="nav-section-title">HRD YAYASAN</div>
+            <div class="nav-item">
+                <a href="<?= $baseUrl ?>/dashboard" class="nav-link <?= isNavActive('/dashboard', $currentPath) ?>">
+                    <i class="fa-solid fa-chart-pie"></i>
+                    <span class="nav-text">Dashboard HR</span>
+                </a>
+            </div>
+            <div class="nav-item">
+                <a href="<?= $baseUrl ?>/akfi/approval-hr" class="nav-link <?= isNavActive('/akfi/approval-hr', $currentPath) ?>">
+                    <i class="fa-solid fa-signature"></i>
+                    <span class="nav-text">Pengesahan Rapor AKFI</span>
+                </a>
+            </div>
+            <div class="nav-item">
+                <a href="<?= $baseUrl ?>/akfi/rekap-yayasan" class="nav-link <?= isNavActive('/akfi/rekap-yayasan', $currentPath) ?>">
+                    <i class="fa-solid fa-award"></i>
+                    <span class="nav-text">Rekap Nilai AKFI</span>
+                </a>
+            </div>
+            <div class="nav-item">
+                <a href="<?= $baseUrl ?>/employees" class="nav-link <?= isNavActive('/employees', $currentPath) ?>">
+                    <i class="fa-solid fa-user-tie"></i>
+                    <span class="nav-text">Data Pegawai</span>
+                </a>
+            </div>
+
         <?php elseif ($role === 'deputi_pendidikan'): ?>
             <div class="nav-section-title">DEPUTI DIREKTUR</div>
             <div class="nav-item">

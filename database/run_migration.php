@@ -128,4 +128,31 @@ try {
     echo "[SKIP] Role guru_tk: " . $e->getMessage() . "\n";
 }
 
+// 8. Role HRD Yayasan, Signature Path, dan 4-Pihak Tanda Tangan AKFI
+try {
+    if (!columnExists('employees', 'signature_path')) {
+        Database::execute("ALTER TABLE employees ADD COLUMN signature_path VARCHAR(255) NULL AFTER email");
+        echo "[OK] employees.signature_path ditambahkan.\n";
+    }
+    if (!columnExists('users', 'signature_path')) {
+        Database::execute("ALTER TABLE users ADD COLUMN signature_path VARCHAR(255) NULL AFTER phone");
+        echo "[OK] users.signature_path ditambahkan.\n";
+    }
+    if (!columnExists('akfi_assessments', 'employee_signed_by')) {
+        Database::execute("ALTER TABLE akfi_assessments ADD COLUMN employee_signed_by INT NULL AFTER absensi_score");
+        Database::execute("ALTER TABLE akfi_assessments ADD COLUMN employee_signed_at DATETIME NULL AFTER employee_signed_by");
+        echo "[OK] akfi_assessments.employee_signed_by ditambahkan.\n";
+    }
+    $hrdRole = Database::fetch("SELECT id FROM roles WHERE name = 'hrd'");
+    if (!$hrdRole) {
+        Database::execute(
+            "INSERT INTO roles (name, display_name, description) VALUES (?, ?, ?)",
+            ['hrd', 'HRD Yayasan', 'Human Resources Department Yayasan: verifikasi kepegawaian & pengesahan final rapor AKFI']
+        );
+        echo "[OK] Role hrd (HRD Yayasan) berhasil dibuat.\n";
+    }
+} catch (\Throwable $e) {
+    echo "[SKIP] HRD/Signature migration: " . $e->getMessage() . "\n";
+}
+
 echo "=== MIGRASI SELESAI DENGAN SUKSES! ===\n";

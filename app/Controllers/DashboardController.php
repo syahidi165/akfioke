@@ -42,7 +42,7 @@ class DashboardController extends Controller {
                  WHERE a.academic_year_id = ?",
                 [$taId]
             );
-        } elseif ($role === 'direktur_pendidikan') {
+        } elseif ($role === 'direktur_pendidikan' || $role === 'hrd') {
             $data['totalUnits'] = Database::fetch("SELECT COUNT(*) as c FROM units")['c'] ?? 5;
             $data['totalEmployees'] = Database::fetch("SELECT COUNT(*) as c FROM employees WHERE is_deleted = 0")['c'];
             $data['totalStudents'] = Database::fetch("SELECT COUNT(*) as c FROM students WHERE status = 'Aktif'")['c'];
