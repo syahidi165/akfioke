@@ -13,6 +13,31 @@ foreach ($assessments as $a) {
     elseif ($a['status'] === 'Disetujui_Atasan' || $a['status'] === 'Final') $countSelesai++;
     else $countDraft++;
 }
+
+// Helper untuk URL sorting header kolom tabel
+$buildSortUrl = function(string $col) use ($sortBy, $sortOrder, $search, $filterStatus, $filterGrade, $filterTemplate) {
+    $nextOrder = ($sortBy === $col && $sortOrder === 'desc') ? 'asc' : 'desc';
+    if ($col === 'nama') {
+        $nextOrder = ($sortBy === $col && $sortOrder === 'asc') ? 'desc' : 'asc';
+    }
+    $params = [
+        'sort_by'    => $col,
+        'sort_order' => $nextOrder
+    ];
+    if (!empty($search)) $params['q'] = $search;
+    if (!empty($filterStatus)) $params['status'] = $filterStatus;
+    if (!empty($filterGrade)) $params['grade'] = $filterGrade;
+    if (!empty($filterTemplate)) $params['template_id'] = $filterTemplate;
+    if (!empty($_GET['unit_id'])) $params['unit_id'] = $_GET['unit_id'];
+    return Auth::baseUrl() . '/akfi/penilaian-bawahan?' . http_build_query($params);
+};
+
+$getSortIcon = function(string $col) use ($sortBy, $sortOrder) {
+    if ($sortBy !== $col) return '<i class="fa-solid fa-sort" style="font-size: 10px; opacity: 0.35; margin-left: 4px;"></i>';
+    return $sortOrder === 'asc' 
+        ? '<i class="fa-solid fa-arrow-up-wide-short" style="font-size: 11px; color: #0284c7; margin-left: 4px;"></i>' 
+        : '<i class="fa-solid fa-arrow-down-wide-short" style="font-size: 11px; color: #0284c7; margin-left: 4px;"></i>';
+};
 ?>
 
 <div class="page-header">
@@ -32,7 +57,7 @@ foreach ($assessments as $a) {
         </div>
         <div>
             <div class="stat-value"><?= number_format($totalStaff) ?> <span style="font-size: 13px; font-weight: normal; color: var(--text-muted);">Pegawai</span></div>
-            <div class="stat-label">Total Bawahan</div>
+            <div class="stat-label">Total Bawahan Ditampilkan</div>
         </div>
     </div>
     <div class="stat-card">
@@ -64,7 +89,7 @@ foreach ($assessments as $a) {
     </div>
 </div>
 
-<!-- DAFTAR PEGAWAI BAWAHAN -->
+<!-- DAFTAR PEGAWAI BAWAHAN & MULTI-FILTER TOOLBAR -->
 <div class="card">
     <div class="card-header" style="flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between;">
         <div style="display: flex; align-items: center; gap: 10px;">
@@ -75,19 +100,19 @@ foreach ($assessments as $a) {
             <span class="badge badge-secondary"><?= $totalStaff ?> Pegawai</span>
         </div>
 
-        <!-- Filter & Sort Nilai Sikap Controls -->
+        <!-- Filter & Sorting Komprehensif Controls -->
         <form method="GET" action="<?= Auth::baseUrl() ?>/akfi/penilaian-bawahan" style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 0;">
             <?php if (!empty($_GET['unit_id'])): ?>
                 <input type="hidden" name="unit_id" value="<?= (int)$_GET['unit_id'] ?>">
             <?php endif; ?>
 
-            <!-- Input Pencarian -->
+            <!-- Input Pencarian Nama / NIPY -->
             <div style="position: relative;">
-                <input type="text" name="q" value="<?= SecurityHelper::escape($search ?? '') ?>" placeholder="Cari nama / NIPY..." class="form-control" style="font-size: 12px; padding: 6px 10px; width: 170px; border-radius: 6px;">
+                <input type="text" name="q" value="<?= SecurityHelper::escape($search ?? '') ?>" placeholder="Cari nama / NIPY..." class="form-control" style="font-size: 12px; padding: 6px 10px; width: 150px; border-radius: 6px;">
             </div>
 
-            <!-- Filter Status -->
-            <select name="status" class="form-select" style="font-size: 12px; padding: 6px 10px; border-radius: 6px; width: 140px;" onchange="this.form.submit()">
+            <!-- Filter Status Penilaian -->
+            <select name="status" class="form-select" style="font-size: 12px; padding: 6px 10px; border-radius: 6px; width: 130px;" onchange="this.form.submit()">
                 <option value="">Semua Status</option>
                 <option value="Diajukan" <?= ($filterStatus ?? '') === 'Diajukan' ? 'selected' : '' ?>>Siap Dinilai</option>
                 <option value="Disetujui_Atasan" <?= ($filterStatus ?? '') === 'Disetujui_Atasan' ? 'selected' : '' ?>>Disetujui KS</option>
@@ -95,52 +120,136 @@ foreach ($assessments as $a) {
                 <option value="Draft" <?= ($filterStatus ?? '') === 'Draft' ? 'selected' : '' ?>>Draft Mandiri</option>
             </select>
 
-            <!-- Filter & Sort Nilai Sikap Khusus Kepsek -->
-            <select name="sort_sikap" class="form-select" style="font-size: 12px; padding: 6px 10px; border-radius: 6px; min-width: 190px; background-color: #f0fdf4; border-color: #86efac; color: #166534; font-weight: 600;" onchange="this.form.submit()">
-                <option value="">Urutan Default</option>
-                <option value="best" <?= ($sortSikap ?? '') === 'best' ? 'selected' : '' ?>>★ Nilai Sikap: Tertinggi (Terbaik)</option>
-                <option value="lowest" <?= ($sortSikap ?? '') === 'lowest' ? 'selected' : '' ?>>⚠ Nilai Sikap: Terendah</option>
+            <!-- Filter Predikat (Grade) -->
+            <select name="grade" class="form-select" style="font-size: 12px; padding: 6px 10px; border-radius: 6px; width: 125px;" onchange="this.form.submit()">
+                <option value="">Semua Predikat</option>
+                <option value="A" <?= ($filterGrade ?? '') === 'A' ? 'selected' : '' ?>>Predikat A (Amat Baik)</option>
+                <option value="B" <?= ($filterGrade ?? '') === 'B' ? 'selected' : '' ?>>Predikat B (Baik)</option>
+                <option value="C" <?= ($filterGrade ?? '') === 'C' ? 'selected' : '' ?>>Predikat C (Cukup)</option>
+                <option value="D" <?= ($filterGrade ?? '') === 'D' ? 'selected' : '' ?>>Predikat D (Sedang)</option>
+                <option value="E" <?= ($filterGrade ?? '') === 'E' ? 'selected' : '' ?>>Predikat E (Kurang)</option>
+            </select>
+
+            <!-- Filter Posisi / Rumpun Template -->
+            <?php if (!empty($templates)): ?>
+                <select name="template_id" class="form-select" style="font-size: 12px; padding: 6px 10px; border-radius: 6px; max-width: 140px;" onchange="this.form.submit()">
+                    <option value="">Semua Posisi</option>
+                    <?php foreach ($templates as $t): ?>
+                        <option value="<?= $t['id'] ?>" <?= ((int)($filterTemplate ?? 0) === (int)$t['id']) ? 'selected' : '' ?>>
+                            <?= SecurityHelper::escape($t['position_name']) ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+            <?php endif; ?>
+
+            <!-- Dropdown Filter & Urutan Lengkap (Semua Komponen Nilai) -->
+            <select name="sort_by" class="form-select" style="font-size: 12px; padding: 6px 10px; border-radius: 6px; min-width: 205px; background-color: #f8fafc; border-color: #cbd5e1; color: #0f172a; font-weight: 600;" onchange="this.form.submit()">
+                <option value="">Urutan Default (Status &amp; Total)</option>
+                <optgroup label="⭐ Skor Akhir (Total AKFI)">
+                    <option value="total" <?= (($sortBy ?? '') === 'total' && ($sortOrder ?? '') === 'desc') ? 'selected' : '' ?>>Total AKFI: Tertinggi (Terbaik)</option>
+                    <option value="total_asc" <?= (($sortBy ?? '') === 'total' && ($sortOrder ?? '') === 'asc') ? 'selected' : '' ?>>Total AKFI: Terendah</option>
+                </optgroup>
+                <optgroup label="🌱 Nilai Sikap &amp; Perilaku">
+                    <option value="sikap" <?= (($sortBy ?? '') === 'sikap' && ($sortOrder ?? '') === 'desc') ? 'selected' : '' ?>>Nilai Sikap: Tertinggi (Paling Baik)</option>
+                    <option value="sikap_asc" <?= (($sortBy ?? '') === 'sikap' && ($sortOrder ?? '') === 'asc') ? 'selected' : '' ?>>Nilai Sikap: Terendah</option>
+                </optgroup>
+                <optgroup label="💼 Nilai Kinerja (Tupoksi)">
+                    <option value="kinerja" <?= (($sortBy ?? '') === 'kinerja' && ($sortOrder ?? '') === 'desc') ? 'selected' : '' ?>>Nilai Kinerja: Tertinggi</option>
+                    <option value="kinerja_asc" <?= (($sortBy ?? '') === 'kinerja' && ($sortOrder ?? '') === 'asc') ? 'selected' : '' ?>>Nilai Kinerja: Terendah</option>
+                </optgroup>
+                <optgroup label="⏰ Nilai Absensi (Kehadiran)">
+                    <option value="absensi" <?= (($sortBy ?? '') === 'absensi' && ($sortOrder ?? '') === 'desc') ? 'selected' : '' ?>>Nilai Absensi: Tertinggi</option>
+                    <option value="absensi_asc" <?= (($sortBy ?? '') === 'absensi' && ($sortOrder ?? '') === 'asc') ? 'selected' : '' ?>>Nilai Absensi: Terendah</option>
+                </optgroup>
+                <optgroup label="👤 Nama Pegawai">
+                    <option value="nama" <?= (($sortBy ?? '') === 'nama' && ($sortOrder ?? '') === 'asc') ? 'selected' : '' ?>>Nama: A ke Z</option>
+                    <option value="nama_desc" <?= (($sortBy ?? '') === 'nama' && ($sortOrder ?? '') === 'desc') ? 'selected' : '' ?>>Nama: Z ke A</option>
+                </optgroup>
             </select>
 
             <button type="submit" class="btn btn-sm btn-primary" style="padding: 6px 12px;">
-                <i class="fa-solid fa-filter"></i> Terapkan
+                <i class="fa-solid fa-filter"></i> Filter
             </button>
-            <?php if (!empty($search) || !empty($filterStatus) || !empty($sortSikap)): ?>
-                <a href="<?= Auth::baseUrl() ?>/akfi/penilaian-bawahan" class="btn btn-sm btn-secondary" style="padding: 6px 10px;" title="Reset Filter">
-                    <i class="fa-solid fa-rotate-left"></i>
+            <?php if (!empty($search) || !empty($filterStatus) || !empty($filterGrade) || !empty($filterTemplate) || !empty($sortBy)): ?>
+                <a href="<?= Auth::baseUrl() ?>/akfi/penilaian-bawahan<?= !empty($_GET['unit_id']) ? ('?unit_id=' . (int)$_GET['unit_id']) : '' ?>" class="btn btn-sm btn-outline-danger" style="padding: 6px 10px; border-color: #cbd5e1;" title="Reset Semua Filter">
+                    <i class="fa-solid fa-rotate-left"></i> Reset
                 </a>
             <?php endif; ?>
         </form>
     </div>
 
-    <!-- Active Filter Indicator Banner -->
-    <?php if (($sortSikap ?? '') === 'best'): ?>
-        <div style="background: #f0fdf4; border-bottom: 1px solid #bbf7d0; padding: 8px 16px; font-size: 12px; color: #166534; display: flex; align-items: center; gap: 8px;">
-            <i class="fa-solid fa-arrow-down-wide-short" style="color: #16a34a;"></i>
-            <strong>Mode Filter Aktif:</strong> Menampilkan guru/pegawai dengan <u>Nilai Sikap Tertinggi (Paling Baik)</u> di urutan paling atas.
-        </div>
-    <?php elseif (($sortSikap ?? '') === 'lowest'): ?>
-        <div style="background: #fef2f2; border-bottom: 1px solid #fecaca; padding: 8px 16px; font-size: 12px; color: #991b1b; display: flex; align-items: center; gap: 8px;">
-            <i class="fa-solid fa-arrow-up-wide-short" style="color: #dc2626;"></i>
-            <strong>Mode Filter Aktif:</strong> Menampilkan guru/pegawai dengan <u>Nilai Sikap Terendah</u> di urutan atas untuk pembinaan dan tindak lanjut.
+    <!-- Active Filter & Sorting Indicator Banner -->
+    <?php if (!empty($sortBy) || !empty($filterGrade) || !empty($filterStatus) || !empty($filterTemplate) || !empty($search)): ?>
+        <div style="background: #f0fdf4; border-bottom: 1px solid #bbf7d0; padding: 10px 18px; font-size: 12px; color: #166534; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+            <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                <i class="fa-solid fa-filter-circle-check" style="color: #16a34a; font-size: 13px;"></i>
+                <strong>Filter Aktif:</strong>
+                <?php if (!empty($sortBy)): ?>
+                    <span class="badge" style="background: #dcfce7; color: #15803d; border: 1px solid #86efac;">
+                        Urutan: <?= match($sortBy) {
+                            'total'   => 'Skor Total AKFI (' . ($sortOrder === 'desc' ? 'Tertinggi/Terbaik' : 'Terendah') . ')',
+                            'sikap'   => 'Nilai Sikap (' . ($sortOrder === 'desc' ? 'Tertinggi/Paling Baik' : 'Terendah') . ')',
+                            'kinerja' => 'Nilai Kinerja (' . ($sortOrder === 'desc' ? 'Tertinggi' : 'Terendah') . ')',
+                            'absensi' => 'Nilai Absensi (' . ($sortOrder === 'desc' ? 'Tertinggi' : 'Terendah') . ')',
+                            'nama'    => 'Nama Pegawai (' . ($sortOrder === 'asc' ? 'A-Z' : 'Z-A') . ')',
+                            default   => $sortBy
+                        } ?>
+                    </span>
+                <?php endif; ?>
+                <?php if (!empty($filterGrade)): ?>
+                    <span class="badge" style="background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd;">
+                        Predikat: <?= SecurityHelper::escape($filterGrade) ?>
+                    </span>
+                <?php endif; ?>
+                <?php if (!empty($filterStatus)): ?>
+                    <span class="badge" style="background: #fef3c7; color: #92400e; border: 1px solid #fde68a;">
+                        Status: <?= SecurityHelper::escape($filterStatus) ?>
+                    </span>
+                <?php endif; ?>
+                <?php if (!empty($search)): ?>
+                    <span class="badge" style="background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1;">
+                        Cari: "<?= SecurityHelper::escape($search) ?>"
+                    </span>
+                <?php endif; ?>
+            </div>
+            <a href="<?= Auth::baseUrl() ?>/akfi/penilaian-bawahan<?= !empty($_GET['unit_id']) ? ('?unit_id=' . (int)$_GET['unit_id']) : '' ?>" style="color: #dc2626; font-weight: 600; text-decoration: underline; font-size: 11.5px;">
+                <i class="fa-solid fa-xmark"></i> Hapus Filter
+            </a>
         </div>
     <?php endif; ?>
+
     <div class="table-responsive">
         <table class="table">
             <thead>
                 <tr>
                     <th style="width: 50px; text-align: center;">No</th>
-                    <th>Pegawai</th>
-                    <th>Unit & Posisi</th>
-                    <th style="text-align: center;">Status Pengajuan</th>
-                    <th style="text-align: center;">Kinerja</th>
-                    <th style="text-align: center; background: #f0fdf4;">
-                        <a href="<?= Auth::baseUrl() ?>/akfi/penilaian-bawahan?sort_sikap=<?= ($sortSikap ?? '') === 'best' ? 'lowest' : 'best' ?>" style="color: #166534; text-decoration: none;" title="Klik untuk mengurutkan berdasarkan nilai sikap">
-                            Sikap <i class="fa-solid <?= ($sortSikap ?? '') === 'best' ? 'fa-arrow-down-wide-short' : (($sortSikap ?? '') === 'lowest' ? 'fa-arrow-up-wide-short' : 'fa-sort') ?>" style="font-size: 11px;"></i>
+                    <th style="cursor: pointer; <?= $sortBy === 'nama' ? 'background: #eff6ff;' : '' ?>">
+                        <a href="<?= $buildSortUrl('nama') ?>" style="color: inherit; text-decoration: none; display: inline-flex; align-items: center;" title="Klik untuk mengurutkan berdasarkan nama">
+                            Pegawai <?= $getSortIcon('nama') ?>
                         </a>
                     </th>
-                    <th style="text-align: center;">Absensi</th>
-                    <th style="text-align: center;">Total & Predikat</th>
+                    <th>Unit &amp; Posisi</th>
+                    <th style="text-align: center;">Status Pengajuan</th>
+                    <th style="text-align: center; cursor: pointer; <?= $sortBy === 'kinerja' ? 'background: #eff6ff;' : '' ?>">
+                        <a href="<?= $buildSortUrl('kinerja') ?>" style="color: inherit; text-decoration: none; display: inline-flex; align-items: center;" title="Klik untuk mengurutkan berdasarkan nilai kinerja">
+                            Kinerja <?= $getSortIcon('kinerja') ?>
+                        </a>
+                    </th>
+                    <th style="text-align: center; cursor: pointer; <?= $sortBy === 'sikap' ? 'background: #f0fdf4;' : '' ?>">
+                        <a href="<?= $buildSortUrl('sikap') ?>" style="color: #166534; text-decoration: none; display: inline-flex; align-items: center;" title="Klik untuk mengurutkan berdasarkan nilai sikap">
+                            Sikap <?= $getSortIcon('sikap') ?>
+                        </a>
+                    </th>
+                    <th style="text-align: center; cursor: pointer; <?= $sortBy === 'absensi' ? 'background: #eff6ff;' : '' ?>">
+                        <a href="<?= $buildSortUrl('absensi') ?>" style="color: inherit; text-decoration: none; display: inline-flex; align-items: center;" title="Klik untuk mengurutkan berdasarkan nilai absensi">
+                            Absensi <?= $getSortIcon('absensi') ?>
+                        </a>
+                    </th>
+                    <th style="text-align: center; cursor: pointer; <?= $sortBy === 'total' ? 'background: #eff6ff;' : '' ?>">
+                        <a href="<?= $buildSortUrl('total') ?>" style="color: inherit; text-decoration: none; display: inline-flex; align-items: center;" title="Klik untuk mengurutkan berdasarkan skor total akhir">
+                            Total &amp; Predikat <?= $getSortIcon('total') ?>
+                        </a>
+                    </th>
                     <th style="width: 140px; text-align: center;">Aksi</th>
                 </tr>
             </thead>
@@ -149,7 +258,7 @@ foreach ($assessments as $a) {
                     <tr>
                         <td colspan="9" style="text-align: center; padding: 40px 20px; color: var(--text-muted);">
                             <i class="fa-solid fa-users-slash" style="font-size: 32px; margin-bottom: 10px; display: block; opacity: 0.4;"></i>
-                            Belum ada pegawai bawahan yang terdaftar untuk dinilai pada tahun ajaran ini.
+                            Tidak ada data penilaian pegawai yang sesuai dengan kriteria filter saat ini.
                         </td>
                     </tr>
                 <?php else: ?>
@@ -194,16 +303,16 @@ foreach ($assessments as $a) {
                                     <span class="badge badge-secondary">Draft Mandiri</span>
                                 <?php endif; ?>
                             </td>
-                            <td style="text-align: center; font-family: monospace; font-size: 13px; font-weight: 600;">
+                            <td style="text-align: center; font-family: monospace; font-size: 13px; font-weight: 600; <?= $sortBy === 'kinerja' ? 'background: #f8fafc;' : '' ?>">
                                 <?= number_format((float)($a['kinerja_score'] ?? 0), 1) ?>
                             </td>
-                            <td style="text-align: center; font-family: monospace; font-size: 13px; font-weight: 600;">
+                            <td style="text-align: center; font-family: monospace; font-size: 13px; font-weight: 600; <?= $sortBy === 'sikap' ? 'background: #f0fdf4;' : '' ?>">
                                 <?= number_format((float)($a['sikap_score'] ?? 0), 1) ?>
                             </td>
-                            <td style="text-align: center; font-family: monospace; font-size: 13px; font-weight: 600;">
+                            <td style="text-align: center; font-family: monospace; font-size: 13px; font-weight: 600; <?= $sortBy === 'absensi' ? 'background: #f8fafc;' : '' ?>">
                                 <?= number_format((float)($a['absensi_score'] ?? 0), 1) ?>
                             </td>
-                            <td style="text-align: center;">
+                            <td style="text-align: center; <?= $sortBy === 'total' ? 'background: #eff6ff;' : '' ?>">
                                 <div style="font-weight: 700; font-size: 14px; color: var(--primary);">
                                     <?= number_format((float)($a['total_score'] ?? 0), 2) ?>
                                 </div>

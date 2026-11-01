@@ -196,8 +196,36 @@ class AkfiController extends Controller {
             }
         }
 
+        $sortByRaw = trim($_GET['sort_by'] ?? '');
+        $sortOrder = strtolower(trim($_GET['sort_order'] ?? ''));
+
+        // Parse format total_asc, sikap_desc, dll
+        if (str_ends_with($sortByRaw, '_asc')) {
+            $sortBy = substr($sortByRaw, 0, -4);
+            $sortOrder = 'asc';
+        } elseif (str_ends_with($sortByRaw, '_desc')) {
+            $sortBy = substr($sortByRaw, 0, -5);
+            $sortOrder = 'desc';
+        } else {
+            $sortBy = $sortByRaw;
+        }
+
+        // Backward compatibility for sort_sikap
         $sortSikap = trim($_GET['sort_sikap'] ?? '');
+        if (!empty($sortSikap)) {
+            $sortBy = 'sikap';
+            $sortOrder = ($sortSikap === 'lowest' || $sortSikap === 'asc') ? 'asc' : 'desc';
+        }
+
+        if (empty($sortOrder)) {
+            $sortOrder = ($sortBy === 'nama') ? 'asc' : 'desc';
+        } elseif (!in_array($sortOrder, ['asc', 'desc'], true)) {
+            $sortOrder = 'desc';
+        }
+
         $filterStatus = trim($_GET['status'] ?? '');
+        $filterGrade = trim($_GET['grade'] ?? '');
+        $filterTemplate = (int)($_GET['template_id'] ?? 0);
         $search = trim($_GET['q'] ?? '');
 
         if ($filterStatus !== '') {
@@ -205,29 +233,52 @@ class AkfiController extends Controller {
             $params[] = $filterStatus;
         }
 
+        if ($filterGrade !== '') {
+            $query .= "AND a.letter_grade = ? ";
+            $params[] = $filterGrade;
+        }
+
+        if ($filterTemplate > 0) {
+            $query .= "AND a.template_id = ? ";
+            $params[] = $filterTemplate;
+        }
+
         if ($search !== '') {
-            $query .= "AND (e.nama LIKE ? OR e.nipy LIKE ? OR e.position LIKE ?) ";
+            $query .= "AND (e.nama LIKE ? OR e.nipy LIKE ? OR e.position LIKE ? OR t.position_name LIKE ?) ";
+            $params[] = "%{$search}%";
             $params[] = "%{$search}%";
             $params[] = "%{$search}%";
             $params[] = "%{$search}%";
         }
 
-        if ($sortSikap === 'best' || $sortSikap === 'desc') {
-            $query .= "ORDER BY a.sikap_score DESC, e.nama ASC";
-        } elseif ($sortSikap === 'lowest' || $sortSikap === 'asc') {
-            $query .= "ORDER BY a.sikap_score ASC, e.nama ASC";
-        } else {
-            $query .= "ORDER BY FIELD(a.status, 'Diajukan', 'Draft', 'Disetujui_Atasan', 'Final'), e.nama ASC";
-        }
+        // Pengurutan dinamis untuk seluruh komponen nilai AKFI
+        $orderSql = match($sortBy) {
+            'total'   => "a.total_score {$sortOrder}, e.nama ASC",
+            'sikap'   => "a.sikap_score {$sortOrder}, e.nama ASC",
+            'kinerja' => "a.kinerja_score {$sortOrder}, e.nama ASC",
+            'absensi' => "a.absensi_score {$sortOrder}, e.nama ASC",
+            'nama'    => "e.nama {$sortOrder}",
+            'status'  => $sortOrder === 'asc' 
+                ? "FIELD(a.status, 'Final', 'Disetujui_Atasan', 'Diajukan', 'Draft'), e.nama ASC"
+                : "FIELD(a.status, 'Diajukan', 'Draft', 'Disetujui_Atasan', 'Final'), e.nama ASC",
+            default   => "FIELD(a.status, 'Diajukan', 'Draft', 'Disetujui_Atasan', 'Final'), a.total_score DESC, e.nama ASC"
+        };
+        $query .= "ORDER BY " . $orderSql;
 
         $assessments = Database::fetchAll($query, $params);
+        $templates = Database::fetchAll("SELECT id, position_name, position_code FROM akfi_templates ORDER BY position_name ASC");
 
         $this->view('akfi/penilaian_bawahan', [
-            'pageTitle'    => 'Daftar Penilaian AKFI Bawahan',
-            'assessments'  => $assessments,
-            'sortSikap'    => $sortSikap,
-            'filterStatus' => $filterStatus,
-            'search'       => $search
+            'pageTitle'      => 'Daftar Penilaian AKFI Bawahan',
+            'assessments'    => $assessments,
+            'templates'      => $templates,
+            'sortBy'         => $sortBy,
+            'sortOrder'      => $sortOrder,
+            'sortSikap'      => $sortSikap,
+            'filterStatus'   => $filterStatus,
+            'filterGrade'    => $filterGrade,
+            'filterTemplate' => $filterTemplate,
+            'search'         => $search
         ]);
     }
 
