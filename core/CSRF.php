@@ -17,6 +17,10 @@ class CSRF {
         return self::generateToken();
     }
 
+    public static function token(): string {
+        return self::generateToken();
+    }
+
     public static function validateToken(?string $token): bool {
         if (session_status() !== PHP_SESSION_ACTIVE) {
             session_start();

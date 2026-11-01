@@ -875,7 +875,7 @@ function commitVerifiedImport() {
     const postData = new URLSearchParams();
     postData.append('unit_id', verifyUnitId);
     postData.append('students_json', JSON.stringify(validRows));
-    postData.append('csrf_token', '<?= CSRF::token() ?>');
+    postData.append('csrf_token', '<?= CSRF::getToken() ?>');
 
     fetch('<?= $baseUrl ?>/students/confirm-import', {
         method: 'POST',
