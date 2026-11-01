@@ -2441,6 +2441,337 @@ class MasterController extends Controller {
         $this->redirect(Auth::baseUrl() . '/students');
     }
 
+    // --- VERIFIKASI PRA-IMPOR SISWA (KARTU VERIFIKASI PREVIEW) ---
+    public function verifyImportStudents(): void {
+        header('Content-Type: application/json; charset=utf-8');
+        $this->requireRole(['operator_sekolah', 'operator_yayasan']);
+        $isYayasan = Auth::hasRole('operator_yayasan');
+        $unitId = $isYayasan ? (int)($_POST['unit_id'] ?? Auth::unitId()) : Auth::unitId();
+        $taId = Auth::academicYearId();
+
+        if (!isset($_FILES['file']) || $_FILES['file']['error'] !== UPLOAD_ERR_OK) {
+            echo json_encode(['success' => false, 'message' => 'Berkas Excel tidak valid atau gagal diunggah.']);
+            return;
+        }
+
+        $tmpFile = $_FILES['file']['tmp_name'];
+        $ext = strtolower(pathinfo($_FILES['file']['name'], PATHINFO_EXTENSION));
+        if (!in_array($ext, ['xlsx', 'xls'], true)) {
+            echo json_encode(['success' => false, 'message' => 'Hanya berkas Excel dengan ekstensi .xlsx atau .xls yang diperbolehkan.']);
+            return;
+        }
+
+        // Classes map
+        $classesRaw = Database::fetchAll("SELECT id, name FROM classes WHERE unit_id = ? AND academic_year_id = ?", [$unitId, $taId]);
+        $classMap = [];
+        foreach ($classesRaw as $c) {
+            $classMap[strtolower(trim($c['name']))] = [
+                'id' => (int)$c['id'],
+                'name' => $c['name']
+            ];
+        }
+
+        // Existing students NIS in DB
+        $existingNisRaw = Database::fetchAll("SELECT nis, nama FROM students WHERE nis IS NOT NULL AND nis != ''");
+        $existingNisMap = [];
+        foreach ($existingNisRaw as $r) {
+            $existingNisMap[strtolower(trim($r['nis']))] = $r['nama'];
+        }
+
+        $unit = Database::fetch("SELECT name FROM units WHERE id = ?", [$unitId]);
+        $unitName = $unit['name'] ?? 'Satuan Unit';
+
+        try {
+            $spreadsheet = IOFactory::load($tmpFile);
+            $sheet = $spreadsheet->getActiveSheet();
+            $highestRow = $sheet->getHighestRow();
+        } catch (\Throwable $e) {
+            echo json_encode(['success' => false, 'message' => 'Gagal membaca berkas Excel: ' . $e->getMessage()]);
+            return;
+        }
+
+        $parsedRows = [];
+        $fileNisSeen = [];
+        $validCount = 0;
+        $invalidCount = 0;
+
+        for ($row = 2; $row <= $highestRow; $row++) {
+            $nama = trim((string)$sheet->getCell("B{$row}")->getValue());
+            $nis = trim((string)$sheet->getCell("C{$row}")->getValue());
+            $nisn = trim((string)$sheet->getCell("D{$row}")->getValue());
+            $nik = trim((string)$sheet->getCell("E{$row}")->getValue());
+            $genderRaw = strtoupper(trim((string)$sheet->getCell("F{$row}")->getValue()));
+            $birthplace = trim((string)$sheet->getCell("G{$row}")->getValue());
+            $birthdateRaw = trim((string)$sheet->getCell("H{$row}")->getValue());
+            $noKk = trim((string)$sheet->getCell("I{$row}")->getValue());
+            $fatherName = trim((string)$sheet->getCell("J{$row}")->getValue());
+            $parentPhone = trim((string)$sheet->getCell("K{$row}")->getValue());
+            $colLVal = trim((string)$sheet->getCell("L{$row}")->getValue());
+            $colMVal = trim((string)$sheet->getCell("M{$row}")->getValue());
+
+            // Check if empty row
+            if (empty($nama) && empty($nis) && empty($nik)) {
+                continue;
+            }
+
+            $errors = [];
+
+            // 1. Validasi Nama
+            if (empty($nama)) {
+                $errors[] = "Nama santri wajib diisi.";
+            }
+
+            // 2. Validasi NIS
+            if (empty($nis)) {
+                $errors[] = "NIS wajib diisi.";
+            } else {
+                $nisKey = strtolower($nis);
+                if (isset($fileNisSeen[$nisKey])) {
+                    $errors[] = "NIS '{$nis}' duplikat di dalam berkas Excel (baris {$fileNisSeen[$nisKey]}).";
+                } else {
+                    $fileNisSeen[$nisKey] = $row;
+                }
+
+                if (isset($existingNisMap[$nisKey])) {
+                    $errors[] = "NIS '{$nis}' sudah terdaftar untuk santri: {$existingNisMap[$nisKey]}.";
+                }
+            }
+
+            // 3. Validasi Jenis Kelamin
+            $gender = 'L';
+            if (empty($genderRaw) || !in_array($genderRaw, ['L', 'P', 'LAKI-LAKI', 'PEREMPUAN'], true)) {
+                $errors[] = "Jenis Kelamin '{$genderRaw}' tidak valid (wajib L atau P).";
+            } else {
+                $gender = str_starts_with($genderRaw, 'P') ? 'P' : 'L';
+            }
+
+            // 4. Tanggal Lahir
+            $birthdate = null;
+            if (is_numeric($birthdateRaw) && (float)$birthdateRaw > 0) {
+                try {
+                    $birthdate = date('Y-m-d', \PhpOffice\PhpSpreadsheet\Shared\Date::excelToTimestamp((float)$birthdateRaw));
+                } catch (\Throwable) {
+                    $birthdate = null;
+                }
+            } elseif (!empty($birthdateRaw)) {
+                if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $birthdateRaw)) {
+                    $birthdate = $birthdateRaw;
+                } elseif (preg_match('/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/', $birthdateRaw, $matches)) {
+                    $birthdate = sprintf('%04d-%02d-%02d', (int)$matches[3], (int)$matches[2], (int)$matches[1]);
+                } else {
+                    $errors[] = "Format tanggal lahir '{$birthdateRaw}' tidak valid.";
+                }
+            }
+
+            // 5. Email & Kelas (Backward compatibility check)
+            $parentEmail = '';
+            $classNameRaw = '';
+            if (filter_var($colLVal, FILTER_VALIDATE_EMAIL)) {
+                $parentEmail = $colLVal;
+                $classNameRaw = $colMVal;
+            } elseif (!empty($colMVal)) {
+                $parentEmail = $colLVal;
+                $classNameRaw = $colMVal;
+            } else {
+                if (isset($classMap[strtolower($colLVal)])) {
+                    $classNameRaw = $colLVal;
+                } else {
+                    $parentEmail = $colLVal;
+                    $classNameRaw = $colMVal;
+                }
+            }
+
+            if (!empty($parentEmail) && !filter_var($parentEmail, FILTER_VALIDATE_EMAIL)) {
+                $errors[] = "Format email orang tua '{$parentEmail}' tidak valid.";
+            }
+
+            // 6. Validasi Kelas
+            $targetClassId = null;
+            $targetClassName = $classNameRaw;
+            if (!empty($classNameRaw)) {
+                $classKey = strtolower($classNameRaw);
+                if (isset($classMap[$classKey])) {
+                    $targetClassId = $classMap[$classKey]['id'];
+                    $targetClassName = $classMap[$classKey]['name'];
+                } else {
+                    $errors[] = "Kelas '{$classNameRaw}' tidak ditemukan di unit ini.";
+                }
+            }
+
+            if (empty($noKk)) {
+                $noKk = !empty($nis) ? 'KK-' . $nis : 'KK-AUTO';
+            }
+
+            $isValid = empty($errors);
+            if ($isValid) {
+                $validCount++;
+            } else {
+                $invalidCount++;
+            }
+
+            $parsedRows[] = [
+                'temp_id'          => $row,
+                'row_num'          => $row,
+                'nama'             => $nama,
+                'nis'              => $nis,
+                'nisn'             => $nisn,
+                'nik'              => $nik,
+                'gender'           => $gender,
+                'birthplace'       => $birthplace,
+                'birthdate'        => $birthdate,
+                'no_kk'            => $noKk,
+                'father_name'      => $fatherName,
+                'parent_phone'     => $parentPhone,
+                'parent_email'     => $parentEmail,
+                'class_id'         => $targetClassId,
+                'class_name'       => $targetClassName,
+                'is_valid'         => $isValid,
+                'errors'           => $errors
+            ];
+        }
+
+        echo json_encode([
+            'success'       => true,
+            'unit_id'       => $unitId,
+            'unit_name'     => $unitName,
+            'total_rows'    => count($parsedRows),
+            'valid_count'   => $validCount,
+            'invalid_count' => $invalidCount,
+            'rows'          => $parsedRows
+        ]);
+    }
+
+    // --- KONFIRMASI SIMPAN DATA SISWA HASIL VERIFIKASI ---
+    public function confirmImportStudents(): void {
+        header('Content-Type: application/json; charset=utf-8');
+        $this->requireRole(['operator_sekolah', 'operator_yayasan']);
+        $isYayasan = Auth::hasRole('operator_yayasan');
+        $unitId = $isYayasan ? (int)($_POST['unit_id'] ?? Auth::unitId()) : Auth::unitId();
+        $taId = Auth::academicYearId();
+
+        $studentsJson = $_POST['students_json'] ?? '';
+        $students = json_decode($studentsJson, true);
+
+        if (!is_array($students) || empty($students)) {
+            echo json_encode(['success' => false, 'message' => 'Tidak ada data siswa valid yang dikirim untuk disimpan.']);
+            return;
+        }
+
+        $parentRole = Database::fetch("SELECT id FROM roles WHERE name = 'orang_tua'");
+        $parentRoleId = $parentRole ? (int)$parentRole['id'] : 18;
+
+        $imported = 0;
+        $skipped = 0;
+        $errors = [];
+
+        Database::beginTransaction();
+        try {
+            foreach ($students as $s) {
+                // Pastikan hanya baris valid yang disimpan
+                if (empty($s['is_valid'])) {
+                    $skipped++;
+                    continue;
+                }
+
+                $nama = trim($s['nama'] ?? '');
+                $nis = trim($s['nis'] ?? '');
+                if (empty($nama) || empty($nis)) {
+                    $skipped++;
+                    continue;
+                }
+
+                // Cek lagi ke database untuk mengantisipasi duplikasi
+                $sCheck = Database::fetch("SELECT id FROM students WHERE nis = ?", [$nis]);
+                if ($sCheck) {
+                    $skipped++;
+                    $errors[] = "NIS '{$nis}' ({$nama}) sudah terdaftar di sistem.";
+                    continue;
+                }
+
+                $nisn = trim($s['nisn'] ?? '');
+                $nik = trim($s['nik'] ?? '');
+                $gender = in_array(strtoupper($s['gender'] ?? 'L'), ['L', 'P'], true) ? strtoupper($s['gender']) : 'L';
+                $birthplace = trim($s['birthplace'] ?? '');
+                $birthdate = !empty($s['birthdate']) ? $s['birthdate'] : null;
+                $noKk = !empty($s['no_kk']) ? trim($s['no_kk']) : ('KK-' . $nis);
+                $fatherName = trim($s['father_name'] ?? '');
+                $parentPhone = trim($s['parent_phone'] ?? '');
+                $parentEmail = trim($s['parent_email'] ?? '');
+                $classId = !empty($s['class_id']) ? (int)$s['class_id'] : null;
+
+                // 1. Akun login orang tua
+                $parentUser = Database::fetch("SELECT id, email FROM users WHERE username = ?", [$noKk]);
+                if (!$parentUser) {
+                    $pHash = password_hash('password123', PASSWORD_DEFAULT);
+                    $pName = !empty($fatherName) ? $fatherName : ('Orang Tua ' . $nama);
+                    Database::execute(
+                        "INSERT INTO users (username, password_hash, full_name, email, phone, unit_id, is_active, force_change_password)
+                         VALUES (?, ?, ?, ?, ?, ?, 1, 0)",
+                        [$noKk, $pHash, $pName, $parentEmail ?: null, $parentPhone ?: null, $unitId]
+                    );
+                    $parentUserId = (int)Database::lastInsertId();
+                    Database::execute("INSERT IGNORE INTO user_roles (user_id, role_id, is_primary) VALUES (?, ?, 1)", [$parentUserId, $parentRoleId]);
+                } else {
+                    $parentUserId = (int)$parentUser['id'];
+                    $updateUserSql = "UPDATE users SET ";
+                    $updateUserParams = [];
+                    $updates = [];
+                    if (!empty($parentPhone)) {
+                        $updates[] = "phone = COALESCE(NULLIF(phone, ''), ?)";
+                        $updateUserParams[] = $parentPhone;
+                    }
+                    if (!empty($parentEmail)) {
+                        $updates[] = "email = COALESCE(NULLIF(email, ''), ?)";
+                        $updateUserParams[] = $parentEmail;
+                    }
+                    if (!empty($updates)) {
+                        $updateUserSql .= implode(', ', $updates) . " WHERE id = ?";
+                        $updateUserParams[] = $parentUserId;
+                        Database::execute($updateUserSql, $updateUserParams);
+                    }
+                }
+
+                // 2. Data Siswa
+                Database::execute(
+                    "INSERT INTO students (unit_id, parent_user_id, nis, nisn, nik, no_kk, nama, gender, birthplace, birthdate, father_name, parent_phone, parent_email, status)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Aktif')",
+                    [$unitId, $parentUserId, $nis, $nisn ?: null, $nik ?: null, $noKk, $nama, $gender, $birthplace ?: null, $birthdate, $fatherName ?: null, $parentPhone ?: null, $parentEmail ?: null]
+                );
+                $newStudentId = (int)Database::lastInsertId();
+
+                // 3. Penempatan Kelas
+                if ($classId > 0) {
+                    Database::execute(
+                        "INSERT INTO class_students (class_id, student_id, academic_year_id, status)
+                         VALUES (?, ?, ?, 'Aktif')
+                         ON DUPLICATE KEY UPDATE class_id = VALUES(class_id)",
+                        [$classId, $newStudentId, $taId]
+                    );
+                }
+
+                AuditLog::log('IMPORT_STUDENT', 'students', $newStudentId, null, [
+                    'nis' => $nis, 'no_kk' => $noKk, 'unit_id' => $unitId
+                ]);
+
+                $imported++;
+            }
+
+            Database::commit();
+        } catch (\Throwable $e) {
+            Database::rollBack();
+            echo json_encode(['success' => false, 'message' => 'Gagal menyimpan data siswa ke database: ' . $e->getMessage()]);
+            return;
+        }
+
+        $msg = "Alhamdulillah, berhasil memasukkan {$imported} data santri valid ke dalam sistem.";
+        if ($skipped > 0) {
+            $msg .= " ({$skipped} baris data bermasalah/duplikat dilewati).";
+        }
+
+        $this->setFlash('success', $msg);
+        echo json_encode(['success' => true, 'message' => $msg, 'imported' => $imported, 'skipped' => $skipped]);
+    }
+
     // --- 6. KELAS & MATA PELAJARAN ---
     public function classes(): void {
         $this->requireRole(['operator_sekolah', 'operator_yayasan']);

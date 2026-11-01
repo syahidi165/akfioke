@@ -32,6 +32,91 @@ $canEdit = Auth::hasRole('operator_sekolah');
     </div>
 </div>
 
+<!-- ============================================================== -->
+<!-- KARTU VERIFIKASI PRA-IMPOR DATA SISWA (PRATINJAU & VALIDASI)   -->
+<!-- ============================================================== -->
+<div id="verifyImportCard" class="card" style="display: none; margin-bottom: 24px; border: 2px solid #0284c7; box-shadow: 0 10px 30px rgba(2, 132, 199, 0.15); border-radius: 12px; overflow: hidden;">
+    <div class="card-header" style="background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%); color: #ffffff; padding: 18px 24px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+        <div style="display: flex; align-items: center; gap: 12px;">
+            <div style="width: 40px; height: 40px; border-radius: 10px; background: rgba(255,255,255,0.2); display: flex; align-items: center; justify-content: center; font-size: 1.25rem;">
+                <i class="fa-solid fa-clipboard-check"></i>
+            </div>
+            <div>
+                <h3 style="margin: 0; font-size: 1.15rem; color: #ffffff; font-weight: 700;">
+                    Kartu Verifikasi &amp; Pratinjau Data Santri (Pra-Impor)
+                </h3>
+                <p style="margin: 2px 0 0 0; font-size: 0.8125rem; color: #e0f2fe;">
+                    Periksa kecocokan data sebelum dimasukkan ke database. Hapus baris yang tidak sesuai agar hanya data valid yang tersimpan di sistem.
+                </p>
+            </div>
+        </div>
+        <button type="button" class="btn btn-outline btn-sm" onclick="cancelVerifyImport()" style="color: #ffffff; border-color: rgba(255,255,255,0.4); background: rgba(255,255,255,0.1); font-size: 18px; line-height: 1;" title="Tutup / Batalkan">&times;</button>
+    </div>
+
+    <!-- Ringkasan Status Validasi -->
+    <div style="padding: 16px 24px; background: #f8fafc; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px;">
+        <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+            <div style="background: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; padding: 6px 14px; font-size: 12.5px;">
+                Total Data: <strong id="vTotalCount" style="color: #0f172a;">0</strong> Santri
+            </div>
+            <div style="background: #f0fdf4; border: 1px solid #86efac; border-radius: 8px; padding: 6px 14px; font-size: 12.5px; color: #166534;">
+                <i class="fa-solid fa-circle-check" style="color: #16a34a;"></i> Siap Masuk: <strong id="vValidCount">0</strong>
+            </div>
+            <div id="vInvalidBadgeBox" style="background: #fef2f2; border: 1px solid #fca5a5; border-radius: 8px; padding: 6px 14px; font-size: 12.5px; color: #991b1b;">
+                <i class="fa-solid fa-triangle-exclamation" style="color: #dc2626;"></i> Bermasalah / Tidak Sesuai: <strong id="vInvalidCount">0</strong>
+            </div>
+        </div>
+
+        <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+            <button type="button" id="btnDropInvalid" class="btn btn-sm btn-outline-danger" onclick="dropAllInvalidRows()" style="display: inline-flex; align-items: center; gap: 6px; font-weight: 600; padding: 6px 12px; font-size: 12px;">
+                <i class="fa-solid fa-trash-can"></i> Hapus Semua Data Bermasalah
+            </button>
+            <div class="btn-group" style="display: inline-flex; border: 1px solid #cbd5e1; border-radius: 6px; overflow: hidden;">
+                <button type="button" class="btn btn-sm" id="btnFilterAll" onclick="filterVerifyRows('all')" style="padding: 4px 10px; font-size: 11.5px; background: #0284c7; color: #fff;">Semua</button>
+                <button type="button" class="btn btn-sm" id="btnFilterValid" onclick="filterVerifyRows('valid')" style="padding: 4px 10px; font-size: 11.5px; background: #fff; color: #475569;">Hanya Valid</button>
+                <button type="button" class="btn btn-sm" id="btnFilterInvalid" onclick="filterVerifyRows('invalid')" style="padding: 4px 10px; font-size: 11.5px; background: #fff; color: #475569;">Bermasalah</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tabel Baris Data Terverifikasi -->
+    <div class="table-responsive" style="max-height: 480px; overflow-y: auto;">
+        <table class="table" style="margin-bottom: 0; font-size: 12px;">
+            <thead style="position: sticky; top: 0; background: #f1f5f9; z-index: 2;">
+                <tr>
+                    <th style="width: 40px; text-align: center;">No</th>
+                    <th>Nama Santri &amp; NIS/NISN</th>
+                    <th style="width: 70px; text-align: center;">JK</th>
+                    <th>Tgl Lahir</th>
+                    <th>Orang Tua &amp; Kontak</th>
+                    <th>Kelas Penempatan</th>
+                    <th style="width: 220px; text-align: center;">Status Validasi</th>
+                    <th style="width: 90px; text-align: center;">Aksi</th>
+                </tr>
+            </thead>
+            <tbody id="verifyTableBody">
+                <!-- Diinjeksi oleh JavaScript -->
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Card Footer: Aksi Simpan ke Sistem -->
+    <div class="card-footer" style="padding: 16px 24px; background: #f8fafc; border-top: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px;">
+        <div style="font-size: 12px; color: #64748b; max-width: 580px; line-height: 1.4;">
+            <i class="fa-solid fa-circle-info" style="color: #0284c7; margin-right: 4px;"></i>
+            Hanya data santri berstatus <strong>Valid (Siap Masuk)</strong> yang akan disimpan ke database. Akun wali santri (username = No. KK) dan penempatan kelas otomatis dibuat.
+        </div>
+        <div style="display: flex; gap: 10px; align-items: center;">
+            <button type="button" class="btn btn-outline" onclick="cancelVerifyImport()" style="padding: 8px 18px;">
+                Batalkan
+            </button>
+            <button type="button" class="btn btn-success" id="btnCommitImport" onclick="commitVerifiedImport()" style="padding: 9px 22px; font-weight: 700; display: inline-flex; align-items: center; gap: 8px; background: #10b981; border-color: #10b981; box-shadow: 0 4px 6px -1px rgba(16, 185, 129, 0.2);">
+                <i class="fa-solid fa-cloud-arrow-down"></i> Masukkan Data ke Sistem (<span id="btnCommitCount">0</span> Santri Valid)
+            </button>
+        </div>
+    </div>
+</div>
+
 <!-- TOOLBAR FILTER & PENCARIAN (KELAS & NOMOR KK) -->
 <div class="card" style="margin-bottom: 20px;">
     <div class="card-body" style="padding: 16px 20px;">
@@ -330,7 +415,7 @@ $canEdit = Auth::hasRole('operator_sekolah');
         </div>
 
         <!-- Form Upload Berkas -->
-        <form method="POST" action="<?= $baseUrl ?>/students/import" enctype="multipart/form-data" style="background: #f8fafc; border: 2px dashed #93c5fd; border-radius: 12px; padding: 32px 24px; text-align: center;">
+        <form method="POST" action="<?= $baseUrl ?>/students/verify-import" enctype="multipart/form-data" onsubmit="handleVerifyImport(event, this)" style="background: #f8fafc; border: 2px dashed #93c5fd; border-radius: 12px; padding: 32px 24px; text-align: center;">
             <?= CSRF::inputField() ?>
             <input type="hidden" name="unit_id" value="<?= $unitId ?>">
 
@@ -349,7 +434,7 @@ $canEdit = Auth::hasRole('operator_sekolah');
                     <i class="fa-solid fa-download"></i> Unduh Template Excel
                 </a>
                 <button type="submit" class="btn btn-primary" style="padding: 10px 26px; font-weight: 600; display: inline-flex; align-items: center; gap: 8px; background: #0284c7; border-color: #0284c7;">
-                    <i class="fa-solid fa-upload"></i> Unggah &amp; Impor Data Santri
+                    <i class="fa-solid fa-magnifying-glass-chart"></i> Unggah &amp; Verifikasi Data Santri
                 </button>
             </div>
         </form>
@@ -359,7 +444,7 @@ $canEdit = Auth::hasRole('operator_sekolah');
 <!-- Modal: Import Siswa Excel (Sesuai app.css modal-overlay & modal-container) -->
 <div class="modal-overlay" id="modalImportStudents">
     <div class="modal-container" style="max-width: 580px; border-radius: 12px; overflow: hidden; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);">
-        <form method="POST" action="<?= $baseUrl ?>/students/import" enctype="multipart/form-data">
+        <form method="POST" action="<?= $baseUrl ?>/students/verify-import" enctype="multipart/form-data" onsubmit="handleVerifyImport(event, this)">
             <?= CSRF::inputField() ?>
             <input type="hidden" name="unit_id" value="<?= $unitId ?>">
             
@@ -404,7 +489,7 @@ $canEdit = Auth::hasRole('operator_sekolah');
             <div class="modal-footer" style="padding: 16px 24px; background: #f8fafc; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end; gap: 10px;">
                 <button type="button" class="btn btn-outline" onclick="closeImportModal()" style="padding: 8px 18px;">Batal</button>
                 <button type="submit" class="btn btn-primary" style="padding: 8px 20px; font-weight: 600; display: inline-flex; align-items: center; gap: 8px; background: #0284c7; border-color: #0284c7;">
-                    <i class="fa-solid fa-upload"></i> Unggah &amp; Impor Santri
+                    <i class="fa-solid fa-magnifying-glass-chart"></i> Unggah &amp; Verifikasi Berkas
                 </button>
             </div>
         </form>
@@ -486,6 +571,317 @@ function liveFilterStudents() {
 
     const badge = document.getElementById('totalVisibleBadge');
     if (badge) badge.innerText = visible + ' Siswa Aktif Ditampilkan';
+}
+
+// ==============================================================
+// VERIFIKASI PRA-IMPOR DATA SISWA (PREVIEW & ROW FILTER/DELETE)
+// ==============================================================
+let verifiedRows = [];
+let currentVerifyFilter = 'all';
+let verifyUnitId = <?= (int)$unitId ?>;
+
+function escapeHtml(text) {
+    if (text === null || text === undefined) return '';
+    return String(text)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
+function handleVerifyImport(event, formElement) {
+    event.preventDefault();
+    const submitBtn = formElement.querySelector('button[type="submit"]');
+    const originalBtnHtml = submitBtn ? submitBtn.innerHTML : '';
+    if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Memvalidasi Format...';
+    }
+
+    const formData = new FormData(formElement);
+
+    fetch('<?= $baseUrl ?>/students/verify-import', {
+        method: 'POST',
+        body: formData,
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = originalBtnHtml;
+        }
+
+        if (!data.success) {
+            alert(data.message || 'Gagal memvalidasi berkas.');
+            return;
+        }
+
+        verifiedRows = data.rows || [];
+        if (data.unit_id) {
+            verifyUnitId = data.unit_id;
+        }
+
+        closeImportModal();
+        formElement.reset();
+
+        const card = document.getElementById('verifyImportCard');
+        if (card) {
+            card.style.display = 'block';
+            currentVerifyFilter = 'all';
+            renderVerifyTable();
+            card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+    })
+    .catch(err => {
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = originalBtnHtml;
+        }
+        alert('Terjadi kesalahan saat memproses unggahan: ' + err.message);
+    });
+}
+
+function filterVerifyRows(type) {
+    currentVerifyFilter = type;
+    renderVerifyTable();
+}
+
+function renderVerifyTable() {
+    const total = verifiedRows.length;
+    const validRows = verifiedRows.filter(r => r.is_valid);
+    const validCount = validRows.length;
+    const invalidCount = total - validCount;
+
+    // Update Counter Badges
+    const elTotal = document.getElementById('vTotalCount');
+    const elValid = document.getElementById('vValidCount');
+    const elInvalid = document.getElementById('vInvalidCount');
+    const elCommit = document.getElementById('btnCommitCount');
+    const btnCommit = document.getElementById('btnCommitImport');
+    const btnDropInvalid = document.getElementById('btnDropInvalid');
+    const badgeInvalidBox = document.getElementById('vInvalidBadgeBox');
+
+    if (elTotal) elTotal.innerText = total;
+    if (elValid) elValid.innerText = validCount;
+    if (elInvalid) elInvalid.innerText = invalidCount;
+    if (elCommit) elCommit.innerText = validCount;
+
+    if (badgeInvalidBox) {
+        badgeInvalidBox.style.display = invalidCount > 0 ? 'block' : 'none';
+    }
+
+    if (btnDropInvalid) {
+        btnDropInvalid.style.display = invalidCount > 0 ? 'inline-flex' : 'none';
+    }
+
+    if (btnCommit) {
+        btnCommit.disabled = (validCount === 0);
+        if (validCount === 0) {
+            btnCommit.style.opacity = '0.5';
+            btnCommit.style.cursor = 'not-allowed';
+        } else {
+            btnCommit.style.opacity = '1';
+            btnCommit.style.cursor = 'pointer';
+        }
+    }
+
+    // Toggle filter buttons UI
+    const btnAll = document.getElementById('btnFilterAll');
+    const btnV = document.getElementById('btnFilterValid');
+    const btnInv = document.getElementById('btnFilterInvalid');
+    if (btnAll && btnV && btnInv) {
+        btnAll.style.background = currentVerifyFilter === 'all' ? '#0284c7' : '#fff';
+        btnAll.style.color = currentVerifyFilter === 'all' ? '#fff' : '#475569';
+        btnV.style.background = currentVerifyFilter === 'valid' ? '#10b981' : '#fff';
+        btnV.style.color = currentVerifyFilter === 'valid' ? '#fff' : '#475569';
+        btnInv.style.background = currentVerifyFilter === 'invalid' ? '#ef4444' : '#fff';
+        btnInv.style.color = currentVerifyFilter === 'invalid' ? '#fff' : '#475569';
+    }
+
+    const tbody = document.getElementById('verifyTableBody');
+    if (!tbody) return;
+
+    // Filter list for display
+    let displayRows = verifiedRows;
+    if (currentVerifyFilter === 'valid') {
+        displayRows = verifiedRows.filter(r => r.is_valid);
+    } else if (currentVerifyFilter === 'invalid') {
+        displayRows = verifiedRows.filter(r => !r.is_valid);
+    }
+
+    if (displayRows.length === 0) {
+        if (total === 0) {
+            tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; padding: 32px 20px; color: #64748b;">
+                <i class="fa-solid fa-folder-open" style="font-size: 2rem; color: #cbd5e1; margin-bottom: 8px; display: block;"></i>
+                Semua baris pratinjau telah dihapus. Silakan unggah berkas baru jika diperlukan.
+            </td></tr>`;
+        } else {
+            tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; padding: 24px 20px; color: #64748b;">
+                Tidak ada data santri untuk filter status ini.
+            </td></tr>`;
+        }
+        return;
+    }
+
+    let html = '';
+    displayRows.forEach((row, index) => {
+        const bgRow = row.is_valid ? (index % 2 === 0 ? '#ffffff' : '#fcfdfd') : '#fff5f5';
+        const borderRow = row.is_valid ? 'border-bottom: 1px solid #f1f5f9;' : 'border-bottom: 1px solid #fed7d7;';
+
+        const genderBadge = row.gender === 'P'
+            ? '<span class="badge" style="background: #fdf2f8; color: #db2777; border: 1px solid #fbcfe8;">Perempuan</span>'
+            : '<span class="badge" style="background: #eff6ff; color: #2563eb; border: 1px solid #bfdbfe;">Laki-laki</span>';
+
+        const classBadge = row.class_name
+            ? `<span class="badge" style="background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; font-weight: 600;"><i class="fa-solid fa-school" style="margin-right: 4px;"></i>${escapeHtml(row.class_name)}</span>`
+            : '<span class="badge" style="background: #f1f5f9; color: #64748b;">Belum Masuk Kelas</span>';
+
+        let statusCell = '';
+        if (row.is_valid) {
+            statusCell = `<span class="badge" style="background: #dcfce7; color: #15803d; border: 1px solid #86efac; padding: 4px 10px; font-weight: 600;">
+                <i class="fa-solid fa-circle-check"></i> Siap Masuk
+            </span>`;
+        } else {
+            const errList = (row.errors || []).map(err => `<li>${escapeHtml(err)}</li>`).join('');
+            statusCell = `<div>
+                <span class="badge" style="background: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5; padding: 3px 8px; margin-bottom: 4px; display: inline-block; font-weight: 700;">
+                    <i class="fa-solid fa-triangle-exclamation"></i> Tidak Sesuai
+                </span>
+                <ul style="margin: 0; padding-left: 14px; text-align: left; font-size: 11px; color: #dc2626; line-height: 1.35;">
+                    ${errList}
+                </ul>
+            </div>`;
+        }
+
+        html += `<tr style="${bgRow} ${borderRow}">
+            <td style="text-align: center; color: #64748b; font-weight: 600;">${index + 1}</td>
+            <td>
+                <div style="font-weight: 700; color: #0f172a; font-size: 12.5px;">${escapeHtml(row.nama)}</div>
+                <div style="font-size: 11px; color: #64748b; margin-top: 2px;">
+                    NIS: <code style="background: #f1f5f9; padding: 1px 4px; border-radius: 4px; color: #0284c7;">${escapeHtml(row.nis)}</code>
+                    ${row.nisn ? ` | NISN: <code>${escapeHtml(row.nisn)}</code>` : ''}
+                </div>
+                ${row.nik ? `<div style="font-size: 10.5px; color: #94a3b8;">NIK: ${escapeHtml(row.nik)}</div>` : ''}
+            </td>
+            <td style="text-align: center;">${genderBadge}</td>
+            <td>
+                <div>${escapeHtml(row.birthplace || '-')}</div>
+                ${row.birthdate ? `<div style="font-size: 11px; color: #64748b;">${escapeHtml(row.birthdate)}</div>` : ''}
+            </td>
+            <td>
+                <div style="font-weight: 600; color: #334155;">${escapeHtml(row.father_name || 'Orang Tua / Wali')}</div>
+                <div style="font-size: 11px; color: #64748b; margin-top: 2px;">
+                    <i class="fa-solid fa-address-card" title="No. KK (Username Ortu)" style="color: #64748b;"></i> KK: <code>${escapeHtml(row.no_kk)}</code>
+                </div>
+                ${row.parent_phone ? `<div style="font-size: 11px; color: #166534;"><i class="fa-brands fa-whatsapp" style="color: #16a34a;"></i> ${escapeHtml(row.parent_phone)}</div>` : ''}
+                ${row.parent_email ? `<div style="font-size: 11px; color: #0284c7;"><i class="fa-solid fa-envelope"></i> ${escapeHtml(row.parent_email)}</div>` : ''}
+            </td>
+            <td>${classBadge}</td>
+            <td style="text-align: center; vertical-align: middle;">${statusCell}</td>
+            <td style="text-align: center; vertical-align: middle;">
+                <button type="button" class="btn btn-sm btn-outline-danger" onclick="deletePreviewRow(${row.temp_id})" title="Hapus baris ini dari pratinjau" style="padding: 4px 10px; font-size: 11px; border-radius: 6px;">
+                    <i class="fa-solid fa-trash-can"></i> Hapus
+                </button>
+            </td>
+        </tr>`;
+    });
+
+    tbody.innerHTML = html;
+}
+
+function deletePreviewRow(tempId) {
+    const idx = verifiedRows.findIndex(r => r.temp_id === tempId);
+    if (idx !== -1) {
+        verifiedRows.splice(idx, 1);
+        renderVerifyTable();
+    }
+}
+
+function dropAllInvalidRows() {
+    const invalidCount = verifiedRows.filter(r => !r.is_valid).length;
+    if (invalidCount === 0) return;
+
+    if (!confirm('Hapus seluruh ' + invalidCount + ' baris data santri yang bermasalah?\n\nHanya data yang valid dan memenuhi syarat yang akan tersisa untuk dimasukkan ke sistem.')) {
+        return;
+    }
+
+    verifiedRows = verifiedRows.filter(r => r.is_valid);
+    currentVerifyFilter = 'all';
+    renderVerifyTable();
+}
+
+function cancelVerifyImport() {
+    if (verifiedRows.length > 0) {
+        if (!confirm('Batalkan verifikasi impor data santri? Semua data pratinjau akan ditutup dan belum disimpan ke sistem.')) {
+            return;
+        }
+    }
+    const card = document.getElementById('verifyImportCard');
+    if (card) card.style.display = 'none';
+    verifiedRows = [];
+}
+
+function commitVerifiedImport() {
+    const validRows = verifiedRows.filter(r => r.is_valid);
+    if (validRows.length === 0) {
+        alert('Tidak ada data santri yang berstatus valid untuk dimasukkan ke dalam sistem.');
+        return;
+    }
+
+    const invalidCount = verifiedRows.length - validRows.length;
+    let confirmMsg = 'Apakah Anda yakin ingin memasukkan ' + validRows.length + ' data santri yang telah terverifikasi ke dalam sistem database?';
+    if (invalidCount > 0) {
+        confirmMsg += '\n\nPerhatian: ' + invalidCount + ' data yang bermasalah/tidak sesuai tidak akan masuk ke sistem.';
+    }
+
+    if (!confirm(confirmMsg)) {
+        return;
+    }
+
+    const btnCommit = document.getElementById('btnCommitImport');
+    const originalHtml = btnCommit ? btnCommit.innerHTML : '';
+    if (btnCommit) {
+        btnCommit.disabled = true;
+        btnCommit.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Memproses & Menyimpan Data...';
+    }
+
+    const postData = new URLSearchParams();
+    postData.append('unit_id', verifyUnitId);
+    postData.append('students_json', JSON.stringify(validRows));
+    postData.append('csrf_token', '<?= CSRF::token() ?>');
+
+    fetch('<?= $baseUrl ?>/students/confirm-import', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'X-Requested-With': 'XMLHttpRequest'
+        },
+        body: postData.toString()
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (btnCommit) {
+            btnCommit.disabled = false;
+            btnCommit.innerHTML = originalHtml;
+        }
+
+        if (data.success) {
+            window.location.reload();
+        } else {
+            alert('Gagal menyimpan data santri: ' + (data.message || 'Terjadi kesalahan'));
+        }
+    })
+    .catch(err => {
+        if (btnCommit) {
+            btnCommit.disabled = false;
+            btnCommit.innerHTML = originalHtml;
+        }
+        alert('Terjadi kesalahan koneksi saat menyimpan data: ' + err.message);
+    });
 }
 </script>
 <?php endif; ?>

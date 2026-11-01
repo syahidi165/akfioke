@@ -102,6 +102,8 @@ Router::post('/students/delete', [MasterController::class, 'deleteStudent']);
 Router::get('/students/export', [MasterController::class, 'exportStudents']);
 Router::get('/students/template', [MasterController::class, 'templateStudents']);
 Router::post('/students/import', [MasterController::class, 'importStudents']);
+Router::post('/students/verify-import', [MasterController::class, 'verifyImportStudents']);
+Router::post('/students/confirm-import', [MasterController::class, 'confirmImportStudents']);
 Router::get('/students/print-parent-card/:id', [MasterController::class, 'printParentCard']);
 Router::get('/classes', [MasterController::class, 'classes']);
 Router::post('/classes/save', [MasterController::class, 'saveClass']);
