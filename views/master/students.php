@@ -33,86 +33,90 @@ $canEdit = Auth::hasAnyRole(['operator_sekolah', 'operator_yayasan']);
 </div>
 
 <!-- ============================================================== -->
-<!-- KARTU VERIFIKASI PRA-IMPOR DATA SISWA (PRATINJAU & VALIDASI)   -->
+<!-- POPUP MODAL VERIFIKASI PRA-IMPOR DATA SISWA (KARTU VERIFIKASI)  -->
 <!-- ============================================================== -->
-<div id="verifyImportCard" class="card" style="display: none; margin-bottom: 24px; border: 2px solid #0284c7; box-shadow: 0 10px 30px rgba(2, 132, 199, 0.15); border-radius: 12px; overflow: hidden;">
-    <div class="card-header" style="background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%); color: #ffffff; padding: 18px 24px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
-        <div style="display: flex; align-items: center; gap: 12px;">
-            <div style="width: 40px; height: 40px; border-radius: 10px; background: rgba(255,255,255,0.2); display: flex; align-items: center; justify-content: center; font-size: 1.25rem;">
-                <i class="fa-solid fa-clipboard-check"></i>
+<div class="modal-overlay" id="modalVerifyImport" style="display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.7); z-index: 9999; align-items: center; justify-content: center; backdrop-filter: blur(4px); padding: 20px;">
+    <div class="modal-container" style="max-width: 1100px; width: 100%; max-height: 90vh; display: flex; flex-direction: column; border-radius: 14px; overflow: hidden; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); background: #ffffff;">
+        
+        <!-- Header Modal Popup -->
+        <div class="modal-header" style="background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%); color: #ffffff; padding: 18px 24px; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0;">
+            <div style="display: flex; align-items: center; gap: 12px;">
+                <div style="width: 42px; height: 42px; border-radius: 10px; background: rgba(255,255,255,0.2); display: flex; align-items: center; justify-content: center; font-size: 1.3rem;">
+                    <i class="fa-solid fa-clipboard-check"></i>
+                </div>
+                <div>
+                    <h3 style="margin: 0; font-size: 1.15rem; color: #ffffff; font-weight: 700;">
+                        Kartu Verifikasi Data Santri (Pra-Impor)
+                    </h3>
+                    <p style="margin: 2px 0 0 0; font-size: 0.8125rem; color: #e0f2fe;">
+                        Periksa kecocokan data sebelum dimasukkan ke database. Hapus baris yang bermasalah agar hanya data valid yang tersimpan.
+                    </p>
+                </div>
             </div>
-            <div>
-                <h3 style="margin: 0; font-size: 1.15rem; color: #ffffff; font-weight: 700;">
-                    Kartu Verifikasi &amp; Pratinjau Data Santri (Pra-Impor)
-                </h3>
-                <p style="margin: 2px 0 0 0; font-size: 0.8125rem; color: #e0f2fe;">
-                    Periksa kecocokan data sebelum dimasukkan ke database. Hapus baris yang tidak sesuai agar hanya data valid yang tersimpan di sistem.
-                </p>
-            </div>
-        </div>
-        <button type="button" class="btn btn-outline btn-sm" onclick="cancelVerifyImport()" style="color: #ffffff; border-color: rgba(255,255,255,0.4); background: rgba(255,255,255,0.1); font-size: 18px; line-height: 1;" title="Tutup / Batalkan">&times;</button>
-    </div>
-
-    <!-- Ringkasan Status Validasi -->
-    <div style="padding: 16px 24px; background: #f8fafc; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px;">
-        <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
-            <div style="background: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; padding: 6px 14px; font-size: 12.5px;">
-                Total Data: <strong id="vTotalCount" style="color: #0f172a;">0</strong> Santri
-            </div>
-            <div style="background: #f0fdf4; border: 1px solid #86efac; border-radius: 8px; padding: 6px 14px; font-size: 12.5px; color: #166534;">
-                <i class="fa-solid fa-circle-check" style="color: #16a34a;"></i> Siap Masuk: <strong id="vValidCount">0</strong>
-            </div>
-            <div id="vInvalidBadgeBox" style="background: #fef2f2; border: 1px solid #fca5a5; border-radius: 8px; padding: 6px 14px; font-size: 12.5px; color: #991b1b;">
-                <i class="fa-solid fa-triangle-exclamation" style="color: #dc2626;"></i> Bermasalah / Tidak Sesuai: <strong id="vInvalidCount">0</strong>
-            </div>
+            <button type="button" class="btn btn-outline btn-sm" onclick="closeVerifyModal()" style="color: #ffffff; border-color: rgba(255,255,255,0.4); background: rgba(255,255,255,0.1); font-size: 20px; line-height: 1; padding: 4px 12px; border-radius: 8px;" title="Tutup">&times;</button>
         </div>
 
-        <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
-            <button type="button" id="btnDropInvalid" class="btn btn-sm btn-outline-danger" onclick="dropAllInvalidRows()" style="display: inline-flex; align-items: center; gap: 6px; font-weight: 600; padding: 6px 12px; font-size: 12px;">
-                <i class="fa-solid fa-trash-can"></i> Hapus Semua Data Bermasalah
-            </button>
-            <div class="btn-group" style="display: inline-flex; border: 1px solid #cbd5e1; border-radius: 6px; overflow: hidden;">
-                <button type="button" class="btn btn-sm" id="btnFilterAll" onclick="filterVerifyRows('all')" style="padding: 4px 10px; font-size: 11.5px; background: #0284c7; color: #fff;">Semua</button>
-                <button type="button" class="btn btn-sm" id="btnFilterValid" onclick="filterVerifyRows('valid')" style="padding: 4px 10px; font-size: 11.5px; background: #fff; color: #475569;">Hanya Valid</button>
-                <button type="button" class="btn btn-sm" id="btnFilterInvalid" onclick="filterVerifyRows('invalid')" style="padding: 4px 10px; font-size: 11.5px; background: #fff; color: #475569;">Bermasalah</button>
+        <!-- Ringkasan Status & Toolbar Tombol Aksi -->
+        <div style="padding: 14px 24px; background: #f8fafc; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; flex-shrink: 0;">
+            <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                <div style="background: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; padding: 6px 14px; font-size: 12.5px;">
+                    Total Data: <strong id="vTotalCount" style="color: #0f172a;">0</strong> Santri
+                </div>
+                <div style="background: #f0fdf4; border: 1px solid #86efac; border-radius: 8px; padding: 6px 14px; font-size: 12.5px; color: #166534;">
+                    <i class="fa-solid fa-circle-check" style="color: #16a34a;"></i> Siap Masuk: <strong id="vValidCount">0</strong>
+                </div>
+                <div id="vInvalidBadgeBox" style="background: #fef2f2; border: 1px solid #fca5a5; border-radius: 8px; padding: 6px 14px; font-size: 12.5px; color: #991b1b;">
+                    <i class="fa-solid fa-triangle-exclamation" style="color: #dc2626;"></i> Bermasalah / Tidak Sesuai: <strong id="vInvalidCount">0</strong>
+                </div>
+            </div>
+
+            <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                <button type="button" id="btnDropInvalid" class="btn btn-sm btn-outline-danger" onclick="dropAllInvalidRows()" style="display: inline-flex; align-items: center; gap: 6px; font-weight: 600; padding: 6px 12px; font-size: 12px; border-radius: 6px; border: 1px solid #ef4444; color: #ef4444; background: #fff;">
+                    <i class="fa-solid fa-trash-can"></i> Hapus Semua Data Bermasalah
+                </button>
+                <div class="btn-group" style="display: inline-flex; border: 1px solid #cbd5e1; border-radius: 6px; overflow: hidden;">
+                    <button type="button" class="btn btn-sm" id="btnFilterAll" onclick="filterVerifyRows('all')" style="padding: 5px 12px; font-size: 12px; background: #0284c7; color: #fff; border: none; cursor: pointer;">Semua</button>
+                    <button type="button" class="btn btn-sm" id="btnFilterValid" onclick="filterVerifyRows('valid')" style="padding: 5px 12px; font-size: 12px; background: #fff; color: #475569; border: none; border-left: 1px solid #cbd5e1; cursor: pointer;">Hanya Valid</button>
+                    <button type="button" class="btn btn-sm" id="btnFilterInvalid" onclick="filterVerifyRows('invalid')" style="padding: 5px 12px; font-size: 12px; background: #fff; color: #475569; border: none; border-left: 1px solid #cbd5e1; cursor: pointer;">Bermasalah</button>
+                </div>
             </div>
         </div>
-    </div>
 
-    <!-- Tabel Baris Data Terverifikasi -->
-    <div class="table-responsive" style="max-height: 480px; overflow-y: auto;">
-        <table class="table" style="margin-bottom: 0; font-size: 12px;">
-            <thead style="position: sticky; top: 0; background: #f1f5f9; z-index: 2;">
-                <tr>
-                    <th style="width: 40px; text-align: center;">No</th>
-                    <th>Nama Santri &amp; NIS/NISN</th>
-                    <th style="width: 70px; text-align: center;">JK</th>
-                    <th>Tgl Lahir</th>
-                    <th>Orang Tua &amp; Kontak</th>
-                    <th>Kelas Penempatan</th>
-                    <th style="width: 220px; text-align: center;">Status Validasi</th>
-                    <th style="width: 90px; text-align: center;">Aksi</th>
-                </tr>
-            </thead>
-            <tbody id="verifyTableBody">
-                <!-- Diinjeksi oleh JavaScript -->
-            </tbody>
-        </table>
-    </div>
-
-    <!-- Card Footer: Aksi Simpan ke Sistem -->
-    <div class="card-footer" style="padding: 16px 24px; background: #f8fafc; border-top: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px;">
-        <div style="font-size: 12px; color: #64748b; max-width: 580px; line-height: 1.4;">
-            <i class="fa-solid fa-circle-info" style="color: #0284c7; margin-right: 4px;"></i>
-            Hanya data santri berstatus <strong>Valid (Siap Masuk)</strong> yang akan disimpan ke database. Akun wali santri (username = No. KK) dan penempatan kelas otomatis dibuat.
+        <!-- Tabel Baris Data Terverifikasi (Scrollable) -->
+        <div class="table-responsive" style="flex: 1; overflow-y: auto; max-height: 55vh; padding: 0;">
+            <table class="table" style="margin-bottom: 0; font-size: 12px; width: 100%; border-collapse: collapse;">
+                <thead style="position: sticky; top: 0; background: #f1f5f9; z-index: 2; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
+                    <tr>
+                        <th style="width: 45px; text-align: center; padding: 10px 8px;">No</th>
+                        <th style="padding: 10px 12px;">Nama Santri &amp; NIS/NISN</th>
+                        <th style="width: 80px; text-align: center; padding: 10px 8px;">JK</th>
+                        <th style="padding: 10px 12px;">Tgl Lahir</th>
+                        <th style="padding: 10px 12px;">Orang Tua &amp; Kontak</th>
+                        <th style="padding: 10px 12px;">Kelas Penempatan</th>
+                        <th style="width: 250px; text-align: center; padding: 10px 12px;">Status Validasi</th>
+                        <th style="width: 90px; text-align: center; padding: 10px 8px;">Aksi</th>
+                    </tr>
+                </thead>
+                <tbody id="verifyTableBody">
+                    <!-- Diinjeksi oleh JavaScript -->
+                </tbody>
+            </table>
         </div>
-        <div style="display: flex; gap: 10px; align-items: center;">
-            <button type="button" class="btn btn-outline" onclick="cancelVerifyImport()" style="padding: 8px 18px;">
-                Batalkan
-            </button>
-            <button type="button" class="btn btn-success" id="btnCommitImport" onclick="commitVerifiedImport()" style="padding: 9px 22px; font-weight: 700; display: inline-flex; align-items: center; gap: 8px; background: #10b981; border-color: #10b981; box-shadow: 0 4px 6px -1px rgba(16, 185, 129, 0.2);">
-                <i class="fa-solid fa-cloud-arrow-down"></i> Masukkan Data ke Sistem (<span id="btnCommitCount">0</span> Santri Valid)
-            </button>
+
+        <!-- Footer Modal Popup -->
+        <div class="modal-footer" style="padding: 16px 24px; background: #f8fafc; border-top: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; flex-shrink: 0;">
+            <div style="font-size: 12px; color: #64748b; line-height: 1.4;">
+                <i class="fa-solid fa-circle-info" style="color: #0284c7; margin-right: 4px;"></i>
+                Hanya data santri berstatus <strong>Siap Masuk (Valid)</strong> yang akan disimpan ke database.
+            </div>
+            <div style="display: flex; gap: 10px; align-items: center;">
+                <button type="button" class="btn btn-outline" onclick="closeVerifyModal()" style="padding: 8px 18px; border-radius: 8px;">
+                    Batalkan
+                </button>
+                <button type="button" class="btn btn-success" id="btnCommitImport" onclick="commitVerifiedImport()" style="padding: 9px 22px; font-weight: 700; display: inline-flex; align-items: center; gap: 8px; background: #10b981; border-color: #10b981; color: #ffffff; border-radius: 8px; box-shadow: 0 4px 6px -1px rgba(16, 185, 129, 0.25); cursor: pointer;">
+                    <i class="fa-solid fa-cloud-arrow-down"></i> Masukkan Data ke Sistem (<span id="btnCommitCount">0</span> Santri Valid)
+                </button>
+            </div>
         </div>
     </div>
 </div>
@@ -632,13 +636,9 @@ function handleVerifyImport(event, formElement) {
         closeImportModal();
         formElement.reset();
 
-        const card = document.getElementById('verifyImportCard');
-        if (card) {
-            card.style.display = 'block';
-            currentVerifyFilter = 'all';
-            renderVerifyTable();
-            card.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }
+        openVerifyModal();
+        currentVerifyFilter = 'all';
+        renderVerifyTable();
     })
     .catch(err => {
         if (submitBtn) {
@@ -820,15 +820,32 @@ function dropAllInvalidRows() {
     renderVerifyTable();
 }
 
-function cancelVerifyImport() {
-    if (verifiedRows.length > 0) {
-        if (!confirm('Batalkan verifikasi impor data santri? Semua data pratinjau akan ditutup dan belum disimpan ke sistem.')) {
+function openVerifyModal() {
+    const modal = document.getElementById('modalVerifyImport');
+    if (modal) {
+        modal.style.display = 'flex';
+        modal.classList.add('active');
+        modal.classList.add('show');
+    }
+}
+
+function closeVerifyModal() {
+    if (verifiedRows && verifiedRows.length > 0) {
+        if (!confirm('Tutup kartu verifikasi? Data pratinjau yang belum disimpan tidak akan masuk ke sistem database.')) {
             return;
         }
     }
-    const card = document.getElementById('verifyImportCard');
-    if (card) card.style.display = 'none';
+    const modal = document.getElementById('modalVerifyImport');
+    if (modal) {
+        modal.style.display = 'none';
+        modal.classList.remove('active');
+        modal.classList.remove('show');
+    }
     verifiedRows = [];
+}
+
+function cancelVerifyImport() {
+    closeVerifyModal();
 }
 
 function commitVerifiedImport() {
@@ -899,13 +916,9 @@ document.addEventListener('DOMContentLoaded', function() {
             if (initialImport.unit_id) {
                 verifyUnitId = initialImport.unit_id;
             }
-            const card = document.getElementById('verifyImportCard');
-            if (card) {
-                card.style.display = 'block';
-                currentVerifyFilter = 'all';
-                renderVerifyTable();
-                card.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            }
+            openVerifyModal();
+            currentVerifyFilter = 'all';
+            renderVerifyTable();
         }
     <?php endif; ?>
 });
