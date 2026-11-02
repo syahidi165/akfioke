@@ -372,7 +372,15 @@ function getLevelBadgeStyle(string $lvl): array {
                     <select name="walas_id" id="cls_walas_id" class="form-control">
                         <option value="">-- Belum Ditugaskan / Pilih Nanti --</option>
                         <?php foreach ($teachers as $t): ?>
-                            <option value="<?= $t['id'] ?>"><?= SecurityHelper::escape($t['nama']) ?> (<?= SecurityHelper::escape($t['level_posisi']) ?>)</option>
+                            <?php
+                                $posLabel = $t['level_posisi'] ?? '';
+                                if (!empty($t['has_walas_role'])) {
+                                    $posLabel = (!empty($posLabel) && stripos($posLabel, 'Wali') === false)
+                                        ? ($posLabel . ' • Peran: Walas')
+                                        : ($posLabel ?: 'Guru Wali Kelas');
+                                }
+                            ?>
+                            <option value="<?= $t['id'] ?>"><?= SecurityHelper::escape($t['nama']) ?><?= !empty($posLabel) ? ' (' . SecurityHelper::escape($posLabel) . ')' : '' ?></option>
                         <?php endforeach; ?>
                     </select>
                 </div>

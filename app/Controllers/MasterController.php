@@ -2844,13 +2844,46 @@ class MasterController extends Controller {
         );
 
         $teachers = Database::fetchAll(
-            "SELECT id, nama, level_posisi, position, contact_phone FROM employees 
-             WHERE unit_id = ? AND is_deleted = 0 AND status = 'Aktif'
-               AND (position LIKE '%Guru%' OR level_posisi LIKE '%Guru%' OR position LIKE '%Waka%' OR level_posisi LIKE '%Waka%' OR position LIKE '%Tutor%' OR level_posisi LIKE '%Tutor%')
-               AND level_posisi NOT IN ('Direktur Pendidikan', 'Deputi Direktur', 'Kepala Sekolah', 'Tata Usaha Keuangan', 'Cleaning Services', 'Security', 'Operator Sekolah')
-               AND position NOT IN ('Direktur Pendidikan', 'Deputi Direktur', 'Kepala Sekolah', 'Tata Usaha Keuangan', 'Cleaning Services', 'Security', 'Operator Sekolah')
-             ORDER BY nama ASC", 
-            [$unitId]
+            "SELECT e.id, e.nama, e.level_posisi, e.position, e.contact_phone,
+                    GROUP_CONCAT(DISTINCT r.display_name ORDER BY ur.is_primary DESC, r.display_name ASC SEPARATOR ', ') as role_names,
+                    MAX(CASE WHEN r.name = 'walas' THEN 1 ELSE 0 END) as has_walas_role
+             FROM employees e
+             LEFT JOIN users u ON e.user_id = u.id
+             LEFT JOIN user_roles ur ON u.id = ur.user_id
+             LEFT JOIN roles r ON ur.role_id = r.id
+             WHERE e.unit_id = ? AND e.is_deleted = 0 AND e.status = 'Aktif'
+               AND (
+                   EXISTS (
+                       SELECT 1 FROM user_roles ur2 
+                       JOIN roles r2 ON ur2.role_id = r2.id 
+                       WHERE ur2.user_id = e.user_id AND r2.name = 'walas'
+                   )
+                   OR e.id IN (
+                       SELECT DISTINCT walas_id FROM classes WHERE unit_id = ? AND walas_id IS NOT NULL
+                   )
+                   OR EXISTS (
+                       SELECT 1 FROM user_roles ur2 
+                       JOIN roles r2 ON ur2.role_id = r2.id 
+                       WHERE ur2.user_id = e.user_id AND r2.name IN (
+                           'guru_kelas', 'guru_mapel', 'guru_diniyah', 'guru_tahfidz', 
+                           'guru_tk', 'guru_mapel_kbtk', 'guru_supervisor', 
+                           'waka_kurikulum', 'waka_kesiswaan', 'koor_tahfidz', 'tutor_siswa', 'tutor_sebaya'
+                       )
+                   )
+                   OR (
+                       (e.position LIKE '%Guru%' OR e.level_posisi LIKE '%Guru%' 
+                        OR e.position LIKE '%Wali%' OR e.level_posisi LIKE '%Wali%' 
+                        OR e.position LIKE '%Walas%' OR e.level_posisi LIKE '%Walas%' 
+                        OR e.position LIKE '%Waka%' OR e.level_posisi LIKE '%Waka%' 
+                        OR e.position LIKE '%Tutor%' OR e.level_posisi LIKE '%Tutor%' 
+                        OR e.position LIKE '%Pengajar%' OR e.level_posisi LIKE '%Pengajar%')
+                       AND e.level_posisi NOT IN ('Direktur Pendidikan', 'Deputi Direktur', 'Kepala Sekolah', 'Tata Usaha Keuangan', 'Cleaning Services', 'Security', 'Operator Sekolah')
+                       AND (e.position IS NULL OR e.position NOT IN ('Direktur Pendidikan', 'Deputi Direktur', 'Kepala Sekolah', 'Tata Usaha Keuangan', 'Cleaning Services', 'Security', 'Operator Sekolah'))
+                   )
+               )
+             GROUP BY e.id, e.nama, e.level_posisi, e.position, e.contact_phone
+             ORDER BY e.nama ASC", 
+            [$unitId, $unitId]
         );
 
         $unit = Database::fetch("SELECT * FROM units WHERE id = ?", [$unitId]);
@@ -2899,11 +2932,21 @@ class MasterController extends Controller {
 
         // Validasi: pastikan wali kelas berasal dari unit sekolah yang sama
         if ($walasId) {
-            $validWalas = Database::fetch("SELECT id FROM employees WHERE id = ? AND unit_id = ? AND is_deleted = 0", [$walasId, $unitId]);
+            $validWalas = Database::fetch("SELECT id, user_id FROM employees WHERE id = ? AND unit_id = ? AND is_deleted = 0", [$walasId, $unitId]);
             if (!$validWalas) {
                 $this->setFlash('danger', 'Validasi Gagal: Guru yang dipilih sebagai wali kelas bukan berasal dari unit sekolah Anda.');
                 $this->redirect(Auth::baseUrl() . '/classes');
                 return;
+            }
+            // Pastikan user akun guru memiliki peran walas (Guru Wali Kelas)
+            if (!empty($validWalas['user_id'])) {
+                $walasRole = Database::fetch("SELECT id FROM roles WHERE name = 'walas'");
+                if ($walasRole) {
+                    Database::execute(
+                        "INSERT IGNORE INTO user_roles (user_id, role_id, is_primary) VALUES (?, ?, 0)",
+                        [$validWalas['user_id'], (int)$walasRole['id']]
+                    );
+                }
             }
         }
 
@@ -3259,12 +3302,35 @@ class MasterController extends Controller {
 
         $subjects = Database::fetchAll("SELECT * FROM subjects WHERE unit_id = ? ORDER BY type ASC, name ASC", [$unitId]);
         $teachers = Database::fetchAll(
-            "SELECT id, nama, level_posisi, position FROM employees 
-             WHERE unit_id = ? AND is_deleted = 0 AND status = 'Aktif'
-               AND (position LIKE '%Guru%' OR level_posisi LIKE '%Guru%' OR position LIKE '%Waka%' OR level_posisi LIKE '%Waka%' OR position LIKE '%Tutor%' OR level_posisi LIKE '%Tutor%')
-               AND level_posisi NOT IN ('Direktur Pendidikan', 'Deputi Direktur', 'Kepala Sekolah', 'Tata Usaha Keuangan', 'Cleaning Services', 'Security', 'Operator Sekolah')
-               AND position NOT IN ('Direktur Pendidikan', 'Deputi Direktur', 'Kepala Sekolah', 'Tata Usaha Keuangan', 'Cleaning Services', 'Security', 'Operator Sekolah')
-             ORDER BY nama ASC", 
+            "SELECT e.id, e.nama, e.level_posisi, e.position 
+             FROM employees e
+             LEFT JOIN users u ON e.user_id = u.id
+             LEFT JOIN user_roles ur ON u.id = ur.user_id
+             LEFT JOIN roles r ON ur.role_id = r.id
+             WHERE e.unit_id = ? AND e.is_deleted = 0 AND e.status = 'Aktif'
+               AND (
+                   EXISTS (
+                       SELECT 1 FROM user_roles ur2 
+                       JOIN roles r2 ON ur2.role_id = r2.id 
+                       WHERE ur2.user_id = e.user_id AND r2.name IN (
+                           'walas', 'guru_kelas', 'guru_mapel', 'guru_diniyah', 'guru_tahfidz', 
+                           'guru_tk', 'guru_mapel_kbtk', 'guru_supervisor', 
+                           'waka_kurikulum', 'waka_kesiswaan', 'koor_tahfidz', 'tutor_siswa', 'tutor_sebaya'
+                       )
+                   )
+                   OR (
+                       (e.position LIKE '%Guru%' OR e.level_posisi LIKE '%Guru%' 
+                        OR e.position LIKE '%Wali%' OR e.level_posisi LIKE '%Wali%' 
+                        OR e.position LIKE '%Walas%' OR e.level_posisi LIKE '%Walas%' 
+                        OR e.position LIKE '%Waka%' OR e.level_posisi LIKE '%Waka%' 
+                        OR e.position LIKE '%Tutor%' OR e.level_posisi LIKE '%Tutor%' 
+                        OR e.position LIKE '%Pengajar%' OR e.level_posisi LIKE '%Pengajar%')
+                       AND e.level_posisi NOT IN ('Direktur Pendidikan', 'Deputi Direktur', 'Kepala Sekolah', 'Tata Usaha Keuangan', 'Cleaning Services', 'Security', 'Operator Sekolah')
+                       AND (e.position IS NULL OR e.position NOT IN ('Direktur Pendidikan', 'Deputi Direktur', 'Kepala Sekolah', 'Tata Usaha Keuangan', 'Cleaning Services', 'Security', 'Operator Sekolah'))
+                   )
+               )
+             GROUP BY e.id, e.nama, e.level_posisi, e.position
+             ORDER BY e.nama ASC", 
             [$unitId]
         );
         $classes = Database::fetchAll("SELECT id, name FROM classes WHERE unit_id = ? AND academic_year_id = ? ORDER BY name ASC", [$unitId, Auth::academicYearId()]);
