@@ -31,6 +31,7 @@ use App\Controllers\SarprasController;
 use App\Controllers\JadwalController;
 use App\Controllers\PwaController;
 use App\Controllers\NotificationController;
+use App\Controllers\DeputiController;
 
 // PWA (Progressive Web App) Routes
 Router::get('/manifest.json', [PwaController::class, 'manifest']);
@@ -389,6 +390,40 @@ Router::get('/sarpras/scrap/detail/:id', [SarprasController::class, 'scrapDetail
 Router::get('/sarpras/scrap/print/:id', [SarprasController::class, 'scrapPrint']);
 
 Router::get('/sarpras/file/view', [SarprasController::class, 'viewFile']);
+
+// 19. Modul Eksekutif Deputi Pendidikan & RAPBS (SOP 2017 Rev A)
+Router::get('/deputi/units', [DeputiController::class, 'units']);
+Router::post('/deputi/units/save', [DeputiController::class, 'saveUnits']);
+
+Router::get('/deputi/bobot', [DeputiController::class, 'bobot']);
+Router::post('/deputi/bobot/save', [DeputiController::class, 'saveBobot']);
+
+Router::get('/deputi/calendar', [DeputiController::class, 'calendar']);
+Router::post('/deputi/calendar/save-event', [DeputiController::class, 'saveEvent']);
+Router::post('/deputi/calendar/delete-event', [DeputiController::class, 'deleteEvent']);
+Router::post('/deputi/calendar/save-mom', [DeputiController::class, 'saveMom']);
+Router::post('/deputi/calendar/toggle-action', [DeputiController::class, 'toggleActionStatus']);
+Router::post('/deputi/calendar/send-invitation', [DeputiController::class, 'sendInvitation']);
+Router::get('/deputi/calendar/get-event-details', [DeputiController::class, 'getEventDetails']);
+
+Router::get('/deputi/kpi-mutu', [DeputiController::class, 'kpiMutu']);
+Router::post('/deputi/kpi-mutu/save', [DeputiController::class, 'saveKpiMutu']);
+Router::post('/deputi/kpi-mutu/delete', [DeputiController::class, 'deleteKpiMutu']);
+
+Router::get('/deputi/rapbs', [DeputiController::class, 'rapbs']);
+Router::get('/rapbs', [DeputiController::class, 'rapbs']);
+Router::post('/deputi/rapbs/save-item', [DeputiController::class, 'saveRapbsItem']);
+Router::post('/deputi/rapbs/delete-item', [DeputiController::class, 'deleteRapbsItem']);
+Router::post('/deputi/rapbs/update-realization', [DeputiController::class, 'updateRealization']);
+Router::post('/deputi/rapbs/update-status', [DeputiController::class, 'updateRapbsStatus']);
+
+Router::get('/deputi/sdm-supervisi', [DeputiController::class, 'sdmSupervisi']);
+Router::post('/deputi/badges/award', [DeputiController::class, 'awardBadge']);
+Router::post('/deputi/badges/delete', [DeputiController::class, 'deleteBadge']);
+
+Router::get('/deputi/rapor', [DeputiController::class, 'rapor']);
+Router::post('/deputi/rapor/save-evaluation', [DeputiController::class, 'saveEvaluation']);
+Router::get('/deputi/rapor/print', [DeputiController::class, 'printRapor']);
 
 // Run Router
 Router::run();

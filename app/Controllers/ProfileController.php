@@ -119,6 +119,10 @@ class ProfileController extends Controller {
             $holderParams
         );
 
+        $employeeBadges = !empty($employee['id'])
+            ? Database::fetchAll("SELECT * FROM employee_badges WHERE employee_id = ? ORDER BY awarded_at DESC", [$employee['id']])
+            : [];
+
         $this->view('profile/index', [
             'pageTitle'           => 'Profil Pengguna - ' . ($employee['nama'] ?? $user['full_name']),
             'user'                => $user,
@@ -128,7 +132,8 @@ class ProfileController extends Controller {
             'roles'               => $roles,
             'teachingAssignments' => $teachingAssignments,
             'waliKelasList'       => $waliKelasList,
-            'assignedAssets'      => $assignedAssets
+            'assignedAssets'      => $assignedAssets,
+            'employeeBadges'      => $employeeBadges
         ]);
     }
 

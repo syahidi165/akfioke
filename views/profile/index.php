@@ -90,6 +90,43 @@ if (strpos($waNumber, '0') === 0) {
     </div>
 </div>
 
+<?php if (!empty($employeeBadges)): ?>
+<!-- EMPLOYEE AWARDS & REWARD BADGES (SOP 8.2.5.5) -->
+<div class="card" style="background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%); border: 1px solid #fde68a; border-radius: 12px; margin-bottom: 24px; padding: 18px 24px; box-shadow: 0 4px 12px rgba(217, 119, 6, 0.08);">
+    <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+        <div style="width: 40px; height: 40px; border-radius: 50%; background: #f59e0b; color: #ffffff; display: flex; align-items: center; justify-content: center; font-size: 1.25rem;">
+            <i class="fa-solid fa-medal"></i>
+        </div>
+        <div>
+            <h3 style="margin: 0; font-size: 16px; font-weight: 800; color: #78350f;">
+                Lencana Kehormatan &amp; Penghargaan Pegawai Berprestasi
+            </h3>
+            <div style="font-size: 12px; color: #92400e;">
+                Penetapan resmi Yayasan Islam Al-Kahfi Batam berdasarkan evaluasi kinerja tahunan (SOP 8.2.5.5 &amp; 8.2.11)
+            </div>
+        </div>
+    </div>
+    <div style="display: flex; flex-wrap: wrap; gap: 12px;">
+        <?php foreach ($employeeBadges as $bdg): ?>
+            <div style="background: #ffffff; border: 1px solid #fcd34d; border-radius: 8px; padding: 10px 16px; display: flex; align-items: center; gap: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+                <i class="fa-solid fa-award" style="font-size: 1.5rem; color: #d97706;"></i>
+                <div>
+                    <div style="font-weight: 700; font-size: 13px; color: #78350f;">
+                        <?= SecurityHelper::escape($bdg['title']) ?>
+                    </div>
+                    <div style="font-size: 11px; color: #64748b;">
+                        Tanggal Penetapan: <?= date('d M Y', strtotime($bdg['awarded_at'])) ?>
+                        <?php if (!empty($bdg['notes'])): ?>
+                            &bull; <em>"<?= SecurityHelper::escape($bdg['notes']) ?>"</em>
+                        <?php endif; ?>
+                    </div>
+                </div>
+            </div>
+        <?php endforeach; ?>
+    </div>
+</div>
+<?php endif; ?>
+
 <div class="grid-cols-3" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; margin-bottom: 24px;">
     <!-- INFORMASI BIODATA UTAMA -->
     <div class="card" style="box-shadow: 0 2px 8px rgba(0,0,0,0.05); border: 1px solid #e2e8f0; border-radius: 12px;">
@@ -245,6 +282,43 @@ if (strpos($waNumber, '0') === 0) {
         </div>
     </div>
 </div>
+
+<?php if (!empty($employeeBadges)): ?>
+<!-- EMPLOYEE AWARDS & REWARD BADGES (SOP 8.2.5.5) -->
+<div class="card" style="background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%); border: 1px solid #fde68a; border-radius: 12px; margin-bottom: 24px; padding: 18px 24px; box-shadow: 0 4px 12px rgba(217, 119, 6, 0.08);">
+    <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+        <div style="width: 40px; height: 40px; border-radius: 50%; background: #f59e0b; color: #ffffff; display: flex; align-items: center; justify-content: center; font-size: 1.25rem;">
+            <i class="fa-solid fa-medal"></i>
+        </div>
+        <div>
+            <h3 style="margin: 0; font-size: 16px; font-weight: 800; color: #78350f;">
+                Lencana Kehormatan &amp; Penghargaan Pegawai Berprestasi
+            </h3>
+            <div style="font-size: 12px; color: #92400e;">
+                Penetapan resmi Yayasan Islam Al-Kahfi Batam berdasarkan evaluasi kinerja tahunan (SOP 8.2.5.5 &amp; 8.2.11)
+            </div>
+        </div>
+    </div>
+    <div style="display: flex; flex-wrap: wrap; gap: 12px;">
+        <?php foreach ($employeeBadges as $bdg): ?>
+            <div style="background: #ffffff; border: 1px solid #fcd34d; border-radius: 8px; padding: 10px 16px; display: flex; align-items: center; gap: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+                <i class="fa-solid fa-award" style="font-size: 1.5rem; color: #d97706;"></i>
+                <div>
+                    <div style="font-weight: 700; font-size: 13px; color: #78350f;">
+                        <?= SecurityHelper::escape($bdg['title']) ?>
+                    </div>
+                    <div style="font-size: 11px; color: #64748b;">
+                        Tanggal Penetapan: <?= date('d M Y', strtotime($bdg['awarded_at'])) ?>
+                        <?php if (!empty($bdg['notes'])): ?>
+                            &bull; <em>"<?= SecurityHelper::escape($bdg['notes']) ?>"</em>
+                        <?php endif; ?>
+                    </div>
+                </div>
+            </div>
+        <?php endforeach; ?>
+    </div>
+</div>
+<?php endif; ?>
 
 <!-- SECTION 1: MENGAJAR DI KELAS APA DAN MATA PELAJARAN APA -->
 <div class="card" style="box-shadow: 0 2px 8px rgba(0,0,0,0.05); border: 1px solid #e2e8f0; border-radius: 12px; margin-bottom: 24px;">

@@ -247,6 +247,11 @@ foreach ($assignments as $asg) {
                                     <td><strong style="color: var(--text-main, #0f172a);"><?= SecurityHelper::escape($sub['name']) ?></strong></td>
                                     <td>
                                         <span class="badge <?= $badgeClass ?>"><?= SecurityHelper::escape($sub['type']) ?></span>
+                                        <?php if (!empty($sub['deputi_kpi_category'])): ?>
+                                            <span class="badge" style="background: #f5f3ff; color: #7c3aed; font-size: 10px; margin-top: 2px; display: inline-block;">
+                                                <i class="fa-solid fa-bullseye"></i> <?= SecurityHelper::escape($sub['deputi_kpi_category']) ?>
+                                            </span>
+                                        <?php endif; ?>
                                     </td>
                                     <td style="text-align: center;">
                                         <?php if ($usage > 0): ?>
@@ -305,6 +310,27 @@ foreach ($assignments as $asg) {
                         <option value="Baca Latin">Baca Latin (Khusus TK)</option>
                         <option value="National Kurikulum">National Kurikulum (Khusus TK)</option>
                     </select>
+                </div>
+                <div class="form-group" style="margin-bottom: 14px;">
+                    <label class="form-label" style="font-weight: 600;">Kategori Standar Mutu (KPI Deputi)</label>
+                    <select name="deputi_kpi_category" id="sub_deputi_kpi_category" class="form-control">
+                        <option value="">-- Tanpa Kategori Khusus --</option>
+                        <option value="TAHFIZH">TAHFIZH (Hafalan Al-Qur'an)</option>
+                        <option value="TAHSIN">TAHSIN (Membaca Al-Qur'an &amp; Tajwid)</option>
+                        <option value="TUHFATUL ATHFAL">TUHFATUL ATHFAL (Matan Tajwid)</option>
+                        <option value="INDONESIAN">INDONESIAN (Bahasa Indonesia)</option>
+                        <option value="SCIENCE">SCIENCE (IPA / Sains)</option>
+                        <option value="MATH">MATH (Matematika)</option>
+                        <option value="ENGLISH">ENGLISH (Bahasa Inggris)</option>
+                        <option value="ARABIC">ARABIC (Bahasa Arab)</option>
+                        <option value="PHYSIC">PHYSIC (Fisika)</option>
+                        <option value="CHEMISTRY">CHEMISTRY (Kimia)</option>
+                        <option value="BIOLOGY">BIOLOGY (Biologi)</option>
+                        <option value="DINIYAH">DINIYAH (Fiqih / Aqidah / SKI)</option>
+                    </select>
+                    <div style="font-size: 11px; color: var(--text-muted); margin-top: 3px;">
+                        Kategori ini dipakai Deputi Pendidikan untuk mengakumulasi ketercapaian KKM mutu secara otomatis.
+                    </div>
                 </div>
             </div>
             <div class="modal-footer">
@@ -407,6 +433,7 @@ function openSubjectModal() {
     document.getElementById('sub_code').value = '';
     document.getElementById('sub_name').value = '';
     document.getElementById('sub_type').value = 'Umum';
+    document.getElementById('sub_deputi_kpi_category').value = '';
     document.getElementById('subjectModal').classList.add('active');
 }
 function editSubject(s) {
@@ -415,6 +442,7 @@ function editSubject(s) {
     document.getElementById('sub_code').value = s.code;
     document.getElementById('sub_name').value = s.name;
     document.getElementById('sub_type').value = s.type;
+    document.getElementById('sub_deputi_kpi_category').value = s.deputi_kpi_category || '';
     document.getElementById('subjectModal').classList.add('active');
 }
 function closeSubjectModal() {

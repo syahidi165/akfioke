@@ -3365,6 +3365,7 @@ class MasterController extends Controller {
         $code = trim($_POST['code'] ?? '');
         $name = trim($_POST['name'] ?? '');
         $type = $_POST['type'] ?? 'Umum';
+        $deputiKpiCategory = !empty($_POST['deputi_kpi_category']) ? trim($_POST['deputi_kpi_category']) : null;
         $unitId = Auth::hasRole('operator_sekolah') ? Auth::unitId() : (int)($_POST['unit_id'] ?? Auth::unitId());
 
         if ($id > 0) {
@@ -3376,11 +3377,11 @@ class MasterController extends Controller {
                     return;
                 }
             }
-            Database::execute("UPDATE subjects SET code = ?, name = ?, type = ?, updated_at = NOW() WHERE id = ?", [$code, $name, $type, $id]);
+            Database::execute("UPDATE subjects SET code = ?, name = ?, type = ?, deputi_kpi_category = ?, updated_at = NOW() WHERE id = ?", [$code, $name, $type, $deputiKpiCategory, $id]);
             AuditLog::log('UPDATE_SUBJECT', 'subjects', $id);
             $this->setFlash('success', 'Mata pelajaran berhasil diperbarui.');
         } else {
-            Database::execute("INSERT INTO subjects (unit_id, code, name, type) VALUES (?, ?, ?, ?)", [$unitId, $code, $name, $type]);
+            Database::execute("INSERT INTO subjects (unit_id, code, name, type, deputi_kpi_category) VALUES (?, ?, ?, ?, ?)", [$unitId, $code, $name, $type, $deputiKpiCategory]);
             AuditLog::log('CREATE_SUBJECT', 'subjects', Database::lastInsertId());
             $this->setFlash('success', 'Mata pelajaran baru berhasil ditambahkan.');
         }

@@ -166,6 +166,37 @@ if (!function_exists('isNavActive')) {
                     <span class="nav-text">Approval AKFI (HR)</span>
                 </a>
             </div>
+            <div class="nav-section-title">EVALUASI DEPUTI PENDIDIKAN</div>
+            <div class="nav-item">
+                <a href="<?= $baseUrl ?>/deputi/rapor" class="nav-link <?= isNavActive('/deputi/rapor', $currentPath) ?>">
+                    <i class="fa-solid fa-file-shield"></i>
+                    <span class="nav-text">Rapor AKFI Deputi</span>
+                </a>
+            </div>
+            <div class="nav-item">
+                <a href="<?= $baseUrl ?>/deputi/bobot" class="nav-link <?= isNavActive('/deputi/bobot', $currentPath) ?>">
+                    <i class="fa-solid fa-sliders"></i>
+                    <span class="nav-text">Pengaturan Bobot Deputi</span>
+                </a>
+            </div>
+            <div class="nav-item">
+                <a href="<?= $baseUrl ?>/deputi/units" class="nav-link <?= isNavActive('/deputi/units', $currentPath) ?>">
+                    <i class="fa-solid fa-sitemap"></i>
+                    <span class="nav-text">Penugasan Unit Deputi</span>
+                </a>
+            </div>
+            <div class="nav-item">
+                <a href="<?= $baseUrl ?>/deputi/rapbs" class="nav-link <?= isNavActive('/deputi/rapbs', $currentPath) ?>">
+                    <i class="fa-solid fa-file-invoice-dollar"></i>
+                    <span class="nav-text">Monitoring RAPBS Unit</span>
+                </a>
+            </div>
+            <div class="nav-item">
+                <a href="<?= $baseUrl ?>/deputi/calendar" class="nav-link <?= isNavActive('/deputi/calendar', $currentPath) ?>">
+                    <i class="fa-solid fa-calendar-days"></i>
+                    <span class="nav-text">Kalender Kerja &amp; MoM</span>
+                </a>
+            </div>
 
         <?php elseif ($role === 'hrd'): ?>
             <div class="nav-section-title">HRD YAYASAN</div>
@@ -196,6 +227,36 @@ if (!function_exists('isNavActive')) {
 
         <?php elseif ($role === 'deputi_pendidikan'): ?>
             <div class="nav-section-title">DEPUTI DIREKTUR</div>
+            <div class="nav-item">
+                <a href="<?= $baseUrl ?>/deputi/rapor" class="nav-link <?= isNavActive('/deputi/rapor', $currentPath) ?>">
+                    <i class="fa-solid fa-file-shield"></i>
+                    <span class="nav-text">Rapor AKFI Saya</span>
+                </a>
+            </div>
+            <div class="nav-item">
+                <a href="<?= $baseUrl ?>/deputi/calendar" class="nav-link <?= isNavActive('/deputi/calendar', $currentPath) ?>">
+                    <i class="fa-solid fa-calendar-days"></i>
+                    <span class="nav-text">Kalender Kerja &amp; MoM</span>
+                </a>
+            </div>
+            <div class="nav-item">
+                <a href="<?= $baseUrl ?>/deputi/rapbs" class="nav-link <?= isNavActive('/deputi/rapbs', $currentPath) ?>">
+                    <i class="fa-solid fa-file-invoice-dollar"></i>
+                    <span class="nav-text">Monitoring RAPBS (501-509)</span>
+                </a>
+            </div>
+            <div class="nav-item">
+                <a href="<?= $baseUrl ?>/deputi/kpi-mutu" class="nav-link <?= isNavActive('/deputi/kpi-mutu', $currentPath) ?>">
+                    <i class="fa-solid fa-bullseye"></i>
+                    <span class="nav-text">Standar KPI Mutu Mapel</span>
+                </a>
+            </div>
+            <div class="nav-item">
+                <a href="<?= $baseUrl ?>/deputi/sdm-supervisi" class="nav-link <?= isNavActive('/deputi/sdm-supervisi', $currentPath) ?>">
+                    <i class="fa-solid fa-users-gear"></i>
+                    <span class="nav-text">SDM, 8 SNP &amp; Reward Guru</span>
+                </a>
+            </div>
             <div class="nav-item">
                 <a href="<?= $baseUrl ?>/administrasi/review-ks" class="nav-link <?= isNavActive('/administrasi/review-ks', $currentPath) ?>">
                     <i class="fa-solid fa-folder-check"></i>
@@ -680,6 +741,18 @@ if (!function_exists('isNavActive')) {
                 <a href="<?= $baseUrl ?>/administrasi/ks" class="nav-link <?= isNavActive('/administrasi/ks', $currentPath) ?>">
                     <i class="fa-solid fa-folder-closed"></i>
                     <span class="nav-text">Dokumen Admin KS (18 Item)</span>
+                </a>
+            </div>
+            <div class="nav-item">
+                <a href="<?= $baseUrl ?>/deputi/rapbs" class="nav-link <?= isNavActive('/deputi/rapbs', $currentPath) ?>">
+                    <i class="fa-solid fa-file-invoice-dollar"></i>
+                    <span class="nav-text">Penyusunan RAPBS Unit</span>
+                </a>
+            </div>
+            <div class="nav-item">
+                <a href="<?= $baseUrl ?>/deputi/calendar" class="nav-link <?= isNavActive('/deputi/calendar', $currentPath) ?>">
+                    <i class="fa-solid fa-calendar-days"></i>
+                    <span class="nav-text">Kalender Rapat &amp; MoM</span>
                 </a>
             </div>
             <div class="nav-item">
