@@ -107,3 +107,4 @@ $pdo->prepare("DELETE FROM deputi_units WHERE user_id = ?")->execute([$deputiBUs
 $pdo->prepare("INSERT INTO deputi_units (user_id, unit_id, created_at) VALUES (?, 7, NOW()), (?, 8, NOW())")->execute([$deputiBUserId, $deputiBUserId]);
 
 echo "Migration completed successfully!\n";
+

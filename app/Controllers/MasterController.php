@@ -576,8 +576,10 @@ class MasterController extends Controller {
         $superiors = Database::fetchAll("SELECT id, nama, level_posisi FROM employees WHERE is_deleted = 0 ORDER BY nama ASC");
         $isYayasan = Auth::hasAnyRole(['operator_yayasan', 'direktur_pendidikan', 'deputi_pendidikan', 'pembina_yayasan']);
         if ($isYayasan) {
-            $roles = Database::fetchAll("SELECT * FROM roles WHERE name NOT IN ('operator_yayasan', 'direktur_pendidikan', 'pembina_yayasan') ORDER BY display_name ASC");
+            // Operator Yayasan dapat meng-assign peran Direktur Pendidikan, Deputi Pendidikan, dsb.
+            $roles = Database::fetchAll("SELECT * FROM roles WHERE name NOT IN ('operator_yayasan', 'pembina_yayasan') ORDER BY display_name ASC");
         } else {
+            // Operator Sekolah tidak boleh meng-assign peran tingkat Yayasan/Direktur/Deputi
             $roles = Database::fetchAll("SELECT * FROM roles WHERE name NOT IN ('operator_yayasan', 'direktur_pendidikan', 'deputi_pendidikan', 'pembina_yayasan', 'operator_sekolah', 'direktur_pengadaan', 'direktur_sarpras', 'hrd') ORDER BY display_name ASC");
         }
 
@@ -3571,8 +3573,10 @@ class MasterController extends Controller {
 
         // Ambil daftar peran (roles)
         if ($isYayasan) {
-            $roles = Database::fetchAll("SELECT * FROM roles WHERE name NOT IN ('operator_yayasan', 'direktur_pendidikan', 'pembina_yayasan') ORDER BY display_name ASC");
+            // Operator Yayasan dapat meng-assign peran Direktur Pendidikan & Deputi
+            $roles = Database::fetchAll("SELECT * FROM roles WHERE name NOT IN ('operator_yayasan', 'pembina_yayasan') ORDER BY display_name ASC");
         } else {
+            // Operator Sekolah tidak boleh meng-assign peran Direktur/Deputi/Yayasan
             $roles = Database::fetchAll("SELECT * FROM roles WHERE name NOT IN ('operator_yayasan', 'direktur_pendidikan', 'deputi_pendidikan', 'pembina_yayasan', 'operator_sekolah', 'direktur_pengadaan', 'direktur_sarpras', 'hrd') ORDER BY display_name ASC");
         }
 

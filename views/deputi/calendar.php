@@ -3,8 +3,10 @@
 use Core\SecurityHelper;
 use Core\CSRF;
 use Core\Auth;
+use Core\Database;
 
 $baseUrl = Auth::baseUrl();
+$stakeholders = $stakeholders ?? [];
 
 // Data event di-encode ke JSON untuk kalender interaktif JS
 $eventsJson = json_encode($events, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE);
@@ -516,7 +518,7 @@ $eventsJson = json_encode($events, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS |
 <!-- ========================================================================= -->
 <!-- MODAL 1: TAMBAH / EDIT AGENDA                                              -->
 <!-- ========================================================================= -->
-<div class="modal-overlay" id="addEventModal">
+<div class="modal-overlay" id="addEventModal" style="display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.65); z-index: 9999; align-items: center; justify-content: center; padding: 20px;">
     <div class="modal-container" style="max-width: 600px;">
         <form action="<?= $baseUrl ?>/deputi/calendar/save-event" method="POST">
             <?= CSRF::inputField() ?>
@@ -586,7 +588,7 @@ $eventsJson = json_encode($events, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS |
 <!-- ========================================================================= -->
 <!-- MODAL 2: POP-UP NOTULA MoM & DAFTAR KOMITMEN TINDAK LANJUT                -->
 <!-- ========================================================================= -->
-<div class="modal-overlay" id="momModal">
+<div class="modal-overlay" id="momModal" style="display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.65); z-index: 9999; align-items: center; justify-content: center; padding: 20px;">
     <div class="modal-container" style="max-width: 800px; max-height: 90vh; overflow-y: auto;">
         <form action="<?= $baseUrl ?>/deputi/calendar/save-mom" method="POST" enctype="multipart/form-data">
             <?= CSRF::inputField() ?>
@@ -658,7 +660,7 @@ $eventsJson = json_encode($events, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS |
 <!-- ========================================================================= -->
 <!-- MODAL 3: KIRIM UNDANGAN RAPAT                                             -->
 <!-- ========================================================================= -->
-<div class="modal-overlay" id="inviteModal">
+<div class="modal-overlay" id="inviteModal" style="display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.65); z-index: 9999; align-items: center; justify-content: center; padding: 20px;">
     <div class="modal-container" style="max-width: 500px;">
         <form action="<?= $baseUrl ?>/deputi/calendar/send-invitation" method="POST">
             <?= CSRF::inputField() ?>
@@ -678,7 +680,6 @@ $eventsJson = json_encode($events, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS |
                     <label class="form-label" style="font-weight: 600;">Pilih Stakeholder / Peserta Rapat:</label>
                     <div style="display: flex; flex-direction: column; gap: 6px; max-height: 180px; overflow-y: auto; background: #f8fafc; padding: 10px; border-radius: 6px; border: 1px solid #e2e8f0;">
                         <?php 
-                        $stakeholders = Database::fetchAll("SELECT u.id, u.full_name, r.display_name FROM users u JOIN user_roles ur ON u.id = ur.user_id JOIN roles r ON ur.role_id = r.id WHERE r.name IN ('kepala_sekolah', 'waka_kurikulum', 'waka_kesiswaan', 'direktur_pendidikan') GROUP BY u.id ORDER BY u.full_name ASC");
                         foreach ($stakeholders as $sh):
                         ?>
                             <label style="display: flex; align-items: center; gap: 8px; font-size: 0.8125rem; cursor: pointer;">
@@ -1003,26 +1004,36 @@ function renderMonthlyGrid() {
 function openAddEventModal() {
     document.getElementById('event_modal_title').value = '';
     document.getElementById('event_modal_date').value = new Date().toISOString().slice(0, 10);
-    document.getElementById('addEventModal').classList.add('active');
+    var m = document.getElementById('addEventModal');
+    m.style.display = 'flex';
+    m.classList.add('active');
 }
 
 function openAddEventModalWithDate(dateStr) {
     document.getElementById('event_modal_title').value = '';
     document.getElementById('event_modal_date').value = dateStr;
-    document.getElementById('addEventModal').classList.add('active');
+    var m = document.getElementById('addEventModal');
+    m.style.display = 'flex';
+    m.classList.add('active');
 }
 
 function closeAddEventModal() {
-    document.getElementById('addEventModal').classList.remove('active');
+    var m = document.getElementById('addEventModal');
+    m.style.display = 'none';
+    m.classList.remove('active');
 }
 
 function openInviteModal(eventId, title) {
     document.getElementById('invite_event_id').value = eventId;
     document.getElementById('inviteEventTitle').innerText = title;
-    document.getElementById('inviteModal').classList.add('active');
+    var m = document.getElementById('inviteModal');
+    m.style.display = 'flex';
+    m.classList.add('active');
 }
 function closeInviteModal() {
-    document.getElementById('inviteModal').classList.remove('active');
+    var m = document.getElementById('inviteModal');
+    m.style.display = 'none';
+    m.classList.remove('active');
 }
 
 function openMomModal(eventId) {
@@ -1087,12 +1098,16 @@ function openMomModal(eventId) {
                 exWrapper.innerHTML = '<div style="font-size:0.75rem; color:#94a3b8; font-style:italic;">Belum ada komitmen aksi tercatat. Klik Tambah Butir di atas.</div>';
             }
 
-            document.getElementById('momModal').classList.add('active');
+            var m = document.getElementById('momModal');
+            m.style.display = 'flex';
+            m.classList.add('active');
         });
 }
 
 function closeMomModal() {
-    document.getElementById('momModal').classList.remove('active');
+    var m = document.getElementById('momModal');
+    m.style.display = 'none';
+    m.classList.remove('active');
 }
 
 function addActionItemRow() {

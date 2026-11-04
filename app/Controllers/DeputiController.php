@@ -217,13 +217,24 @@ class DeputiController extends Controller {
             [$taId, $deputiUserId]
         );
 
+        $stakeholders = Database::fetchAll(
+            "SELECT u.id, u.full_name, r.display_name 
+             FROM users u 
+             JOIN user_roles ur ON u.id = ur.user_id 
+             JOIN roles r ON ur.role_id = r.id 
+             WHERE r.name IN ('kepala_sekolah', 'waka_kurikulum', 'waka_kesiswaan', 'direktur_pendidikan') 
+             GROUP BY u.id 
+             ORDER BY u.full_name ASC"
+        );
+
         $this->view('deputi/calendar', [
             'pageTitle'    => 'Kalender Kerja Tahunan & Meeting Manager (MoM)',
             'deputiUser'   => $deputiUser,
             'deputiList'   => $deputiList,
             'deputiUserId' => $deputiUserId,
             'units'        => $units,
-            'events'       => $events
+            'events'       => $events,
+            'stakeholders' => $stakeholders
         ]);
     }
 
