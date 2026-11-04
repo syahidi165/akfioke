@@ -33,10 +33,24 @@ $baseUrl = Auth::baseUrl();
 
 <!-- Unit Selector Tabs (untuk Deputi/Direktur) -->
 <?php if (!$isKepsek): ?>
+    <?php if (!empty($deputiList) && count($deputiList) > 1 && Auth::hasAnyRole(['direktur_pendidikan', 'operator_yayasan'])): ?>
+        <div style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 10px 14px; margin-bottom: 14px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+            <span style="font-size: 0.875rem; font-weight: 600; color: #1e3a8a;">
+                <i class="fa-solid fa-user-tie" style="margin-right: 6px;"></i> Wilayah Binaan Deputi:
+            </span>
+            <select onchange="window.location.href='<?= $baseUrl ?>/deputi/rapbs?deputi_id=' + this.value" class="form-control" style="width: auto; min-width: 260px; font-weight: 600;">
+                <?php foreach ($deputiList as $dl): ?>
+                    <option value="<?= $dl['id'] ?>" <?= $dl['id'] == $deputiUserId ? 'selected' : '' ?>>
+                        <?= SecurityHelper::escape($dl['full_name']) ?>
+                    </option>
+                <?php endforeach; ?>
+            </select>
+        </div>
+    <?php endif; ?>
     <div style="display: flex; gap: 8px; margin-bottom: 20px; overflow-x: auto; padding-bottom: 4px;">
         <?php foreach ($units as $u): ?>
             <?php $isActive = (int)$u['id'] === $selectedUnitId; ?>
-            <a href="<?= $baseUrl ?>/deputi/rapbs?unit_id=<?= $u['id'] ?>" 
+            <a href="<?= $baseUrl ?>/deputi/rapbs?unit_id=<?= $u['id'] ?>&deputi_id=<?= $deputiUserId ?>" 
                class="btn <?= $isActive ? 'btn-primary' : 'btn-outline' ?>" 
                style="font-size: 0.875rem; font-weight: 600; white-space: nowrap; border-radius: 8px;">
                 <i class="fa-solid fa-school"></i> <?= SecurityHelper::escape($u['name']) ?>

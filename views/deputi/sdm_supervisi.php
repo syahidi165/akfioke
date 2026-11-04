@@ -29,6 +29,21 @@ $baseUrl = Auth::baseUrl();
     </div>
 </div>
 
+<?php if (!empty($deputiList) && count($deputiList) > 1 && Auth::hasAnyRole(['direktur_pendidikan', 'operator_yayasan'])): ?>
+    <div style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 10px 14px; margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+        <span style="font-size: 0.875rem; font-weight: 600; color: #1e3a8a;">
+            <i class="fa-solid fa-user-tie" style="margin-right: 6px;"></i> Wilayah Binaan Deputi:
+        </span>
+        <select onchange="window.location.href='<?= $baseUrl ?>/deputi/sdm-supervisi?deputi_id=' + this.value" class="form-control" style="width: auto; min-width: 260px; font-weight: 600;">
+            <?php foreach ($deputiList as $dl): ?>
+                <option value="<?= $dl['id'] ?>" <?= $dl['id'] == $deputiUserId ? 'selected' : '' ?>>
+                    <?= SecurityHelper::escape($dl['full_name']) ?>
+                </option>
+            <?php endforeach; ?>
+        </select>
+    </div>
+<?php endif; ?>
+
 <!-- Stat Highlights -->
 <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; margin-bottom: 24px;">
     <div class="card" style="padding: 16px 20px; border-radius: 12px; border-left: 4px solid #3b82f6;">

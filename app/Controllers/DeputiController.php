@@ -18,12 +18,18 @@ class DeputiController extends Controller {
      * Jika belum di-assign spesifik, fallback ke semua unit.
      */
     public static function getDeputiUnitIds(int $userId): array {
-        $rows = Database::fetchAll("SELECT unit_id FROM deputi_units WHERE user_id = ?", [$userId]);
+        $rows = Database::fetchAll(
+            "SELECT du.unit_id 
+             FROM deputi_units du
+             JOIN units u ON du.unit_id = u.id
+             WHERE du.user_id = ? AND u.is_active = 1",
+            [$userId]
+        );
         if (!empty($rows)) {
             return array_column($rows, 'unit_id');
         }
         // Fallback: semua unit aktif
-        $all = Database::fetchAll("SELECT id FROM units ORDER BY id ASC");
+        $all = Database::fetchAll("SELECT id FROM units WHERE is_active = 1 ORDER BY id ASC");
         return array_column($all, 'id');
     }
 
@@ -64,7 +70,7 @@ class DeputiController extends Controller {
              ORDER BY u.full_name ASC"
         );
 
-        $allUnits = Database::fetchAll("SELECT * FROM units ORDER BY id ASC");
+        $allUnits = Database::fetchAll("SELECT * FROM units WHERE is_active = 1 ORDER BY id ASC");
 
         // Ambil mapping saat ini
         $mappingsRaw = Database::fetchAll("SELECT user_id, unit_id FROM deputi_units");
@@ -487,9 +493,18 @@ class DeputiController extends Controller {
         $taId = Auth::academicYearId();
         $deputiUserId = $this->resolveDeputiUserId();
 
+        $deputiList = Database::fetchAll(
+            "SELECT u.id, u.full_name, e.nama FROM users u 
+             JOIN user_roles ur ON u.id = ur.user_id 
+             JOIN roles r ON ur.role_id = r.id 
+             LEFT JOIN employees e ON e.user_id = u.id
+             WHERE r.name = 'deputi_pendidikan' AND u.is_active = 1
+             ORDER BY u.id ASC"
+        );
+
         $deputiUnitIds = self::getDeputiUnitIds($deputiUserId);
         $inUnits = !empty($deputiUnitIds) ? implode(',', $deputiUnitIds) : '0';
-        $units = Database::fetchAll("SELECT * FROM units WHERE id IN ({$inUnits}) ORDER BY id ASC");
+        $units = Database::fetchAll("SELECT * FROM units WHERE id IN ({$inUnits}) AND is_active = 1 ORDER BY id ASC");
 
         $selectedUnitId = (int)($_GET['unit_id'] ?? ($units[0]['id'] ?? 0));
 
@@ -541,6 +556,7 @@ class DeputiController extends Controller {
             'selectedUnitId' => $selectedUnitId,
             'standards'      => $standards,
             'achievementMap' => $achievementMap,
+            'deputiList'     => $deputiList,
             'deputiUserId'   => $deputiUserId
         ]);
     }
@@ -603,13 +619,22 @@ class DeputiController extends Controller {
         $isKepsek = Auth::hasRole('kepala_sekolah');
         $deputiUserId = $this->resolveDeputiUserId();
 
+        $deputiList = Database::fetchAll(
+            "SELECT u.id, u.full_name, e.nama FROM users u 
+             JOIN user_roles ur ON u.id = ur.user_id 
+             JOIN roles r ON ur.role_id = r.id 
+             LEFT JOIN employees e ON e.user_id = u.id
+             WHERE r.name = 'deputi_pendidikan' AND u.is_active = 1
+             ORDER BY u.id ASC"
+        );
+
         if ($isKepsek) {
             $unitId = Auth::unitId();
-            $units = Database::fetchAll("SELECT * FROM units WHERE id = ?", [$unitId]);
+            $units = Database::fetchAll("SELECT * FROM units WHERE id = ? AND is_active = 1", [$unitId]);
         } else {
             $deputiUnitIds = self::getDeputiUnitIds($deputiUserId);
             $inUnits = !empty($deputiUnitIds) ? implode(',', $deputiUnitIds) : '0';
-            $units = Database::fetchAll("SELECT * FROM units WHERE id IN ({$inUnits}) ORDER BY id ASC");
+            $units = Database::fetchAll("SELECT * FROM units WHERE id IN ({$inUnits}) AND is_active = 1 ORDER BY id ASC");
             $unitId = (int)($_GET['unit_id'] ?? ($units[0]['id'] ?? 0));
         }
 
@@ -679,6 +704,7 @@ class DeputiController extends Controller {
             'summaryPos'     => $summaryPos,
             'posDefinitions' => $posDefinitions,
             'isKepsek'       => $isKepsek,
+            'deputiList'     => $deputiList,
             'deputiUserId'   => $deputiUserId
         ]);
     }
@@ -785,9 +811,18 @@ class DeputiController extends Controller {
         $taId = Auth::academicYearId();
         $deputiUserId = $this->resolveDeputiUserId();
 
+        $deputiList = Database::fetchAll(
+            "SELECT u.id, u.full_name, e.nama FROM users u 
+             JOIN user_roles ur ON u.id = ur.user_id 
+             JOIN roles r ON ur.role_id = r.id 
+             LEFT JOIN employees e ON e.user_id = u.id
+             WHERE r.name = 'deputi_pendidikan' AND u.is_active = 1
+             ORDER BY u.id ASC"
+        );
+
         $deputiUnitIds = self::getDeputiUnitIds($deputiUserId);
         $inUnits = !empty($deputiUnitIds) ? implode(',', $deputiUnitIds) : '0';
-        $units = Database::fetchAll("SELECT * FROM units WHERE id IN ({$inUnits}) ORDER BY id ASC");
+        $units = Database::fetchAll("SELECT * FROM units WHERE id IN ({$inUnits}) AND is_active = 1 ORDER BY id ASC");
         $selectedUnitId = (int)($_GET['unit_id'] ?? 0);
 
         // 1. Rekap AKFI Kepala Sekolah di Unit Binaan
@@ -876,6 +911,7 @@ class DeputiController extends Controller {
             'candidateEmployees' => $candidateEmployees,
             'surveyStats'        => $surveyStats,
             'monthlyUploads'     => $monthlyUploads,
+            'deputiList'         => $deputiList,
             'deputiUserId'       => $deputiUserId
         ]);
     }
@@ -974,14 +1010,19 @@ class DeputiController extends Controller {
         // Hitung skor otomatis dari sistem untuk setiap indikator
         $autoScores = self::calculateSystemMetrics($deputiUserId, $taId, $semester);
 
+        $assignedUnitIds = self::getDeputiUnitIds($deputiUserId);
+        $inAssigned = !empty($assignedUnitIds) ? implode(',', $assignedUnitIds) : '0';
+        $assignedUnits = Database::fetchAll("SELECT * FROM units WHERE id IN ({$inAssigned}) AND is_active = 1 ORDER BY id ASC");
+
         $this->view('deputi/rapor', [
-            'pageTitle'    => 'Form & Pratinjau Rapor AKFI Deputi Divisi Pendidikan',
-            'deputiUser'   => $deputiUser,
-            'deputiList'   => $deputiList,
-            'deputiUserId' => $deputiUserId,
-            'semester'     => $semester,
-            'evaluation'   => $evaluation,
-            'evalDetails'  => $evalDetails,
+            'pageTitle'     => 'Form & Pratinjau Rapor AKFI Deputi Divisi Pendidikan',
+            'deputiUser'    => $deputiUser,
+            'deputiList'    => $deputiList,
+            'deputiUserId'  => $deputiUserId,
+            'assignedUnits' => $assignedUnits,
+            'semester'      => $semester,
+            'evaluation'    => $evaluation,
+            'evalDetails'   => $evalDetails,
             'indicators'   => $indicators,
             'weightMap'    => $weightMap,
             'autoScores'   => $autoScores,

@@ -36,23 +36,59 @@ $baseUrl = Auth::baseUrl();
     </div>
 </div>
 
+<?php if ($isDirektur && !empty($deputiList) && count($deputiList) > 1): ?>
+    <!-- Switcher Evaluator Direktur Pendidikan -->
+    <div class="card" style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 12px; padding: 14px 18px; margin-bottom: 20px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <div style="width: 36px; height: 36px; border-radius: 8px; background: #3b82f6; color: #ffffff; display: flex; align-items: center; justify-content: center; font-size: 16px;">
+                    <i class="fa-solid fa-user-check"></i>
+                </div>
+                <div>
+                    <strong style="color: #1e3a8a; font-size: 0.9375rem;">Penilaian Deputi Pendidikan oleh Direktur:</strong>
+                    <div style="font-size: 0.8125rem; color: #3b82f6;">Pilih Deputi Pendidikan untuk melihat metrik dan mengisi penilaian kinerja.</div>
+                </div>
+            </div>
+            <form method="GET" action="<?= $baseUrl ?>/deputi/rapor" style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                <select name="deputi_id" class="form-control" style="font-weight: 700; color: #1e3a8a; min-width: 280px;" onchange="this.form.submit()">
+                    <?php foreach ($deputiList as $d): ?>
+                        <option value="<?= $d['id'] ?>" <?= $d['id'] == $deputiUserId ? 'selected' : '' ?>>
+                            <?= SecurityHelper::escape($d['full_name']) ?> (<?= SecurityHelper::escape($d['emp_nama'] ?? $d['full_name']) ?>)
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+                <select name="semester" class="form-control" style="font-weight: 700; width: 110px;" onchange="this.form.submit()">
+                    <option value="Ganjil" <?= $semester === 'Ganjil' ? 'selected' : '' ?>>Ganjil</option>
+                    <option value="Genap" <?= $semester === 'Genap' ? 'selected' : '' ?>>Genap</option>
+                </select>
+            </form>
+        </div>
+    </div>
+<?php endif; ?>
+
 <!-- Header Info Cards -->
 <div class="card" style="background: #ffffff; border-radius: 12px; border: 1px solid #e2e8f0; padding: 20px; margin-bottom: 24px;">
-    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px;">
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px;">
         <div>
             <div style="font-size: 0.75rem; color: #64748b; font-weight: 600; text-transform: uppercase;">Nama Pegawai</div>
             <div style="font-size: 1rem; font-weight: 700; color: #1e293b;"><?= SecurityHelper::escape($deputiUser['full_name'] ?? '-') ?></div>
             <div style="font-size: 0.8125rem; color: #64748b;">NIPY: <?= SecurityHelper::escape($deputiUser['username'] ?? '-') ?></div>
         </div>
         <div>
-            <div style="font-size: 0.75rem; color: #64748b; font-weight: 600; text-transform: uppercase;">Jabatan</div>
+            <div style="font-size: 0.75rem; color: #64748b; font-weight: 600; text-transform: uppercase;">Jabatan &amp; Lingkup</div>
             <div style="font-size: 1rem; font-weight: 700; color: #1e293b;">Deputi Divisi Pendidikan</div>
-            <div style="font-size: 0.8125rem; color: #64748b;">Yayasan Islam Al-Kahfi Batam</div>
+            <div style="font-size: 0.8125rem; color: #0284c7; font-weight: 600;">
+                <?php if (empty($assignedUnits)): ?>
+                    <span>Semua Unit</span>
+                <?php else: ?>
+                    <?= implode(', ', array_map(function($u) { return SecurityHelper::escape($u['code']); }, $assignedUnits)) ?>
+                <?php endif; ?>
+            </div>
         </div>
         <div>
-            <div style="font-size: 0.75rem; color: #64748b; font-weight: 600; text-transform: uppercase;">Penilai / Evaluator</div>
+            <div style="font-size: 0.75rem; color: #64748b; font-weight: 600; text-transform: uppercase;">Atasan Langsung / Evaluator</div>
             <div style="font-size: 1rem; font-weight: 700; color: #1e293b;"><?= SecurityHelper::escape($evaluation['evaluator_name'] ?? 'Direktur Pendidikan') ?></div>
-            <div style="font-size: 0.8125rem; color: #64748b;">Jabatan: Direktur Pendidikan</div>
+            <div style="font-size: 0.8125rem; color: #64748b;">Direktur Pendidikan Yayasan</div>
         </div>
         <div>
             <div style="font-size: 0.75rem; color: #64748b; font-weight: 600; text-transform: uppercase;">Nilai Akhir &amp; Predikat</div>

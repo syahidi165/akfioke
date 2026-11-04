@@ -67,6 +67,8 @@ Router::post('/notifications/:id/delete', [NotificationController::class, 'delet
 Router::get('/master/units', [MasterController::class, 'units']);
 Router::post('/master/units/save', [MasterController::class, 'saveUnit']);
 Router::post('/master/units/upload-logo', [MasterController::class, 'uploadUnitLogo']);
+Router::post('/master/units/delete', [MasterController::class, 'deleteUnit']);
+Router::post('/master/units/restore', [MasterController::class, 'restoreUnit']);
 Router::get('/master/academic-years', [MasterController::class, 'academicYears']);
 Router::post('/master/academic-years/save', [MasterController::class, 'saveAcademicYear']);
 Router::post('/master/academic-years/switch-active', [MasterController::class, 'switchActiveYear']);

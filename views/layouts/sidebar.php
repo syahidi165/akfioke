@@ -192,6 +192,18 @@ if (!function_exists('isNavActive')) {
                 </a>
             </div>
             <div class="nav-item">
+                <a href="<?= $baseUrl ?>/deputi/sdm-supervisi" class="nav-link <?= isNavActive('/deputi/sdm-supervisi', $currentPath) ?>">
+                    <i class="fa-solid fa-users-gear"></i>
+                    <span class="nav-text">SDM, 8 SNP &amp; Reward</span>
+                </a>
+            </div>
+            <div class="nav-item">
+                <a href="<?= $baseUrl ?>/deputi/kpi-mutu" class="nav-link <?= isNavActive('/deputi/kpi-mutu', $currentPath) ?>">
+                    <i class="fa-solid fa-graduation-cap"></i>
+                    <span class="nav-text">Standar Mutu &amp; KKM Mapel</span>
+                </a>
+            </div>
+            <div class="nav-item">
                 <a href="<?= $baseUrl ?>/deputi/calendar" class="nav-link <?= isNavActive('/deputi/calendar', $currentPath) ?>">
                     <i class="fa-solid fa-calendar-days"></i>
                     <span class="nav-text">Kalender Kerja &amp; MoM</span>

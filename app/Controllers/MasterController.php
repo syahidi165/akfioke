@@ -19,10 +19,13 @@ class MasterController extends Controller {
     // --- 1. UNIT & SEKOLAH ---
     public function units(): void {
         $this->requireRole('operator_yayasan');
-        $units = Database::fetchAll("SELECT * FROM units ORDER BY id ASC");
+        $activeUnits = Database::fetchAll("SELECT * FROM units WHERE is_active = 1 ORDER BY id ASC");
+        $archivedUnits = Database::fetchAll("SELECT * FROM units WHERE is_active = 0 ORDER BY deleted_at DESC, id ASC");
         $this->view('master/units', [
-            'pageTitle' => 'Kelola Yayasan & Unit Sekolah',
-            'units'     => $units
+            'pageTitle'     => 'Kelola Yayasan & Unit Sekolah',
+            'activeUnits'   => $activeUnits,
+            'archivedUnits' => $archivedUnits,
+            'units'         => $activeUnits // backward compatibility
         ]);
     }
 
@@ -195,6 +198,51 @@ class MasterController extends Controller {
         AuditLog::log('UPLOAD_UNIT_LOGO', 'units', $unitId, ['old_logo' => $unit['logo_path']], ['new_logo' => $relativePath]);
 
         $this->setFlash('success', "Logo resmi untuk unit {$unit['name']} berhasil diperbarui.");
+        $this->redirect(Auth::baseUrl() . '/master/units');
+    }
+
+    public function deleteUnit(): void {
+        $this->requireRole('operator_yayasan');
+        $unitId = (int)($_POST['id'] ?? 0);
+        $reason = trim($_POST['reason'] ?? 'Unit dinonaktifkan / ditutup oleh Operator Yayasan');
+
+        $unit = Database::fetch("SELECT * FROM units WHERE id = ?", [$unitId]);
+        if (!$unit) {
+            $this->setFlash('danger', 'Unit sekolah tidak ditemukan.');
+            $this->redirect(Auth::baseUrl() . '/master/units');
+            return;
+        }
+
+        // Soft delete: tandai is_active = 0, simpan deleted_at dan alasan
+        // DATA HISTORIS & ARSIP (Rapor, Nilai Siswa, Pegawai, Tagihan) TETAP AMAN & TIDAK DIHAPUS DARI DATABASE
+        Database::execute(
+            "UPDATE units SET is_active = 0, deleted_at = NOW(), deleted_by = ?, deletion_reason = ? WHERE id = ?",
+            [Auth::id(), $reason, $unitId]
+        );
+
+        AuditLog::log('ARCHIVE_UNIT', 'units', $unitId, ['name' => $unit['name'], 'code' => $unit['code']], ['reason' => $reason]);
+        $this->setFlash('success', "Unit sekolah '{$unit['name']}' ({$unit['code']}) berhasil dinonaktifkan/diarsipkan. Seluruh data arsip, rapor, dan transaksi masa lalu tetap tersimpan utuh dan tidak hilang.");
+        $this->redirect(Auth::baseUrl() . '/master/units');
+    }
+
+    public function restoreUnit(): void {
+        $this->requireRole('operator_yayasan');
+        $unitId = (int)($_POST['id'] ?? 0);
+
+        $unit = Database::fetch("SELECT * FROM units WHERE id = ?", [$unitId]);
+        if (!$unit) {
+            $this->setFlash('danger', 'Unit sekolah tidak ditemukan.');
+            $this->redirect(Auth::baseUrl() . '/master/units');
+            return;
+        }
+
+        Database::execute(
+            "UPDATE units SET is_active = 1, deleted_at = NULL, deleted_by = NULL, deletion_reason = NULL, updated_at = NOW() WHERE id = ?",
+            [$unitId]
+        );
+
+        AuditLog::log('RESTORE_UNIT', 'units', $unitId, null, ['name' => $unit['name'], 'code' => $unit['code']]);
+        $this->setFlash('success', "Unit sekolah '{$unit['name']}' ({$unit['code']}) berhasil dipulihkan kembali ke status Aktif.");
         $this->redirect(Auth::baseUrl() . '/master/units');
     }
 
