@@ -361,13 +361,34 @@ class KurikulumController extends Controller {
         $items = Database::fetchAll("SELECT * FROM kurikulum_struktur_items WHERE unit_id = ? AND academic_year_id = ? ORDER BY order_num ASC, id ASC", [$unitId, $taId]);
         $academicYear = Database::fetch("SELECT * FROM academic_years WHERE id = ?", [$taId]);
 
+        // Logo URL
+        $logoUrl = '';
+        if (!empty($unit['logo_path'])) {
+            $lPath = dirname(__DIR__, 2) . '/public/' . ltrim($unit['logo_path'], '/');
+            if (file_exists($lPath)) {
+                $logoUrl = Auth::baseUrl() . '/public/' . ltrim($unit['logo_path'], '/');
+            }
+        }
+
+        // Deputi Signature URL
+        $deputiSigUrl = '';
+        $deputiUser = Database::fetch("SELECT * FROM users WHERE full_name LIKE '%Yona Melinda%' LIMIT 1");
+        if ($deputiUser && !empty($deputiUser['signature_path'])) {
+            $sPath = dirname(__DIR__, 2) . '/public/' . ltrim($deputiUser['signature_path'], '/');
+            if (file_exists($sPath)) {
+                $deputiSigUrl = Auth::baseUrl() . '/public/' . ltrim($deputiUser['signature_path'], '/');
+            }
+        }
+
         $this->view('kurikulum/print_struktur', [
-            'pageTitle'    => 'Cetak Struktur Kurikulum ' . $unit['name'],
+            'pageTitle'    => 'Cetak Struktur Kurikulum ' . ($unit['code'] ?? $unit['name']),
             'unit'         => $unit,
             'meta'         => $meta,
             'items'        => $items,
-            'academicYear' => $academicYear
-        ], 'layouts/plain');
+            'academicYear' => $academicYear,
+            'logoUrl'      => $logoUrl,
+            'deputiSigUrl' => $deputiSigUrl
+        ], null);
     }
 
     /**
