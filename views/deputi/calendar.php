@@ -10,6 +10,108 @@ $stakeholders = $stakeholders ?? [];
 $academicStartYear = $academicStartYear ?? 2026;
 $taName = $taName ?? ($academicStartYear . '/' . ($academicStartYear + 1));
 
+$categoryColors = [
+    'Weekly Meeting'          => ['bg' => '#3b82f6', 'text' => '#ffffff'],
+    'Monthly Review'          => ['bg' => '#8b5cf6', 'text' => '#ffffff'],
+    'Management Review'       => ['bg' => '#ec4899', 'text' => '#ffffff'],
+    'Kajian Pekanan'          => ['bg' => '#10b981', 'text' => '#ffffff'],
+    'Pelatihan SDM'           => ['bg' => '#f59e0b', 'text' => '#ffffff'],
+    'Sosialisasi Visi Misi'   => ['bg' => '#0d9488', 'text' => '#ffffff'],
+    'Timeplan SPMB/PGB/RAPBS' => ['bg' => '#475569', 'text' => '#ffffff'],
+    'Lainnya'                 => ['bg' => '#64748b', 'text' => '#ffffff'],
+];
+
+// Helper render kartu bulan mini server-side (Juli s.d Juni)
+$renderMiniMonth = function($mNum, $mName, $year, $evList, $catColors) {
+    $firstDay = (int)date('w', strtotime(sprintf('%04d-%02d-01', $year, $mNum)));
+    $daysInMonth = (int)date('t', strtotime(sprintf('%04d-%02d-01', $year, $mNum)));
+    $prefix = sprintf('%04d-%02d-', $year, $mNum);
+
+    $monthEvents = [];
+    foreach ($evList as $e) {
+        if (str_starts_with($e['start_date'], $prefix)) {
+            $monthEvents[$e['start_date']][] = $e;
+        }
+    }
+
+    $monthNotes = [];
+    ?>
+    <div class="mini-month-card">
+        <div class="mini-month-header" style="cursor: pointer;" onclick="jumpToMonth(<?= $year ?>, <?= $mNum - 1 ?>)" title="Klik untuk melihat kalender detail <?= $mName ?> <?= $year ?>">
+            <span><?= $mName ?></span>
+            <span style="font-size: 0.75rem; color: #64748b; font-weight: normal;"><?= $year ?></span>
+        </div>
+        <table class="mini-table">
+            <thead>
+                <tr>
+                    <th class="sun-th">M</th>
+                    <th>S</th><th>S</th><th>R</th><th>K</th><th>J</th><th>S</th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php
+                $dateNum = 1;
+                for ($row = 0; $row < 6; $row++) {
+                    $hasCells = false;
+                    $rowHtml = '<tr>';
+                    for ($col = 0; $col < 7; $col++) {
+                        $isSun = ($col === 0);
+                        $sunClass = $isSun ? ' class="sun-td"' : '';
+                        if ($row === 0 && $col < $firstDay) {
+                            $rowHtml .= "<td{$sunClass}></td>";
+                        } elseif ($dateNum > $daysInMonth) {
+                            $rowHtml .= "<td{$sunClass}></td>";
+                        } else {
+                            $hasCells = true;
+                            $dateStr = sprintf('%04d-%02d-%02d', $year, $mNum, $dateNum);
+                            $dayEvs = $monthEvents[$dateStr] ?? [];
+
+                            if (!empty($dayEvs)) {
+                                $dotColor = $catColors[$dayEvs[0]['category']]['bg'] ?? '#2563eb';
+                                $tdClick = count($dayEvs) === 1 
+                                    ? 'onclick="openMomModal(' . (int)$dayEvs[0]['id'] . ')"'
+                                    : 'onclick="openAddEventModalWithDate(\'' . $dateStr . '\')"';
+                                $rowHtml .= '<td class="has-event' . ($isSun ? ' sun-td' : '') . '" ' . $tdClick . '>' . $dateNum . '<span class="mini-event-dot" style="background: ' . $dotColor . ';"></span></td>';
+                                foreach ($dayEvs as $ev) {
+                                    $monthNotes[] = ['date' => $dateNum, 'title' => $ev['title'], 'id' => $ev['id'], 'cat' => $ev['category']];
+                                }
+                            } else {
+                                $rowHtml .= '<td' . $sunClass . ' onclick="openAddEventModalWithDate(\'' . $dateStr . '\')">' . $dateNum . '</td>';
+                            }
+                            $dateNum++;
+                        }
+                    }
+                    $rowHtml .= '</tr>';
+                    if ($hasCells) {
+                        echo $rowHtml;
+                    }
+                }
+                ?>
+            </tbody>
+        </table>
+        <div class="mini-month-notes">
+            <?php if (!empty($monthNotes)): ?>
+                <?php foreach (array_slice($monthNotes, 0, 3) as $n): 
+                    $dotC = $catColors[$n['cat']]['bg'] ?? '#2563eb';
+                ?>
+                    <div class="mini-note-item" onclick="openMomModal(<?= $n['id'] ?>)">
+                        <span style="color: <?= $dotC ?>; font-weight: 800;"><?= $n['date'] ?>:</span>
+                        <span><?= SecurityHelper::escape(mb_strimwidth($n['title'], 0, 28, '...')) ?></span>
+                    </div>
+                <?php endforeach; ?>
+                <?php if (count($monthNotes) > 3): ?>
+                    <div style="font-size: 10px; color: #2563eb; cursor: pointer;">
+                        + <?= count($monthNotes) - 3 ?> agenda lainnya
+                    </div>
+                <?php endif; ?>
+            <?php else: ?>
+                <span style="color: #94a3b8; font-style: italic;">Belum ada agenda</span>
+            <?php endif; ?>
+        </div>
+    </div>
+    <?php
+};
+
 // Data event di-encode ke JSON untuk kalender interaktif JS
 $eventsJson = json_encode($events, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE);
 ?>
@@ -349,8 +451,64 @@ $eventsJson = json_encode($events, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS |
             </div>
         </div>
 
-        <div class="year-grid" id="yearlyCalendarGrid">
-            <!-- Diisi secara dinamis oleh JS -->
+        <div id="yearlyCalendarGrid">
+            <!-- SEMESTER 1 (GANJIL): JULI - DESEMBER -->
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; padding: 10px 16px; background: #f0fdf4; border-left: 5px solid #16a34a; border-radius: 6px;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <i class="fa-solid fa-calendar-check" style="color: #16a34a; font-size: 1.125rem;"></i>
+                    <span style="font-weight: 800; color: #15803d; font-size: 1rem; letter-spacing: 0.5px;">
+                        SEMESTER 1 (GANJIL) &bull; TAHUN <?= $academicStartYear ?> (Juli &ndash; Desember)
+                    </span>
+                </div>
+                <span class="badge" style="background: #dcfce7; color: #15803d; font-size: 11px; font-weight: 700; padding: 4px 10px;">
+                    Awal Tahun Ajaran
+                </span>
+            </div>
+
+            <div class="year-grid" style="margin-bottom: 28px;">
+                <?php 
+                $sem1Months = [
+                    [7, 'Juli', $academicStartYear],
+                    [8, 'Agustus', $academicStartYear],
+                    [9, 'September', $academicStartYear],
+                    [10, 'Oktober', $academicStartYear],
+                    [11, 'November', $academicStartYear],
+                    [12, 'Desember', $academicStartYear],
+                ];
+                foreach ($sem1Months as $sm) {
+                    $renderMiniMonth($sm[0], $sm[1], $sm[2], $events, $categoryColors);
+                }
+                ?>
+            </div>
+
+            <!-- SEMESTER 2 (GENAP): JANUARI - JUNI -->
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; padding: 10px 16px; background: #eff6ff; border-left: 5px solid #2563eb; border-radius: 6px;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <i class="fa-solid fa-calendar-days" style="color: #2563eb; font-size: 1.125rem;"></i>
+                    <span style="font-weight: 800; color: #1d4ed8; font-size: 1rem; letter-spacing: 0.5px;">
+                        SEMESTER 2 (GENAP) &bull; TAHUN <?= $academicStartYear + 1 ?> (Januari &ndash; Juni)
+                    </span>
+                </div>
+                <span class="badge" style="background: #e0f2fe; color: #0284c7; font-size: 11px; font-weight: 700; padding: 4px 10px;">
+                    Akhir Tahun Ajaran
+                </span>
+            </div>
+
+            <div class="year-grid">
+                <?php 
+                $sem2Months = [
+                    [1, 'Januari', $academicStartYear + 1],
+                    [2, 'Februari', $academicStartYear + 1],
+                    [3, 'Maret', $academicStartYear + 1],
+                    [4, 'April', $academicStartYear + 1],
+                    [5, 'Mei', $academicStartYear + 1],
+                    [6, 'Juni', $academicStartYear + 1],
+                ];
+                foreach ($sem2Months as $sm) {
+                    $renderMiniMonth($sm[0], $sm[1], $sm[2], $events, $categoryColors);
+                }
+                ?>
+            </div>
         </div>
     </div>
 </div>
@@ -361,11 +519,11 @@ $eventsJson = json_encode($events, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS |
 <div id="viewMonthlyContainer" style="display: none;">
     <div style="background: #ffffff; border-radius: 12px; border: 1px solid #e2e8f0; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); margin-bottom: 24px;">
         <div class="full-month-header">
-            <div style="display: flex; align-items: center; gap: 10px;">
+            <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
                 <button type="button" class="btn btn-outline" onclick="changeMonth(-1)">
                     <i class="fa-solid fa-chevron-left"></i> Bulan Lalu
                 </button>
-                <h2 id="currentMonthYearLabel" style="margin: 0; font-size: 1.25rem; font-weight: 800; color: #1e3a8a; min-width: 200px; text-align: center;">
+                <h2 id="currentMonthYearLabel" style="margin: 0; font-size: 1.25rem; font-weight: 800; color: #1e3a8a; min-width: 180px; text-align: center;">
                     Bulan 2026
                 </h2>
                 <button type="button" class="btn btn-outline" onclick="changeMonth(1)">
@@ -374,6 +532,25 @@ $eventsJson = json_encode($events, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS |
                 <button type="button" class="btn btn-outline" onclick="goToToday()" style="font-size: 0.8125rem;">
                     Hari Ini
                 </button>
+                <select id="jumpMonthSelect" class="form-control" style="width: auto; font-size: 0.8125rem; font-weight: 600;" onchange="handleMonthJump(this.value)">
+                    <option value="">-- Pilih Bulan Akademik --</option>
+                    <optgroup label="Semester 1 (Ganjil)">
+                        <option value="6-0">Juli (Sem 1)</option>
+                        <option value="7-0">Agustus (Sem 1)</option>
+                        <option value="8-0">September (Sem 1)</option>
+                        <option value="9-0">Oktober (Sem 1)</option>
+                        <option value="10-0">November (Sem 1)</option>
+                        <option value="11-0">Desember (Sem 1)</option>
+                    </optgroup>
+                    <optgroup label="Semester 2 (Genap)">
+                        <option value="0-1">Januari (Sem 2)</option>
+                        <option value="1-1">Februari (Sem 2)</option>
+                        <option value="2-1">Maret (Sem 2)</option>
+                        <option value="3-1">April (Sem 2)</option>
+                        <option value="4-1">Mei (Sem 2)</option>
+                        <option value="5-1">Juni (Sem 2)</option>
+                    </optgroup>
+                </select>
             </div>
             <div style="font-size: 0.8125rem; color: #64748b;">
                 Klik pada tanggal untuk menambah agenda &bull; Klik pada badge agenda untuk membuka notula MoM
@@ -796,6 +973,143 @@ function changeYear(delta) {
     renderYearlyGrid();
 }
 
+function jumpToMonth(year, monthIdx) {
+    currentYear = year;
+    currentMonth = monthIdx;
+    switchView('monthly');
+}
+
+function handleMonthJump(val) {
+    if (!val) return;
+    var parts = val.split('-');
+    var mIdx = parseInt(parts[0], 10);
+    var yOffset = parseInt(parts[1], 10);
+    currentYear = academicStartYear + yOffset;
+    currentMonth = mIdx;
+    renderMonthlyGrid();
+}
+
+function buildMiniMonthCard(mObj, baseYear, dateMap) {
+    var card = document.createElement('div');
+    card.className = 'mini-month-card';
+
+    var monthYear = baseYear + mObj.yearOffset;
+
+    // Header bulan
+    var header = document.createElement('div');
+    header.className = 'mini-month-header';
+    header.style.cursor = 'pointer';
+    header.title = 'Klik untuk melihat kalender detail bulan ' + mObj.name + ' ' + monthYear;
+    header.innerHTML = '<span>' + mObj.name + '</span><span style="font-size:0.75rem; color:#64748b; font-weight:normal;">' + monthYear + '</span>';
+    (function(tYear, tMonth) {
+        header.onclick = function() {
+            jumpToMonth(tYear, tMonth);
+        };
+    })(monthYear, mObj.mIndex);
+    card.appendChild(header);
+
+    // Table M S S R K J S
+    var table = document.createElement('table');
+    table.className = 'mini-table';
+    table.innerHTML = '<thead><tr>' +
+                      '<th class="sun-th">M</th>' +
+                      '<th>S</th><th>S</th><th>R</th><th>K</th><th>J</th><th>S</th>' +
+                      '</tr></thead>';
+    var tbody = document.createElement('tbody');
+
+    var firstDay = new Date(monthYear, mObj.mIndex, 1).getDay(); // 0 is Sunday
+    var daysInMonth = new Date(monthYear, mObj.mIndex + 1, 0).getDate();
+
+    var dateNum = 1;
+    var monthNotes = [];
+
+    for (var row = 0; row < 6; row++) {
+        var tr = document.createElement('tr');
+        var hasCells = false;
+
+        for (var col = 0; col < 7; col++) {
+            var td = document.createElement('td');
+            if (col === 0) td.className = 'sun-td';
+
+            if (row === 0 && col < firstDay) {
+                td.innerHTML = '';
+            } else if (dateNum > daysInMonth) {
+                td.innerHTML = '';
+            } else {
+                hasCells = true;
+                var dateStr = monthYear + '-' + String(mObj.mIndex + 1).padStart(2, '0') + '-' + String(dateNum).padStart(2, '0');
+                var dayEvents = dateMap[dateStr] || [];
+
+                td.innerText = dateNum;
+
+                if (dayEvents.length > 0) {
+                    td.classList.add('has-event');
+                    var dotColor = categoryColors[dayEvents[0].category] ? categoryColors[dayEvents[0].category].bg : '#2563eb';
+                    td.innerHTML = dateNum + '<span class="mini-event-dot" style="background:' + dotColor + ';"></span>';
+
+                    // Set onclick untuk membuka modal
+                    (function(evList, clickedDate) {
+                        td.onclick = function() {
+                            if (evList.length === 1) {
+                                openMomModal(evList[0].id);
+                            } else {
+                                openAddEventModalWithDate(clickedDate);
+                            }
+                        };
+                    })(dayEvents, dateStr);
+
+                    // Kumpulkan catatan agenda bulan ini
+                    dayEvents.forEach(function(ev) {
+                        monthNotes.push({ date: dateNum, title: ev.title, id: ev.id, cat: ev.category });
+                    });
+                } else {
+                    // Klik tanggal kosong -> tambah agenda di tanggal tersebut
+                    (function(clickedDate) {
+                        td.onclick = function() {
+                            openAddEventModalWithDate(clickedDate);
+                        };
+                    })(dateStr);
+                }
+                dateNum++;
+            }
+            tr.appendChild(td);
+        }
+        if (hasCells) {
+            tbody.appendChild(tr);
+        }
+    }
+    table.appendChild(tbody);
+    card.appendChild(table);
+
+    // Notes section di bawah tabel bulan (seperti lampiran)
+    var notesDiv = document.createElement('div');
+    notesDiv.className = 'mini-month-notes';
+    if (monthNotes.length > 0) {
+        monthNotes.slice(0, 3).forEach(function(n) {
+            var dotC = categoryColors[n.cat] ? categoryColors[n.cat].bg : '#2563eb';
+            var nItem = document.createElement('div');
+            nItem.className = 'mini-note-item';
+            nItem.innerHTML = '<span style="color:' + dotC + '; font-weight:800;">' + n.date + ':</span> ' +
+                              '<span>' + n.title.substring(0, 28) + (n.title.length > 28 ? '...' : '') + '</span>';
+            nItem.onclick = function() { openMomModal(n.id); };
+            notesDiv.appendChild(nItem);
+        });
+        if (monthNotes.length > 3) {
+            var more = document.createElement('div');
+            more.style.fontSize = '10px';
+            more.style.color = '#2563eb';
+            more.style.cursor = 'pointer';
+            more.innerText = '+ ' + (monthNotes.length - 3) + ' agenda lainnya';
+            notesDiv.appendChild(more);
+        }
+    } else {
+        notesDiv.innerHTML = '<span style="color:#94a3b8; font-style:italic;">Belum ada agenda</span>';
+    }
+    card.appendChild(notesDiv);
+
+    return card;
+}
+
 function renderYearlyGrid() {
     var container = document.getElementById('yearlyCalendarGrid');
     if (!container) return;
@@ -810,128 +1124,44 @@ function renderYearlyGrid() {
         dateMap[d].push(ev);
     });
 
-    academicMonths.forEach(function(mObj) {
-        var card = document.createElement('div');
-        card.className = 'mini-month-card';
+    // 1. SEMESTER 1 (GANJIL): JULI - DESEMBER
+    var sem1Header = document.createElement('div');
+    sem1Header.style.cssText = 'display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; padding: 10px 16px; background: #f0fdf4; border-left: 5px solid #16a34a; border-radius: 6px;';
+    sem1Header.innerHTML = '<div style="display: flex; align-items: center; gap: 10px;">' +
+                           '<i class="fa-solid fa-calendar-check" style="color: #16a34a; font-size: 1.125rem;"></i>' +
+                           '<span style="font-weight: 800; color: #15803d; font-size: 1rem; letter-spacing: 0.5px;">' +
+                           'SEMESTER 1 (GANJIL) &bull; TAHUN ' + academicStartYear + ' (Juli &ndash; Desember)' +
+                           '</span></div>' +
+                           '<span class="badge" style="background: #dcfce7; color: #15803d; font-size: 11px; font-weight: 700; padding: 4px 10px;">Awal Tahun Ajaran</span>';
+    container.appendChild(sem1Header);
 
-        var monthYear = academicStartYear + mObj.yearOffset;
+    var sem1Grid = document.createElement('div');
+    sem1Grid.className = 'year-grid';
+    sem1Grid.style.marginBottom = '28px';
 
-        // Header bulan (misal: "Juli" dan "2026", atau "Januari" dan "2027")
-        var header = document.createElement('div');
-        header.className = 'mini-month-header';
-        header.style.cursor = 'pointer';
-        header.title = 'Klik untuk melihat kalender detail bulan ' + mObj.name + ' ' + monthYear;
-        header.innerHTML = '<span>' + mObj.name + '</span><span style="font-size:0.75rem; color:#64748b; font-weight:normal;">' + monthYear + '</span>';
-        (function(tYear, tMonth) {
-            header.onclick = function() {
-                currentYear = tYear;
-                currentMonth = tMonth;
-                switchView('monthly');
-            };
-        })(monthYear, mObj.mIndex);
-        card.appendChild(header);
-
-        // Table M S S R K J S
-        var table = document.createElement('table');
-        table.className = 'mini-table';
-        table.innerHTML = '<thead><tr>' +
-                          '<th class="sun-th">M</th>' +
-                          '<th>S</th><th>S</th><th>R</th><th>K</th><th>J</th><th>S</th>' +
-                          '</tr></thead>';
-        var tbody = document.createElement('tbody');
-
-        var firstDay = new Date(monthYear, mObj.mIndex, 1).getDay(); // 0 is Sunday
-        var daysInMonth = new Date(monthYear, mObj.mIndex + 1, 0).getDate();
-
-        var dateNum = 1;
-        var monthNotes = [];
-
-        for (var row = 0; row < 6; row++) {
-            var tr = document.createElement('tr');
-            var hasCells = false;
-
-            for (var col = 0; col < 7; col++) {
-                var td = document.createElement('td');
-                if (col === 0) td.className = 'sun-td';
-
-                if (row === 0 && col < firstDay) {
-                    td.innerHTML = '';
-                } else if (dateNum > daysInMonth) {
-                    td.innerHTML = '';
-                } else {
-                    hasCells = true;
-                    var dateStr = monthYear + '-' + String(mObj.mIndex + 1).padStart(2, '0') + '-' + String(dateNum).padStart(2, '0');
-                    var dayEvents = dateMap[dateStr] || [];
-
-                    td.innerText = dateNum;
-
-                    if (dayEvents.length > 0) {
-                        td.classList.add('has-event');
-                        var dotColor = categoryColors[dayEvents[0].category] ? categoryColors[dayEvents[0].category].bg : '#2563eb';
-                        td.innerHTML = dateNum + '<span class="mini-event-dot" style="background:' + dotColor + ';"></span>';
-
-                        // Set onclick untuk membuka modal
-                        (function(evList, clickedDate) {
-                            td.onclick = function() {
-                                if (evList.length === 1) {
-                                    openMomModal(evList[0].id);
-                                } else {
-                                    openAddEventModalWithDate(clickedDate);
-                                }
-                            };
-                        })(dayEvents, dateStr);
-
-                        // Kumpulkan catatan agenda bulan ini
-                        dayEvents.forEach(function(ev) {
-                            monthNotes.push({ date: dateNum, title: ev.title, id: ev.id, cat: ev.category });
-                        });
-                    } else {
-                        // Klik tanggal kosong -> tambah agenda di tanggal tersebut
-                        (function(clickedDate) {
-                            td.onclick = function() {
-                                openAddEventModalWithDate(clickedDate);
-                            };
-                        })(dateStr);
-                    }
-                    dateNum++;
-                }
-                tr.appendChild(td);
-            }
-            if (hasCells) {
-                tbody.appendChild(tr);
-            }
-        }
-        table.appendChild(tbody);
-        card.appendChild(table);
-
-        // Notes section di bawah tabel bulan (seperti lampiran)
-        var notesDiv = document.createElement('div');
-        notesDiv.className = 'mini-month-notes';
-        if (monthNotes.length > 0) {
-            monthNotes.slice(0, 3).forEach(function(n) {
-                var dotC = categoryColors[n.cat] ? categoryColors[n.cat].bg : '#2563eb';
-                var nItem = document.createElement('div');
-                nItem.className = 'mini-note-item';
-                nItem.innerHTML = '<span style="color:' + dotC + '; font-weight:800;">' + n.date + ':</span> ' +
-                                  '<span>' + n.title.substring(0, 28) + (n.title.length > 28 ? '...' : '') + '</span>';
-                nItem.onclick = function() { openMomModal(n.id); };
-                notesDiv.appendChild(nItem);
-            });
-            if (monthNotes.length > 3) {
-                var more = document.createElement('div');
-                more.style.fontSize = '10px';
-                more.style.color = '#2563eb';
-                more.style.cursor = 'pointer';
-                more.innerText = '+ ' + (monthNotes.length - 3) + ' agenda lainnya';
-                notesDiv.appendChild(more);
-            }
-        } else {
-            notesDiv.innerHTML = '<span style="color:#94a3b8; font-style:italic;">Belum ada agenda</span>';
-        }
-        card.appendChild(notesDiv);
-
-        container.appendChild(card);
+    academicMonths.slice(0, 6).forEach(function(mObj) {
+        sem1Grid.appendChild(buildMiniMonthCard(mObj, academicStartYear, dateMap));
     });
+    container.appendChild(sem1Grid);
+
+    // 2. SEMESTER 2 (GENAP): JANUARI - JUNI
+    var sem2Header = document.createElement('div');
+    sem2Header.style.cssText = 'display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; padding: 10px 16px; background: #eff6ff; border-left: 5px solid #2563eb; border-radius: 6px;';
+    sem2Header.innerHTML = '<div style="display: flex; align-items: center; gap: 10px;">' +
+                           '<i class="fa-solid fa-calendar-days" style="color: #2563eb; font-size: 1.125rem;"></i>' +
+                           '<span style="font-weight: 800; color: #1d4ed8; font-size: 1rem; letter-spacing: 0.5px;">' +
+                           'SEMESTER 2 (GENAP) &bull; TAHUN ' + (academicStartYear + 1) + ' (Januari &ndash; Juni)' +
+                           '</span></div>' +
+                           '<span class="badge" style="background: #e0f2fe; color: #0284c7; font-size: 11px; font-weight: 700; padding: 4px 10px;">Akhir Tahun Ajaran</span>';
+    container.appendChild(sem2Header);
+
+    var sem2Grid = document.createElement('div');
+    sem2Grid.className = 'year-grid';
+
+    academicMonths.slice(6, 12).forEach(function(mObj) {
+        sem2Grid.appendChild(buildMiniMonthCard(mObj, academicStartYear, dateMap));
+    });
+    container.appendChild(sem2Grid);
 }
 
 // -----------------------------------------------------------------------------
