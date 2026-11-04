@@ -155,4 +155,64 @@ try {
     echo "[SKIP] HRD/Signature migration: " . $e->getMessage() . "\n";
 }
 
+// 9. Tabel Kurikulum Struktur (FR - 9023a)
+try {
+    Database::execute("
+        CREATE TABLE IF NOT EXISTS `kurikulum_struktur_meta` (
+          `id` int(11) NOT NULL AUTO_INCREMENT,
+          `unit_id` int(11) NOT NULL,
+          `academic_year_id` int(11) NOT NULL,
+          `doc_number` varchar(50) DEFAULT 'FR – 9023a',
+          `revision` varchar(20) DEFAULT '-',
+          `title` varchar(200) DEFAULT 'PENGAJUAN STRUKTUR KURIKULUM',
+          `kepsek_nama` varchar(150) DEFAULT NULL,
+          `kepsek_telp` varchar(50) DEFAULT NULL,
+          `sign_date_kepsek` date DEFAULT NULL,
+          `deputi_nama` varchar(150) DEFAULT NULL,
+          `sign_date_deputi` date DEFAULT NULL,
+          `notes` text DEFAULT NULL,
+          `status` enum('Draft','Diajukan','Disetujui') DEFAULT 'Disetujui',
+          `created_at` datetime DEFAULT current_timestamp(),
+          `updated_at` datetime DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+          PRIMARY KEY (`id`),
+          UNIQUE KEY `uk_unit_ta` (`unit_id`,`academic_year_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+    ");
+    echo "[OK] Tabel kurikulum_struktur_meta siap.\n";
+
+    Database::execute("
+        CREATE TABLE IF NOT EXISTS `kurikulum_struktur_items` (
+          `id` int(11) NOT NULL AUTO_INCREMENT,
+          `unit_id` int(11) NOT NULL,
+          `academic_year_id` int(11) NOT NULL,
+          `subject_id` int(11) DEFAULT NULL,
+          `order_num` int(11) DEFAULT 0,
+          `item_number` varchar(20) DEFAULT NULL,
+          `kelompok` varchar(100) NOT NULL,
+          `nama_mapel` varchar(255) NOT NULL,
+          `jp_1` varchar(20) DEFAULT NULL,
+          `jp_2` varchar(20) DEFAULT NULL,
+          `jp_3` varchar(20) DEFAULT NULL,
+          `jp_4` varchar(20) DEFAULT NULL,
+          `jp_5` varchar(20) DEFAULT NULL,
+          `jp_6` varchar(20) DEFAULT NULL,
+          `jp_7` varchar(20) DEFAULT NULL,
+          `jp_8` varchar(20) DEFAULT NULL,
+          `jp_9` varchar(20) DEFAULT NULL,
+          `jp_10` varchar(20) DEFAULT NULL,
+          `jp_11` varchar(20) DEFAULT NULL,
+          `jp_12` varchar(20) DEFAULT NULL,
+          `keterangan` varchar(255) DEFAULT NULL,
+          `is_sub_item` tinyint(1) DEFAULT 0,
+          `created_at` datetime DEFAULT current_timestamp(),
+          `updated_at` datetime DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+          PRIMARY KEY (`id`),
+          KEY `idx_unit_ta` (`unit_id`,`academic_year_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+    ");
+    echo "[OK] Tabel kurikulum_struktur_items siap.\n";
+} catch (\Throwable $e) {
+    echo "[SKIP] Kurikulum Struktur migration: " . $e->getMessage() . "\n";
+}
+
 echo "=== MIGRASI SELESAI DENGAN SUKSES! ===\n";
