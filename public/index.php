@@ -401,6 +401,7 @@ Router::get('/deputi/bobot', [DeputiController::class, 'bobot']);
 Router::post('/deputi/bobot/save', [DeputiController::class, 'saveBobot']);
 
 Router::get('/deputi/calendar', [DeputiController::class, 'calendar']);
+Router::get('/deputi/calendar/pdf', [DeputiController::class, 'exportPdf']);
 Router::post('/deputi/calendar/save-event', [DeputiController::class, 'saveEvent']);
 Router::post('/deputi/calendar/delete-event', [DeputiController::class, 'deleteEvent']);
 Router::post('/deputi/calendar/save-mom', [DeputiController::class, 'saveMom']);

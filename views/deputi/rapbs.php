@@ -24,9 +24,11 @@ $baseUrl = Auth::baseUrl();
         </div>
 
         <div style="display: flex; gap: 8px; align-items: center;">
-            <button class="btn btn-primary" onclick="openAddItemModal()" style="font-weight: 600;">
-                <i class="fa-solid fa-plus"></i> Tambah Pos Anggaran
-            </button>
+            <?php if (($header['status'] ?? 'Draft') !== 'Disetujui Yayasan'): ?>
+                <button class="btn btn-primary" onclick="openAddItemModal()" style="font-weight: 600;">
+                    <i class="fa-solid fa-plus"></i> Tambah Poin Anggaran
+                </button>
+            <?php endif; ?>
         </div>
     </div>
 </div>
@@ -59,37 +61,48 @@ $baseUrl = Auth::baseUrl();
     </div>
 <?php endif; ?>
 
-<!-- Status Banner & Workflow Approval -->
+<!-- Status Banner & Workflow Approval Berjenjang: KS -> Deputi -> Direktur -->
 <div class="card" style="background: #ffffff; border-radius: 12px; border: 1px solid #e2e8f0; padding: 18px 24px; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
     <div>
         <div style="font-size: 0.8125rem; color: #64748b; font-weight: 600;">STATUS RAPBS TAHUN AJARAN INI:</div>
-        <div style="display: flex; align-items: center; gap: 10px; margin-top: 4px;">
+        <div style="display: flex; align-items: center; gap: 10px; margin-top: 4px; flex-wrap: wrap;">
             <?php
                 $st = $header['status'] ?? 'Draft';
                 $stBadge = match($st) {
-                    'Disetujui Yayasan' => ['bg' => '#dcfce7', 'text' => '#15803d', 'icon' => 'fa-check-double'],
-                    'Review Deputi'     => ['bg' => '#e0e7ff', 'text' => '#4338ca', 'icon' => 'fa-clipboard-check'],
-                    'Diajukan'          => ['bg' => '#fef3c7', 'text' => '#b45309', 'icon' => 'fa-paper-plane'],
-                    'Revisi'            => ['bg' => '#fee2e2', 'text' => '#b91c1c', 'icon' => 'fa-triangle-exclamation'],
-                    default             => ['bg' => '#f1f5f9', 'text' => '#475569', 'icon' => 'fa-file-lines']
+                    'Disetujui Yayasan' => ['bg' => '#dcfce7', 'text' => '#15803d', 'icon' => 'fa-check-double', 'label' => 'Disetujui Direktur Pendidikan &amp; Yayasan'],
+                    'Review Deputi'     => ['bg' => '#e0e7ff', 'text' => '#4338ca', 'icon' => 'fa-clipboard-check', 'label' => 'Disetujui Deputi (Menunggu Persetujuan Direktur)'],
+                    'Diajukan'          => ['bg' => '#fef3c7', 'text' => '#b45309', 'icon' => 'fa-paper-plane', 'label' => 'Diajukan Kepala Sekolah (Menunggu Deputi)'],
+                    'Revisi'            => ['bg' => '#fee2e2', 'text' => '#b91c1c', 'icon' => 'fa-triangle-exclamation', 'label' => 'Perlu Perbaikan / Revisi'],
+                    default             => ['bg' => '#f1f5f9', 'text' => '#475569', 'icon' => 'fa-file-lines', 'label' => 'Draf RAPBS (Belum Diajukan)']
                 };
             ?>
             <span class="badge" style="font-size: 0.9375rem; padding: 6px 14px; background: <?= $stBadge['bg'] ?>; color: <?= $stBadge['text'] ?>; font-weight: 700;">
-                <i class="fa-solid <?= $stBadge['icon'] ?>"></i> <?= SecurityHelper::escape($st) ?>
+                <i class="fa-solid <?= $stBadge['icon'] ?>"></i> <?= $stBadge['label'] ?>
             </span>
             <?php if (!empty($header['reviewed_by_deputi_id'])): ?>
                 <span style="font-size: 0.8125rem; color: #64748b;">
-                    Direview Deputi: <strong><?= SecurityHelper::escape($header['deputi_name'] ?? 'Deputi') ?></strong>
+                    &bull; Deputi: <strong><?= SecurityHelper::escape($header['deputi_name'] ?? 'Deputi') ?></strong> (Disetujui <?= date('d/m/Y', strtotime($header['reviewed_at'] ?? 'now')) ?>)
+                </span>
+            <?php endif; ?>
+            <?php if (!empty($header['approved_by_yayasan_id'])): ?>
+                <span style="font-size: 0.8125rem; color: #15803d; font-weight: 600;">
+                    &bull; Direktur/Yayasan: <strong><?= SecurityHelper::escape($header['yayasan_name'] ?? 'Direktur Pendidikan') ?></strong>
                 </span>
             <?php endif; ?>
         </div>
+        <?php if (!empty($header['notes'])): ?>
+            <div style="font-size: 0.8125rem; color: #b91c1c; margin-top: 4px;">
+                <i class="fa-solid fa-circle-exclamation"></i> Catatan Revisi: <?= SecurityHelper::escape($header['notes']) ?>
+            </div>
+        <?php endif; ?>
     </div>
 
-    <!-- Workflow Action Buttons -->
-    <div style="display: flex; gap: 8px;">
+    <!-- Workflow Action Buttons (Alur: Kepala Sekolah -> Deputi -> Direktur Pendidikan) -->
+    <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
         <?php if ($header): ?>
+            <!-- 1. KEPALA SEKOLAH: Mengajukan ke Deputi -->
             <?php if ($isKepsek && in_array($st, ['Draft', 'Revisi'])): ?>
-                <form action="<?= $baseUrl ?>/deputi/rapbs/update-status" method="POST" onsubmit="return confirm('Ajukan draf RAPBS ke Deputi Pendidikan?')">
+                <form action="<?= $baseUrl ?>/deputi/rapbs/update-status" method="POST" onsubmit="return confirm('Ajukan draf RAPBS ke Deputi Direktur Pendidikan?')">
                     <?= CSRF::inputField() ?>
                     <input type="hidden" name="header_id" value="<?= $header['id'] ?>">
                     <input type="hidden" name="unit_id" value="<?= $selectedUnitId ?>">
@@ -98,26 +111,66 @@ $baseUrl = Auth::baseUrl();
                         <i class="fa-solid fa-paper-plane"></i> Ajukan ke Deputi
                     </button>
                 </form>
+            <?php elseif ($isKepsek && $st === 'Diajukan'): ?>
+                <span style="font-size: 0.8125rem; color: #b45309; font-weight: 600;">
+                    <i class="fa-solid fa-clock"></i> RAPBS sedang direview oleh Deputi Pendidikan
+                </span>
+
+            <!-- 2. DEPUTI PENDIDIKAN: Verifikasi & Setujui lalu teruskan ke Direktur Pendidikan -->
             <?php elseif (Auth::hasRole('deputi_pendidikan') && in_array($st, ['Diajukan', 'Draft'])): ?>
-                <form action="<?= $baseUrl ?>/deputi/rapbs/update-status" method="POST" onsubmit="return confirm('Verifikasi & teruskan RAPBS ke Yayasan?')">
+                <form action="<?= $baseUrl ?>/deputi/rapbs/update-status" method="POST" style="display:inline-block;" onsubmit="return confirm('Minta Kepala Sekolah merevisi RAPBS ini?')">
+                    <?= CSRF::inputField() ?>
+                    <input type="hidden" name="header_id" value="<?= $header['id'] ?>">
+                    <input type="hidden" name="unit_id" value="<?= $selectedUnitId ?>">
+                    <input type="hidden" name="status" value="Revisi">
+                    <button type="submit" class="btn btn-outline" style="font-weight: 600; color: #dc2626; border-color: #fca5a5;">
+                        <i class="fa-solid fa-rotate-left"></i> Minta Revisi
+                    </button>
+                </form>
+                <form action="<?= $baseUrl ?>/deputi/rapbs/update-status" method="POST" style="display:inline-block;" onsubmit="return confirm('Setujui RAPBS ini dan teruskan ke Direktur Pendidikan untuk disahkan?')">
                     <?= CSRF::inputField() ?>
                     <input type="hidden" name="header_id" value="<?= $header['id'] ?>">
                     <input type="hidden" name="unit_id" value="<?= $selectedUnitId ?>">
                     <input type="hidden" name="status" value="Review Deputi">
                     <button type="submit" class="btn btn-primary" style="font-weight: 600; background: #4338ca; border-color: #4338ca;">
-                        <i class="fa-solid fa-clipboard-check"></i> Verifikasi &amp; Teruskan ke Yayasan
+                        <i class="fa-solid fa-clipboard-check"></i> Setujui &amp; Teruskan ke Direktur
                     </button>
                 </form>
-            <?php elseif (Auth::hasAnyRole(['direktur_pendidikan', 'operator_yayasan', 'pembina_yayasan']) && $st !== 'Disetujui Yayasan'): ?>
-                <form action="<?= $baseUrl ?>/deputi/rapbs/update-status" method="POST" onsubmit="return confirm('Sahkan RAPBS untuk unit ini?')">
-                    <?= CSRF::inputField() ?>
-                    <input type="hidden" name="header_id" value="<?= $header['id'] ?>">
-                    <input type="hidden" name="unit_id" value="<?= $selectedUnitId ?>">
-                    <input type="hidden" name="status" value="Disetujui Yayasan">
-                    <button type="submit" class="btn btn-primary" style="font-weight: 600; background: #059669; border-color: #059669;">
-                        <i class="fa-solid fa-check-double"></i> Sahkan RAPBS (Yayasan)
-                    </button>
-                </form>
+            <?php elseif (Auth::hasRole('deputi_pendidikan') && $st === 'Review Deputi'): ?>
+                <span style="font-size: 0.8125rem; color: #4338ca; font-weight: 600;">
+                    <i class="fa-solid fa-hourglass-half"></i> Telah Anda setujui &bull; Menunggu persetujuan Direktur Pendidikan
+                </span>
+
+            <!-- 3. DIREKTUR PENDIDIKAN: Menyetujui RAPBS yang diajukan KS dan disetujui Deputi -->
+            <?php elseif (Auth::hasAnyRole(['direktur_pendidikan', 'operator_yayasan', 'pembina_yayasan'])): ?>
+                <?php if ($st === 'Review Deputi'): ?>
+                    <form action="<?= $baseUrl ?>/deputi/rapbs/update-status" method="POST" style="display:inline-block;" onsubmit="return confirm('Kembalikan RAPBS ke unit untuk revisi?')">
+                        <?= CSRF::inputField() ?>
+                        <input type="hidden" name="header_id" value="<?= $header['id'] ?>">
+                        <input type="hidden" name="unit_id" value="<?= $selectedUnitId ?>">
+                        <input type="hidden" name="status" value="Revisi">
+                        <button type="submit" class="btn btn-outline" style="font-weight: 600; color: #dc2626; border-color: #fca5a5;">
+                            <i class="fa-solid fa-rotate-left"></i> Minta Revisi
+                        </button>
+                    </form>
+                    <form action="<?= $baseUrl ?>/deputi/rapbs/update-status" method="POST" style="display:inline-block;" onsubmit="return confirm('Setujui & sahkan RAPBS ini secara resmi?')">
+                        <?= CSRF::inputField() ?>
+                        <input type="hidden" name="header_id" value="<?= $header['id'] ?>">
+                        <input type="hidden" name="unit_id" value="<?= $selectedUnitId ?>">
+                        <input type="hidden" name="status" value="Disetujui Yayasan">
+                        <button type="submit" class="btn btn-primary" style="font-weight: 600; background: #059669; border-color: #059669;">
+                            <i class="fa-solid fa-check-double"></i> Setujui &amp; Sahkan RAPBS (Direktur)
+                        </button>
+                    </form>
+                <?php elseif ($st === 'Diajukan'): ?>
+                    <span style="font-size: 0.8125rem; color: #b45309; font-weight: 600;">
+                        <i class="fa-solid fa-clock"></i> Menunggu verifikasi &amp; persetujuan dari Deputi Pendidikan terlebih dahulu.
+                    </span>
+                <?php elseif ($st === 'Disetujui Yayasan'): ?>
+                    <span class="badge" style="background: #dcfce7; color: #15803d; font-size: 12px; font-weight: 700; padding: 6px 12px;">
+                        <i class="fa-solid fa-circle-check"></i> RAPBS Resmi Disahkan
+                    </span>
+                <?php endif; ?>
             <?php endif; ?>
         <?php endif; ?>
     </div>
@@ -135,11 +188,12 @@ $baseUrl = Auth::baseUrl();
         <table class="table" style="width: 100%; border-collapse: collapse;">
             <thead>
                 <tr style="background: #f8fafc; text-align: left; font-size: 0.8125rem; font-weight: 700; color: #1e293b; border-bottom: 2px solid #cbd5e1;">
-                    <th style="padding: 10px 16px; width: 60px; text-align: center;">No</th>
+                    <th style="padding: 10px 16px; width: 50px; text-align: center;">No</th>
                     <th style="padding: 10px 16px;">KETERANGAN</th>
-                    <th style="padding: 10px 16px; width: 180px; text-align: right;">Real Pengeluaran</th>
-                    <th style="padding: 10px 16px; width: 200px; text-align: right; background: #f0fdf4;">Plan Pengeluaran di RAPBS</th>
-                    <th style="padding: 10px 16px; width: 180px; text-align: center; background: #f0fdf4;">% Penggunaan Anggaran</th>
+                    <th style="padding: 10px 16px; width: 160px; text-align: right;">Real Pengeluaran</th>
+                    <th style="padding: 10px 16px; width: 180px; text-align: right; background: #f0fdf4;">Plan Pengeluaran di RAPBS</th>
+                    <th style="padding: 10px 16px; width: 160px; text-align: center; background: #f0fdf4;">% Penggunaan Anggaran</th>
+                    <th style="padding: 10px 16px; width: 80px; text-align: center;">Aksi</th>
                 </tr>
             </thead>
             <tbody>
@@ -167,11 +221,12 @@ $baseUrl = Auth::baseUrl();
                         $pctBg = '#f1f5f9'; $pctColor = '#64748b';
                     }
                 ?>
-                    <!-- Pos Header Row -->
+                    <!-- Pos Header Row (Pos Standar 501 - 509 bersifat tetap dan tidak dapat dihapus) -->
                     <tr style="background: #e2e8f0; font-weight: 800; border-top: 1px solid #cbd5e1;">
                         <td style="padding: 8px 16px; text-align: center;"><?= $pCode ?></td>
-                        <td style="padding: 8px 16px;" colspan="4">
+                        <td style="padding: 8px 16px;" colspan="5">
                             <?= SecurityHelper::escape($p['pos_name']) ?>
+                            <span style="font-size: 11px; font-weight: normal; color: #64748b; margin-left: 8px;">(Pos Anggaran Standar)</span>
                         </td>
                     </tr>
 
@@ -206,6 +261,20 @@ $baseUrl = Auth::baseUrl();
                                 <td style="padding: 6px 16px; text-align: center; background: <?= $itPctBg ?>; color: <?= $itPctColor ?>; font-weight: 700;">
                                     <?= number_format($itPct, 2, ',', '.') ?>%
                                 </td>
+                                <td style="padding: 6px 16px; text-align: center;">
+                                    <?php if ($st !== 'Disetujui Yayasan'): ?>
+                                        <form action="<?= $baseUrl ?>/deputi/rapbs/delete-item" method="POST" style="display:inline-block;" onsubmit="return confirm('Hapus poin anggaran: <?= SecurityHelper::escape($it['keterangan']) ?>?')">
+                                            <?= CSRF::inputField() ?>
+                                            <input type="hidden" name="id" value="<?= $it['id'] ?>">
+                                            <input type="hidden" name="unit_id" value="<?= $selectedUnitId ?>">
+                                            <button type="submit" class="btn btn-outline" style="padding: 2px 8px; font-size: 11px; color: #dc2626; border-color: #fca5a5;" title="Hapus Poin Anggaran Ini">
+                                                <i class="fa-solid fa-trash"></i>
+                                            </button>
+                                        </form>
+                                    <?php else: ?>
+                                        <span class="badge" style="background: #f1f5f9; color: #94a3b8; font-size: 10px;">Terkunci</span>
+                                    <?php endif; ?>
+                                </td>
                             </tr>
                         <?php endforeach; ?>
                     <?php endif; ?>
@@ -225,6 +294,7 @@ $baseUrl = Auth::baseUrl();
                         <td style="padding: 8px 16px; text-align: center; background: <?= $pctBg ?>; color: <?= $pctColor ?>; font-weight: 800;">
                             <?= number_format($pct, 2, ',', '.') ?>%
                         </td>
+                        <td style="padding: 8px 16px;"></td>
                     </tr>
                 <?php endforeach; ?>
 
@@ -244,6 +314,7 @@ $baseUrl = Auth::baseUrl();
                     <td style="padding: 12px 16px; text-align: center; background: <?= $grandPct > 100 ? '#ef4444' : '#22c55e' ?>; color: #ffffff; font-size: 1rem;">
                         <?= number_format($grandPct, 2, ',', '.') ?>%
                     </td>
+                    <td style="padding: 12px 16px;"></td>
                 </tr>
             </tbody>
         </table>

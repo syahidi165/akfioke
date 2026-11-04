@@ -22,7 +22,7 @@ $categoryColors = [
 ];
 
 // Helper render kartu bulan mini server-side (Juli s.d Juni)
-$renderMiniMonth = function($mNum, $mName, $year, $evList, $catColors) {
+$renderMiniMonth = function($mNum, $mName, $year, $evList, $catColors, $isKepsek = false) {
     $firstDay = (int)date('w', strtotime(sprintf('%04d-%02d-01', $year, $mNum)));
     $daysInMonth = (int)date('t', strtotime(sprintf('%04d-%02d-01', $year, $mNum)));
     $prefix = sprintf('%04d-%02d-', $year, $mNum);
@@ -76,7 +76,8 @@ $renderMiniMonth = function($mNum, $mName, $year, $evList, $catColors) {
                                     $monthNotes[] = ['date' => $dateNum, 'title' => $ev['title'], 'id' => $ev['id'], 'cat' => $ev['category']];
                                 }
                             } else {
-                                $rowHtml .= '<td' . $sunClass . ' onclick="openAddEventModalWithDate(\'' . $dateStr . '\')">' . $dateNum . '</td>';
+                                $tdAdd = !empty($isKepsek) ? '' : ' onclick="openAddEventModalWithDate(\'' . $dateStr . '\')"';
+                                $rowHtml .= '<td' . $sunClass . $tdAdd . '>' . $dateNum . '</td>';
                             }
                             $dateNum++;
                         }
@@ -349,9 +350,18 @@ $eventsJson = json_encode($events, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS |
                     </select>
                 </form>
             <?php endif; ?>
-            <button class="btn btn-primary" onclick="openAddEventModal()" style="font-weight: 600;">
-                <i class="fa-solid fa-plus"></i> Tambah Agenda Rapat
-            </button>
+            <a href="<?= $baseUrl ?>/deputi/calendar/pdf?deputi_id=<?= (int)$deputiUserId ?>" target="_blank" class="btn btn-outline" style="font-weight: 600; color: #dc2626; border-color: #fca5a5; background: #fff5f5;" title="Unduh Kalender Resmi Lengkap Beserta Keterangan Agenda (PDF)">
+                <i class="fa-solid fa-file-pdf"></i> Download PDF Kalender
+            </a>
+            <?php if (!empty($isKepsek)): ?>
+                <span class="badge" style="background: #f1f5f9; color: #475569; font-size: 0.8125rem; padding: 8px 14px; border: 1px solid #cbd5e1;">
+                    <i class="fa-solid fa-eye"></i> Mode Lihat (Kepala Sekolah)
+                </span>
+            <?php else: ?>
+                <button class="btn btn-primary" onclick="openAddEventModal()" style="font-weight: 600;">
+                    <i class="fa-solid fa-plus"></i> Tambah Agenda Rapat
+                </button>
+            <?php endif; ?>
         </div>
     </div>
 </div>
@@ -476,7 +486,7 @@ $eventsJson = json_encode($events, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS |
                     [12, 'Desember', $academicStartYear],
                 ];
                 foreach ($sem1Months as $sm) {
-                    $renderMiniMonth($sm[0], $sm[1], $sm[2], $events, $categoryColors);
+                    $renderMiniMonth($sm[0], $sm[1], $sm[2], $events, $categoryColors, !empty($isKepsek));
                 }
                 ?>
             </div>
@@ -505,7 +515,7 @@ $eventsJson = json_encode($events, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS |
                     [6, 'Juni', $academicStartYear + 1],
                 ];
                 foreach ($sem2Months as $sm) {
-                    $renderMiniMonth($sm[0], $sm[1], $sm[2], $events, $categoryColors);
+                    $renderMiniMonth($sm[0], $sm[1], $sm[2], $events, $categoryColors, !empty($isKepsek));
                 }
                 ?>
             </div>
@@ -654,6 +664,8 @@ $eventsJson = json_encode($events, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS |
                                         <span class="badge" style="background: #dcfce7; color: #15803d; font-size: 10px;">
                                             <i class="fa-solid fa-check"></i> Terkirim (<?= $ev['invitation_h_days'] >= 1 ? "H-{$ev['invitation_h_days']}" : "Hari H" ?>)
                                         </span>
+                                    <?php elseif (!empty($isKepsek)): ?>
+                                        <span style="color: #94a3b8; font-size: 11px;">-</span>
                                     <?php else: ?>
                                         <button type="button" class="btn btn-outline" onclick="openInviteModal(<?= $ev['id'] ?>, '<?= SecurityHelper::escape($ev['title']) ?>')" style="padding: 2px 8px; font-size: 11px;">
                                             <i class="fa-solid fa-envelope"></i> Kirim Undangan
@@ -675,17 +687,23 @@ $eventsJson = json_encode($events, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS |
                                     <?php endif; ?>
                                 </td>
                                 <td style="padding: 12px 16px; text-align: right; white-space: nowrap;">
-                                    <button class="btn btn-primary" onclick="openMomModal(<?= $ev['id'] ?>)" style="padding: 4px 10px; font-size: 0.8125rem;">
-                                        <i class="fa-solid fa-file-pen"></i> MoM &amp; Komitmen
-                                    </button>
-                                    <form action="<?= $baseUrl ?>/deputi/calendar/delete-event" method="POST" style="display: inline-block;" onsubmit="return confirm('Hapus agenda kegiatan ini?')">
-                                        <?= CSRF::inputField() ?>
-                                        <input type="hidden" name="id" value="<?= $ev['id'] ?>">
-                                        <input type="hidden" name="deputi_id" value="<?= $deputiUserId ?>">
-                                        <button type="submit" class="btn btn-outline" style="padding: 4px 8px; font-size: 0.8125rem; color: #dc2626; border-color: #fecaca;">
-                                            <i class="fa-solid fa-trash"></i>
+                                    <?php if (!empty($isKepsek)): ?>
+                                        <button class="btn btn-outline" onclick="openMomModal(<?= $ev['id'] ?>)" style="padding: 4px 10px; font-size: 0.8125rem;">
+                                            <i class="fa-solid fa-eye"></i> Detail MoM
                                         </button>
-                                    </form>
+                                    <?php else: ?>
+                                        <button class="btn btn-primary" onclick="openMomModal(<?= $ev['id'] ?>)" style="padding: 4px 10px; font-size: 0.8125rem;">
+                                            <i class="fa-solid fa-file-pen"></i> MoM &amp; Komitmen
+                                        </button>
+                                        <form action="<?= $baseUrl ?>/deputi/calendar/delete-event" method="POST" style="display: inline-block;" onsubmit="return confirm('Hapus agenda kegiatan ini?')">
+                                            <?= CSRF::inputField() ?>
+                                            <input type="hidden" name="id" value="<?= $ev['id'] ?>">
+                                            <input type="hidden" name="deputi_id" value="<?= $deputiUserId ?>">
+                                            <button type="submit" class="btn btn-outline" style="padding: 4px 8px; font-size: 0.8125rem; color: #dc2626; border-color: #fecaca;">
+                                                <i class="fa-solid fa-trash"></i>
+                                            </button>
+                                        </form>
+                                    <?php endif; ?>
                                 </td>
                             </tr>
                         <?php endforeach; ?>
@@ -883,6 +901,7 @@ $eventsJson = json_encode($events, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS |
 // Seluruh Events dari Database
 var allEvents = <?= $eventsJson ?>;
 var academicStartYear = <?= (int)($academicStartYear ?? 2026) ?>;
+var isKepsek = <?= !empty($isKepsek) ? 'true' : 'false' ?>;
 var currentYear = <?= (int)date('Y') ?>;
 var currentMonth = <?= (int)date('n') - 1 ?>; // Bulan berjalan saat ini (0-11)
 var selectedCategory = 'ALL';
@@ -1268,6 +1287,7 @@ function renderMonthlyGrid() {
 // MODAL FUNCTIONS
 // -----------------------------------------------------------------------------
 function openAddEventModal() {
+    if (isKepsek) return;
     document.getElementById('event_modal_title').value = '';
     document.getElementById('event_modal_date').value = new Date().toISOString().slice(0, 10);
     var m = document.getElementById('addEventModal');
@@ -1276,6 +1296,7 @@ function openAddEventModal() {
 }
 
 function openAddEventModalWithDate(dateStr) {
+    if (isKepsek) return;
     document.getElementById('event_modal_title').value = '';
     document.getElementById('event_modal_date').value = dateStr;
     var m = document.getElementById('addEventModal');
@@ -1314,10 +1335,27 @@ function openMomModal(eventId) {
                 alert('Gagal memuat detail agenda.');
                 return;
             }
-            document.getElementById('momModalTitle').innerText = 'Notula: ' + data.event.title;
+            var readOnly = isKepsek;
+            document.getElementById('momModalTitle').innerText = (readOnly ? 'Detail Notula: ' : 'Notula: ') + data.event.title;
             document.getElementById('momEventSubtitle').innerText = (data.event.unit_name || 'Lintas Yayasan') + ' • ' + data.event.start_date + ' ' + (data.event.start_time || '');
             document.getElementById('mom_meeting_date').value = (data.mom && data.mom.meeting_date) ? data.mom.meeting_date : data.event.start_date;
             document.getElementById('mom_content').value = (data.mom && data.mom.mom_content) ? data.mom.mom_content : '';
+
+            // Kontrol Mode Read-Only untuk Kepala Sekolah
+            document.getElementById('mom_meeting_date').readOnly = readOnly;
+            document.getElementById('mom_content').readOnly = readOnly;
+            var fileInputGroup = document.querySelector('input[name="mom_file"]')?.closest('.form-group');
+            if (fileInputGroup) {
+                fileInputGroup.style.display = readOnly ? 'none' : '';
+            }
+            var btnAddAction = document.querySelector('#momModal button[onclick="addActionItemRow()"]');
+            if (btnAddAction) {
+                btnAddAction.style.display = readOnly ? 'none' : '';
+            }
+            var btnSubmitMom = document.querySelector('#momModal button[type="submit"]');
+            if (btnSubmitMom) {
+                btnSubmitMom.style.display = readOnly ? 'none' : '';
+            }
 
             var fileSpan = document.getElementById('momCurrentFile');
             if (data.mom && data.mom.file_path) {
@@ -1348,15 +1386,19 @@ function openMomModal(eventId) {
                            '<tr style="background:#e2e8f0; font-weight:700;"><th style="padding:4px 8px;">Topik Komitmen</th><th style="padding:4px 8px;">PIC</th><th style="padding:4px 8px;">Tenggat</th><th style="padding:4px 8px; text-align:center;">Status</th></tr>';
                 data.actions.forEach(function(a) {
                     var isDone = a.status === 'Completed';
+                    var btnOrBadge = '';
+                    if (readOnly) {
+                        btnOrBadge = '<span class="badge" style="font-size:10px; padding:3px 8px; background:' + (isDone ? '#dcfce7' : '#fee2e2') + '; color:' + (isDone ? '#15803d' : '#b91c1c') + ';">' +
+                                     (isDone ? '<i class="fa-solid fa-check"></i> Selesai' : '<i class="fa-solid fa-hourglass-half"></i> Pending') + '</span>';
+                    } else {
+                        btnOrBadge = '<button type="button" class="btn" style="padding:2px 8px; font-size:10px; background:' + (isDone ? '#dcfce7' : '#fee2e2') + '; color:' + (isDone ? '#15803d' : '#b91c1c') + ';" onclick="toggleAction(' + a.id + ', \'' + (isDone ? 'Pending' : 'Completed') + '\')">' +
+                                     (isDone ? '<i class="fa-solid fa-check"></i> Selesai' : '<i class="fa-solid fa-hourglass-half"></i> Pending') + '</button>';
+                    }
                     html += '<tr style="border-bottom:1px solid #e2e8f0;">' +
                             '<td style="padding:6px 8px;">' + a.action_topic + '</td>' +
                             '<td style="padding:6px 8px;">' + (a.pic_name || '-') + '</td>' +
                             '<td style="padding:6px 8px;">' + (a.due_date || '-') + '</td>' +
-                            '<td style="padding:6px 8px; text-align:center;">' +
-                            '  <button type="button" class="btn" style="padding:2px 8px; font-size:10px; background:' + (isDone ? '#dcfce7' : '#fee2e2') + '; color:' + (isDone ? '#15803d' : '#b91c1c') + ';" onclick="toggleAction(' + a.id + ', \'' + (isDone ? 'Pending' : 'Completed') + '\')">' +
-                            (isDone ? '<i class="fa-solid fa-check"></i> Selesai' : '<i class="fa-solid fa-hourglass-half"></i> Pending') +
-                            '  </button>' +
-                            '</td></tr>';
+                            '<td style="padding:6px 8px; text-align:center;">' + btnOrBadge + '</td></tr>';
                 });
                 html += '</table>';
                 exWrapper.innerHTML = html;

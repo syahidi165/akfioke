@@ -44,6 +44,15 @@ class DeputiController extends Controller {
         if ($targetId > 0) {
             return $targetId;
         }
+        if (Auth::hasRole('kepala_sekolah')) {
+            $ksUnitId = Auth::unitId();
+            if ($ksUnitId) {
+                $depAssigned = Database::fetch("SELECT deputi_user_id FROM deputi_units WHERE unit_id = ? LIMIT 1", [$ksUnitId]);
+                if ($depAssigned && !empty($depAssigned['deputi_user_id'])) {
+                    return (int)$depAssigned['deputi_user_id'];
+                }
+            }
+        }
         // Ambil deputi pendidikan pertama yang ada di sistem
         $first = Database::fetch(
             "SELECT u.id FROM users u 
@@ -234,6 +243,7 @@ class DeputiController extends Controller {
         $systemAcademicStartYear = ($nowM >= 7) ? $nowY : ($nowY - 1);
         $academicStartYear = $systemAcademicStartYear;
 
+        $isKepsek = Auth::hasRole('kepala_sekolah');
         $this->view('deputi/calendar', [
             'pageTitle'          => 'Kalender Kerja Tahunan & Meeting Manager (MoM)',
             'deputiUser'         => $deputiUser,
@@ -244,8 +254,252 @@ class DeputiController extends Controller {
             'stakeholders'       => $stakeholders,
             'currentTa'          => $currentTa,
             'academicStartYear'  => $academicStartYear,
-            'taName'             => $taName
+            'taName'             => $taName,
+            'isKepsek'           => $isKepsek
         ]);
+    }
+
+    /**
+     * Cetak & Unduh Kalender Pendidikan & Agenda Kerja ke format PDF (Dompdf).
+     */
+    public function exportPdf(): void {
+        $this->requireRole(['deputi_pendidikan', 'direktur_pendidikan', 'operator_yayasan', 'kepala_sekolah']);
+        $taId = Auth::academicYearId();
+        $deputiUserId = $this->resolveDeputiUserId();
+
+        $deputiUser = Database::fetch("SELECT u.*, e.nama, e.contact_phone FROM users u LEFT JOIN employees e ON e.user_id = u.id WHERE u.id = ?", [$deputiUserId]);
+        $currentTa = Database::fetch("SELECT * FROM academic_years WHERE id = ?", [$taId]);
+        $taName = $currentTa['name'] ?? (date('Y') . '/' . (date('Y') + 1));
+
+        $nowY = (int)date('Y');
+        $nowM = (int)date('n');
+        $systemAcademicStartYear = ($nowM >= 7) ? $nowY : ($nowY - 1);
+        $academicStartYear = $systemAcademicStartYear;
+
+        // Ambil data unit binaan
+        $deputiUnitIds = self::getDeputiUnitIds($deputiUserId);
+        $inUnits = !empty($deputiUnitIds) ? implode(',', $deputiUnitIds) : '0';
+        $units = Database::fetchAll("SELECT * FROM units WHERE id IN ({$inUnits}) ORDER BY id ASC");
+        $unitNames = array_column($units, 'name');
+
+        // Ambil semua agenda
+        $events = Database::fetchAll(
+            "SELECT e.*, u.name as unit_name, m.id as mom_id, m.realization_pct, m.is_on_time_24h,
+                    COUNT(a.id) as total_actions,
+                    SUM(CASE WHEN a.status = 'Completed' THEN 1 ELSE 0 END) as completed_actions
+             FROM deputi_calendar_events e
+             LEFT JOIN units u ON e.unit_id = u.id
+             LEFT JOIN deputi_meeting_moms m ON e.id = m.event_id
+             LEFT JOIN deputi_meeting_actions a ON m.id = a.mom_id
+             WHERE (e.deputi_user_id = ? OR e.deputi_user_id = 0)
+             GROUP BY e.id
+             ORDER BY e.start_date ASC, e.start_time ASC",
+            [$deputiUserId]
+        );
+
+        // Ambil data tanda tangan Direktur Pendidikan & Deputi
+        $direktur = Database::fetch(
+            "SELECT u.full_name, e.nama, e.signature_path, u.signature_path as user_sig
+             FROM users u 
+             JOIN user_roles ur ON u.id = ur.user_id 
+             JOIN roles r ON ur.role_id = r.id 
+             LEFT JOIN employees e ON e.user_id = u.id 
+             WHERE r.name = 'direktur_pendidikan' LIMIT 1"
+        );
+        $deputiSig = $deputiUser['signature_path'] ?? ($deputiUser['user_sig'] ?? null);
+        $direkturSig = $direktur['signature_path'] ?? ($direktur['user_sig'] ?? null);
+
+        // Map events per date
+        $dateMap = [];
+        foreach ($events as $ev) {
+            $dateMap[$ev['start_date']][] = $ev;
+        }
+
+        // 12 Bulan Akademik (Juli s.d Juni)
+        $sem1 = [
+            [7, 'Juli', $academicStartYear],
+            [8, 'Agustus', $academicStartYear],
+            [9, 'September', $academicStartYear],
+            [10, 'Oktober', $academicStartYear],
+            [11, 'November', $academicStartYear],
+            [12, 'Desember', $academicStartYear],
+        ];
+        $sem2 = [
+            [1, 'Januari', $academicStartYear + 1],
+            [2, 'Februari', $academicStartYear + 1],
+            [3, 'Maret', $academicStartYear + 1],
+            [4, 'April', $academicStartYear + 1],
+            [5, 'Mei', $academicStartYear + 1],
+            [6, 'Juni', $academicStartYear + 1],
+        ];
+
+        // Helper render mini-table per bulan untuk PDF
+        $renderPdfMonthTable = function($mNum, $mName, $year) use ($dateMap) {
+            $firstDay = (int)date('w', strtotime(sprintf('%04d-%02d-01', $year, $mNum)));
+            $daysInMonth = (int)date('t', strtotime(sprintf('%04d-%02d-01', $year, $mNum)));
+
+            $html = '<div class="month-box">';
+            $html .= '<div class="month-head">' . $mName . ' ' . $year . '</div>';
+            $html .= '<table class="cal-table">';
+            $html .= '<thead><tr><th class="sun">M</th><th>S</th><th>S</th><th>R</th><th>K</th><th>J</th><th>S</th></tr></thead><tbody>';
+
+            $dateNum = 1;
+            for ($row = 0; $row < 6; $row++) {
+                $hasCells = false;
+                $rowHtml = '<tr>';
+                for ($col = 0; $col < 7; $col++) {
+                    $isSun = ($col === 0);
+                    $sunCls = $isSun ? ' sun' : '';
+
+                    if ($row === 0 && $col < $firstDay) {
+                        $rowHtml .= '<td' . $sunCls . '></td>';
+                    } elseif ($dateNum > $daysInMonth) {
+                        $rowHtml .= '<td' . $sunCls . '></td>';
+                    } else {
+                        $hasCells = true;
+                        $dStr = sprintf('%04d-%02d-%02d', $year, $mNum, $dateNum);
+                        $hasEv = !empty($dateMap[$dStr]);
+                        $evCls = $hasEv ? ' has-ev' : '';
+                        $rowHtml .= '<td class="' . trim($sunCls . $evCls) . '">' . $dateNum . '</td>';
+                        $dateNum++;
+                    }
+                }
+                $rowHtml .= '</tr>';
+                if ($hasCells) {
+                    $html .= $rowHtml;
+                }
+            }
+            $html .= '</tbody></table></div>';
+            return $html;
+        };
+
+        // Bangun HTML Lengkap Dokumen PDF
+        $html = '<!DOCTYPE html><html><head><meta charset="UTF-8">';
+        $html .= '<style>
+            @page { margin: 12mm 15mm 12mm 15mm; }
+            body { font-family: Helvetica, Arial, sans-serif; font-size: 9px; color: #1e293b; line-height: 1.3; }
+            .kop { border-bottom: 2px solid #1e3a8a; padding-bottom: 6px; margin-bottom: 12px; }
+            .kop-title { font-size: 14px; font-weight: bold; color: #1e3a8a; text-transform: uppercase; margin: 0; }
+            .kop-sub { font-size: 10px; color: #475569; margin-top: 2px; }
+            .sem-title { background: #1e3a8a; color: #ffffff; padding: 4px 8px; font-weight: bold; font-size: 10px; margin: 10px 0 6px 0; border-radius: 3px; }
+            .months-row { width: 100%; border-collapse: collapse; margin-bottom: 8px; }
+            .month-cell { width: 16.66%; vertical-align: top; padding: 2px; }
+            .month-box { border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px; background: #ffffff; }
+            .month-head { font-weight: bold; font-size: 9.5px; color: #1e3a8a; border-bottom: 1px solid #eab308; padding-bottom: 2px; margin-bottom: 3px; text-align: center; }
+            .cal-table { width: 100%; border-collapse: collapse; text-align: center; font-size: 7.5px; }
+            .cal-table th { padding: 1px; color: #334155; font-weight: bold; }
+            .cal-table td { padding: 1.5px 1px; }
+            .sun { color: #dc2626 !important; font-weight: bold; }
+            .has-ev { background: #dbeafe; color: #1d4ed8 !important; font-weight: bold; border-radius: 2px; }
+            .agenda-table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 8.5px; }
+            .agenda-table th { background: #f1f5f9; border: 1px solid #cbd5e1; padding: 4px 6px; font-weight: bold; color: #1e293b; }
+            .agenda-table td { border: 1px solid #e2e8f0; padding: 4px 6px; vertical-align: top; }
+            .badge-cat { display: inline-block; padding: 1px 4px; border-radius: 2px; font-size: 7.5px; font-weight: bold; }
+            .page-break { page-break-before: always; }
+            .sig-table { width: 100%; margin-top: 20px; border-collapse: collapse; page-break-inside: avoid; }
+            .sig-cell { width: 50%; text-align: center; vertical-align: top; font-size: 9px; }
+        </style></head><body>';
+
+        // Header KOP
+        $html .= '<div class="kop">';
+        $html .= '<table style="width:100%;"><tr>';
+        $html .= '<td style="vertical-align:middle;">';
+        $html .= '<div class="kop-title">YAYASAN ISLAM AL-KAHFI KOTA BATAM</div>';
+        $html .= '<div style="font-size:11px; font-weight:bold; color:#0f766e;">DIVISI PENDIDIKAN &bull; KALENDER PENDIDIKAN &amp; AGENDA KERJA TAHUNAN</div>';
+        $html .= '<div class="kop-sub">Tahun Ajaran ' . htmlspecialchars($taName) . ' (Juli ' . $academicStartYear . ' &ndash; Juni ' . ($academicStartYear + 1) . ') &bull; Deputi: <strong>' . htmlspecialchars($deputiUser['full_name'] ?? 'Deputi') . '</strong> &bull; Wilayah Binaan: ' . htmlspecialchars(implode(', ', $unitNames) ?: 'Seluruh Unit') . '</div>';
+        $html .= '</td>';
+        $html .= '<td style="text-align:right; vertical-align:middle; width:140px; font-size:8px; color:#64748b;">';
+        $html .= 'Dicetak: ' . date('d/m/Y H:i') . ' WIB<br>Status: Dokumen Resmi';
+        $html .= '</td></tr></table></div>';
+
+        // 1. SEMESTER 1 (GANJIL)
+        $html .= '<div class="sem-title">SEMESTER 1 (GANJIL) &bull; TAHUN ' . $academicStartYear . ' (Juli s.d Desember)</div>';
+        $html .= '<table class="months-row"><tr>';
+        foreach ($sem1 as $sm) {
+            $html .= '<td class="month-cell">' . $renderPdfMonthTable($sm[0], $sm[1], $sm[2]) . '</td>';
+        }
+        $html .= '</tr></table>';
+
+        // 2. SEMESTER 2 (GENAP)
+        $html .= '<div class="sem-title" style="background:#0f766e;">SEMESTER 2 (GENAP) &bull; TAHUN ' . ($academicStartYear + 1) . ' (Januari s.d Juni)</div>';
+        $html .= '<table class="months-row"><tr>';
+        foreach ($sem2 as $sm) {
+            $html .= '<td class="month-cell">' . $renderPdfMonthTable($sm[0], $sm[1], $sm[2]) . '</td>';
+        }
+        $html .= '</tr></table>';
+
+        // Keterangan Agenda di Halaman berikutnya atau lanjutan
+        $html .= '<div style="margin-top:10px;">';
+        $html .= '<div style="font-weight:bold; font-size:11px; color:#1e3a8a; border-bottom:1.5px solid #1e3a8a; padding-bottom:3px; margin-bottom:6px;">';
+        $html .= 'RINCIAN LENGKAP AGENDA RAPAT &amp; KEGIATAN DIVISI PENDIDIKAN';
+        $html .= '</div>';
+
+        if (empty($events)) {
+            $html .= '<div style="text-align:center; padding:15px; color:#94a3b8; font-style:italic;">Belum ada agenda rapat atau kegiatan yang dijadwalkan pada kalender akademik ini.</div>';
+        } else {
+            $html .= '<table class="agenda-table">';
+            $html .= '<thead><tr>';
+            $html .= '<th style="width:24px;">No</th>';
+            $html .= '<th style="width:95px;">Tanggal &amp; Waktu</th>';
+            $html .= '<th style="width:90px;">Kategori</th>';
+            $html .= '<th style="width:90px;">Unit Terkait</th>';
+            $html .= '<th>Judul Agenda &amp; Pokok Bahasan</th>';
+            $html .= '<th style="width:110px;">Lokasi / Tautan</th>';
+            $html .= '<th style="width:80px; text-align:center;">Notula (MoM)</th>';
+            $html .= '</tr></thead><tbody>';
+
+            $no = 1;
+            foreach ($events as $ev) {
+                $dFormatted = date('d/m/Y', strtotime($ev['start_date']));
+                $tFormatted = !empty($ev['start_time']) ? date('H:i', strtotime($ev['start_time'])) . ' WIB' : 'Penuh';
+                $momStatus = !empty($ev['mom_id']) ? ('Tuntas ' . round((float)$ev['realization_pct']) . '%') : 'Belum Diisi';
+                $momColor = !empty($ev['mom_id']) ? '#15803d' : '#94a3b8';
+
+                $html .= '<tr>';
+                $html .= '<td style="text-align:center;">' . $no++ . '</td>';
+                $html .= '<td><strong>' . $dFormatted . '</strong><br><span style="color:#64748b; font-size:7.5px;">' . $tFormatted . '</span></td>';
+                $html .= '<td><span class="badge-cat" style="background:#e2e8f0; color:#1e293b;">' . htmlspecialchars($ev['category']) . '</span></td>';
+                $html .= '<td>' . htmlspecialchars($ev['unit_name'] ?: 'Semua Unit') . '</td>';
+                $html .= '<td><strong>' . htmlspecialchars($ev['title']) . '</strong>';
+                if (!empty($ev['description'])) {
+                    $html .= '<br><span style="color:#64748b; font-size:7.5px;">' . htmlspecialchars(mb_strimwidth($ev['description'], 0, 100, '...')) . '</span>';
+                }
+                $html .= '</td>';
+                $html .= '<td>' . htmlspecialchars($ev['location'] ?: '-') . '</td>';
+                $html .= '<td style="text-align:center; color:' . $momColor . '; font-weight:bold;">' . $momStatus . '</td>';
+                $html .= '</tr>';
+            }
+            $html .= '</tbody></table>';
+        }
+        $html .= '</div>';
+
+        // Tanda Tangan Pengesahan (Deputi & Direktur)
+        $tglCetak = SecurityHelper::formatTanggalIndo(date('Y-m-d'));
+        $html .= '<table class="sig-table"><tr>';
+        $html .= '<td class="sig-cell">';
+        $html .= 'Mengetahui,<br><strong>Deputi Direktur Pendidikan</strong><br>';
+        if (!empty($deputiSig) && file_exists(dirname(__DIR__, 2) . '/public' . $deputiSig)) {
+            $html .= '<img src="' . dirname(__DIR__, 2) . '/public' . $deputiSig . '" style="height:45px; margin:4px 0;"><br>';
+        } else {
+            $html .= '<div style="height:50px;"></div>';
+        }
+        $html .= '<strong><u>' . htmlspecialchars($deputiUser['full_name'] ?? 'Deputi Pendidikan') . '</u></strong>';
+        $html .= '</td>';
+
+        $html .= '<td class="sig-cell">';
+        $html .= 'Batam, ' . $tglCetak . '<br>Mengesahkan,<br><strong>Direktur Divisi Pendidikan</strong><br>';
+        if (!empty($direkturSig) && file_exists(dirname(__DIR__, 2) . '/public' . $direkturSig)) {
+            $html .= '<img src="' . dirname(__DIR__, 2) . '/public' . $direkturSig . '" style="height:45px; margin:4px 0;"><br>';
+        } else {
+            $html .= '<div style="height:50px;"></div>';
+        }
+        $html .= '<strong><u>' . htmlspecialchars($direktur['full_name'] ?? ($direktur['nama'] ?? 'Direktur Pendidikan')) . '</u></strong>';
+        $html .= '</td>';
+        $html .= '</tr></table>';
+
+        $html .= '</body></html>';
+
+        \Core\ExportHelper::pdf($html, 'Kalender_Kerja_Deputi_' . preg_replace('/[^A-Za-z0-9_-]/', '_', $taName), 'A4', 'landscape', true);
     }
 
     public function saveEvent(): void {
@@ -311,7 +565,7 @@ class DeputiController extends Controller {
      * Simpan Notula Rapat (MoM) & Komitmen Tindak Lanjut (Action Items)
      */
     public function saveMom(): void {
-        $this->requireRole(['deputi_pendidikan', 'direktur_pendidikan', 'operator_yayasan', 'kepala_sekolah']);
+        $this->requireRole(['deputi_pendidikan', 'direktur_pendidikan', 'operator_yayasan']);
         $eventId = (int)($_POST['event_id'] ?? 0);
         $meetingDate = $_POST['meeting_date'] ?? date('Y-m-d');
         $momContent = trim($_POST['mom_content'] ?? '');
@@ -389,7 +643,7 @@ class DeputiController extends Controller {
     }
 
     public function toggleActionStatus(): void {
-        $this->requireRole(['deputi_pendidikan', 'direktur_pendidikan', 'operator_yayasan', 'kepala_sekolah']);
+        $this->requireRole(['deputi_pendidikan', 'direktur_pendidikan', 'operator_yayasan']);
         $actionId = (int)($_POST['action_id'] ?? 0);
         $newStatus = $_POST['status'] ?? 'Pending';
         $deputiId = (int)($_POST['deputi_id'] ?? Auth::id());
@@ -772,12 +1026,29 @@ class DeputiController extends Controller {
     }
 
     public function deleteRapbsItem(): void {
-        $this->requireRole(['kepala_sekolah', 'deputi_pendidikan', 'operator_yayasan']);
+        $this->requireRole(['kepala_sekolah', 'deputi_pendidikan', 'direktur_pendidikan', 'operator_yayasan']);
         $id = (int)($_POST['id'] ?? 0);
-        $unitId = (int)($_POST['unit_id'] ?? 0);
+        $unitId = Auth::hasRole('kepala_sekolah') ? Auth::unitId() : (int)($_POST['unit_id'] ?? 0);
+
         if ($id > 0) {
-            Database::execute("DELETE FROM rapbs_items WHERE id = ?", [$id]);
-            $this->setFlash('success', 'Item anggaran berhasil dihapus.');
+            // Jika kepala sekolah, pastikan poin anggaran berada di bawah RAPBS unitnya sendiri
+            if (Auth::hasRole('kepala_sekolah')) {
+                $item = Database::fetch(
+                    "SELECT i.id FROM rapbs_items i 
+                     JOIN rapbs_headers h ON i.header_id = h.id 
+                     WHERE i.id = ? AND h.unit_id = ?",
+                    [$id, $unitId]
+                );
+                if ($item) {
+                    Database::execute("DELETE FROM rapbs_items WHERE id = ?", [$id]);
+                    $this->setFlash('success', 'Poin anggaran berhasil dihapus.');
+                } else {
+                    $this->setFlash('danger', 'Anda tidak memiliki wewenang untuk menghapus poin anggaran ini.');
+                }
+            } else {
+                Database::execute("DELETE FROM rapbs_items WHERE id = ?", [$id]);
+                $this->setFlash('success', 'Poin anggaran berhasil dihapus.');
+            }
         }
         $this->redirect(Auth::baseUrl() . '/deputi/rapbs?unit_id=' . $unitId);
     }
@@ -786,7 +1057,7 @@ class DeputiController extends Controller {
         $this->requireRole(['kepala_sekolah', 'deputi_pendidikan', 'operator_yayasan']);
         $itemId = (int)($_POST['item_id'] ?? 0);
         $realAmount = (float)($_POST['real_amount'] ?? 0);
-        $unitId = (int)($_POST['unit_id'] ?? 0);
+        $unitId = Auth::hasRole('kepala_sekolah') ? Auth::unitId() : (int)($_POST['unit_id'] ?? 0);
 
         if ($itemId > 0) {
             Database::execute("UPDATE rapbs_items SET real_amount = ? WHERE id = ?", [$realAmount, $itemId]);
@@ -799,10 +1070,34 @@ class DeputiController extends Controller {
         $this->requireRole(['kepala_sekolah', 'deputi_pendidikan', 'direktur_pendidikan', 'operator_yayasan']);
         $headerId = (int)($_POST['header_id'] ?? 0);
         $newStatus = $_POST['status'] ?? 'Diajukan';
-        $unitId = (int)($_POST['unit_id'] ?? 0);
+        $unitId = Auth::hasRole('kepala_sekolah') ? Auth::unitId() : (int)($_POST['unit_id'] ?? 0);
         $notes = trim($_POST['notes'] ?? '');
 
         if ($headerId > 0) {
+            $currHeader = Database::fetch("SELECT status FROM rapbs_headers WHERE id = ?", [$headerId]);
+            $currentStatus = $currHeader['status'] ?? 'Draft';
+            // Validasi alur persetujuan:
+            // 1. Diajukan oleh Kepala Sekolah
+            // 2. Disetujui oleh Deputi Pendidikan (Review Deputi)
+            // 3. Disetujui & Disahkan oleh Direktur Pendidikan (Disetujui Yayasan)
+            if (Auth::hasRole('kepala_sekolah') && !in_array($newStatus, ['Diajukan'], true)) {
+                $this->setFlash('danger', 'Kepala Sekolah hanya dapat mengajukan RAPBS.');
+                $this->redirect(Auth::baseUrl() . '/deputi/rapbs?unit_id=' . $unitId);
+                return;
+            }
+
+            if (Auth::hasRole('deputi_pendidikan') && !in_array($newStatus, ['Review Deputi', 'Revisi'], true)) {
+                $this->setFlash('danger', 'Deputi Pendidikan hanya dapat menyetujui (teruskan ke Direktur) atau meminta revisi.');
+                $this->redirect(Auth::baseUrl() . '/deputi/rapbs?unit_id=' . $unitId);
+                return;
+            }
+
+            if ($newStatus === 'Disetujui Yayasan' && $currentStatus !== 'Review Deputi') {
+                $this->setFlash('danger', 'RAPBS harus disetujui terlebih dahulu oleh Deputi Pendidikan sebelum disahkan oleh Direktur Pendidikan.');
+                $this->redirect(Auth::baseUrl() . '/deputi/rapbs?unit_id=' . $unitId);
+                return;
+            }
+
             $updateSql = "UPDATE rapbs_headers SET status = ?, notes = ?";
             $params = [$newStatus, $notes];
 
@@ -819,7 +1114,15 @@ class DeputiController extends Controller {
             $updateSql .= " WHERE id = ?";
             $params[] = $headerId;
             Database::execute($updateSql, $params);
-            $this->setFlash('success', "Status pengajuan RAPBS berhasil diubah menjadi: {$newStatus}.");
+
+            $msg = match($newStatus) {
+                'Diajukan'          => 'RAPBS berhasil diajukan ke Deputi Direktur Pendidikan.',
+                'Review Deputi'     => 'RAPBS telah disetujui oleh Deputi Pendidikan dan diteruskan ke Direktur Pendidikan.',
+                'Disetujui Yayasan' => 'RAPBS telah disetujui dan disahkan secara resmi oleh Direktur Pendidikan.',
+                'Revisi'            => 'RAPBS dikembalikan ke Kepala Sekolah untuk dilakukan perbaikan / revisi.',
+                default             => "Status RAPBS berhasil diperbarui menjadi {$newStatus}."
+            };
+            $this->setFlash('success', $msg);
         }
         $this->redirect(Auth::baseUrl() . '/deputi/rapbs?unit_id=' . $unitId);
     }
