@@ -202,7 +202,7 @@ class DeputiController extends Controller {
         $inUnits = !empty($deputiUnitIds) ? implode(',', $deputiUnitIds) : '0';
         $units = Database::fetchAll("SELECT * FROM units WHERE id IN ({$inUnits}) ORDER BY id ASC");
 
-        // Ambil semua event untuk tahun ajaran aktif
+        // Ambil semua event untuk deputi terkait (dan event lintas yayasan)
         $events = Database::fetchAll(
             "SELECT e.*, u.name as unit_name, m.id as mom_id, m.realization_pct, m.is_on_time_24h,
                     COUNT(a.id) as total_actions,
@@ -211,10 +211,10 @@ class DeputiController extends Controller {
              LEFT JOIN units u ON e.unit_id = u.id
              LEFT JOIN deputi_meeting_moms m ON e.id = m.event_id
              LEFT JOIN deputi_meeting_actions a ON m.id = a.mom_id
-             WHERE e.academic_year_id = ? AND (e.deputi_user_id = ? OR e.deputi_user_id = 0)
+             WHERE (e.deputi_user_id = ? OR e.deputi_user_id = 0)
              GROUP BY e.id
              ORDER BY e.start_date ASC, e.start_time ASC",
-            [$taId, $deputiUserId]
+            [$deputiUserId]
         );
 
         $stakeholders = Database::fetchAll(
@@ -227,14 +227,24 @@ class DeputiController extends Controller {
              ORDER BY u.full_name ASC"
         );
 
+        $currentTa = Database::fetch("SELECT * FROM academic_years WHERE id = ?", [$taId]);
+        $taName = $currentTa['name'] ?? (date('Y') . '/' . (date('Y') + 1));
+        $nowY = (int)date('Y');
+        $nowM = (int)date('n');
+        $systemAcademicStartYear = ($nowM >= 7) ? $nowY : ($nowY - 1);
+        $academicStartYear = $systemAcademicStartYear;
+
         $this->view('deputi/calendar', [
-            'pageTitle'    => 'Kalender Kerja Tahunan & Meeting Manager (MoM)',
-            'deputiUser'   => $deputiUser,
-            'deputiList'   => $deputiList,
-            'deputiUserId' => $deputiUserId,
-            'units'        => $units,
-            'events'       => $events,
-            'stakeholders' => $stakeholders
+            'pageTitle'          => 'Kalender Kerja Tahunan & Meeting Manager (MoM)',
+            'deputiUser'         => $deputiUser,
+            'deputiList'         => $deputiList,
+            'deputiUserId'       => $deputiUserId,
+            'units'              => $units,
+            'events'             => $events,
+            'stakeholders'       => $stakeholders,
+            'currentTa'          => $currentTa,
+            'academicStartYear'  => $academicStartYear,
+            'taName'             => $taName
         ]);
     }
 

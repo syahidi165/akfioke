@@ -7,6 +7,8 @@ use Core\Database;
 
 $baseUrl = Auth::baseUrl();
 $stakeholders = $stakeholders ?? [];
+$academicStartYear = $academicStartYear ?? 2026;
+$taName = $taName ?? ($academicStartYear . '/' . ($academicStartYear + 1));
 
 // Data event di-encode ke JSON untuk kalender interaktif JS
 $eventsJson = json_encode($events, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE);
@@ -327,14 +329,16 @@ $eventsJson = json_encode($events, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS |
         <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #e2e8f0; padding-bottom: 12px; margin-bottom: 20px;">
             <div style="display: flex; align-items: center; gap: 12px;">
                 <h2 style="margin: 0; font-size: 1.375rem; font-weight: 800; color: #1e3a8a;">
-                    <i class="fa-solid fa-calendar-check" style="color: #2563eb;"></i> Kalender Tahunan Yayasan
+                    <i class="fa-solid fa-calendar-check" style="color: #2563eb;"></i> Kalender Pendidikan Yayasan (Juli - Juni)
                 </h2>
-                <div style="display: flex; gap: 4px;">
-                    <button type="button" class="btn btn-outline" onclick="changeYear(-1)" style="padding: 2px 8px; font-size: 11px;">
+                <div style="display: flex; gap: 6px; align-items: center;">
+                    <button type="button" class="btn btn-outline" onclick="changeYear(-1)" style="padding: 3px 10px; font-size: 12px; font-weight: 700;">
                         <i class="fa-solid fa-chevron-left"></i>
                     </button>
-                    <span id="yearlyYearLabel" style="font-weight: 800; font-size: 1.125rem; color: #1e293b; padding: 0 6px;">2026</span>
-                    <button type="button" class="btn btn-outline" onclick="changeYear(1)" style="padding: 2px 8px; font-size: 11px;">
+                    <span id="yearlyYearLabel" style="font-weight: 800; font-size: 1.0625rem; color: #1e3a8a; padding: 2px 10px; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 6px;">
+                        <?= SecurityHelper::escape($academicStartYear . ' / ' . ($academicStartYear + 1)) ?>
+                    </span>
+                    <button type="button" class="btn btn-outline" onclick="changeYear(1)" style="padding: 3px 10px; font-size: 12px; font-weight: 700;">
                         <i class="fa-solid fa-chevron-right"></i>
                     </button>
                 </div>
@@ -701,13 +705,30 @@ $eventsJson = json_encode($events, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS |
 <script>
 // Seluruh Events dari Database
 var allEvents = <?= $eventsJson ?>;
-var currentYear = 2026;
-var currentMonth = 7; // Default Juli (Awal Tahun Ajaran)
+var academicStartYear = <?= (int)($academicStartYear ?? 2026) ?>;
+var currentYear = <?= (int)date('Y') ?>;
+var currentMonth = <?= (int)date('n') - 1 ?>; // Bulan berjalan saat ini (0-11)
 var selectedCategory = 'ALL';
 
 var monthNames = [
     'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
     'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+];
+
+// 12 Bulan Kalender Pendidikan: Juli s.d Juni
+var academicMonths = [
+    { mIndex: 6,  name: 'Juli',      yearOffset: 0 },
+    { mIndex: 7,  name: 'Agustus',   yearOffset: 0 },
+    { mIndex: 8,  name: 'September', yearOffset: 0 },
+    { mIndex: 9,  name: 'Oktober',   yearOffset: 0 },
+    { mIndex: 10, name: 'November',  yearOffset: 0 },
+    { mIndex: 11, name: 'Desember',  yearOffset: 0 },
+    { mIndex: 0,  name: 'Januari',   yearOffset: 1 },
+    { mIndex: 1,  name: 'Februari',  yearOffset: 1 },
+    { mIndex: 2,  name: 'Maret',     yearOffset: 1 },
+    { mIndex: 3,  name: 'April',     yearOffset: 1 },
+    { mIndex: 4,  name: 'Mei',       yearOffset: 1 },
+    { mIndex: 5,  name: 'Juni',      yearOffset: 1 }
 ];
 
 var categoryColors = {
@@ -767,13 +788,17 @@ function getFilteredEvents() {
 // RENDER VIEW 1: KALENDER TAHUNAN 12 BULAN (PERSIS LAMPIRAN USER)
 // -----------------------------------------------------------------------------
 function changeYear(delta) {
-    currentYear += delta;
-    document.getElementById('yearlyYearLabel').innerText = currentYear;
+    academicStartYear += delta;
+    var lbl = document.getElementById('yearlyYearLabel');
+    if (lbl) {
+        lbl.innerText = academicStartYear + ' / ' + (academicStartYear + 1);
+    }
     renderYearlyGrid();
 }
 
 function renderYearlyGrid() {
     var container = document.getElementById('yearlyCalendarGrid');
+    if (!container) return;
     container.innerHTML = '';
     var events = getFilteredEvents();
 
@@ -785,14 +810,25 @@ function renderYearlyGrid() {
         dateMap[d].push(ev);
     });
 
-    for (var m = 0; m < 12; m++) {
+    academicMonths.forEach(function(mObj) {
         var card = document.createElement('div');
         card.className = 'mini-month-card';
 
-        // Header bulan
+        var monthYear = academicStartYear + mObj.yearOffset;
+
+        // Header bulan (misal: "Juli" dan "2026", atau "Januari" dan "2027")
         var header = document.createElement('div');
         header.className = 'mini-month-header';
-        header.innerHTML = '<span>' + monthNames[m] + '</span><span style="font-size:0.75rem; color:#64748b; font-weight:normal;">' + currentYear + '</span>';
+        header.style.cursor = 'pointer';
+        header.title = 'Klik untuk melihat kalender detail bulan ' + mObj.name + ' ' + monthYear;
+        header.innerHTML = '<span>' + mObj.name + '</span><span style="font-size:0.75rem; color:#64748b; font-weight:normal;">' + monthYear + '</span>';
+        (function(tYear, tMonth) {
+            header.onclick = function() {
+                currentYear = tYear;
+                currentMonth = tMonth;
+                switchView('monthly');
+            };
+        })(monthYear, mObj.mIndex);
         card.appendChild(header);
 
         // Table M S S R K J S
@@ -804,8 +840,8 @@ function renderYearlyGrid() {
                           '</tr></thead>';
         var tbody = document.createElement('tbody');
 
-        var firstDay = new Date(currentYear, m, 1).getDay(); // 0 is Sunday
-        var daysInMonth = new Date(currentYear, m + 1, 0).getDate();
+        var firstDay = new Date(monthYear, mObj.mIndex, 1).getDay(); // 0 is Sunday
+        var daysInMonth = new Date(monthYear, mObj.mIndex + 1, 0).getDate();
 
         var dateNum = 1;
         var monthNotes = [];
@@ -824,7 +860,7 @@ function renderYearlyGrid() {
                     td.innerHTML = '';
                 } else {
                     hasCells = true;
-                    var dateStr = currentYear + '-' + String(m + 1).padStart(2, '0') + '-' + String(dateNum).padStart(2, '0');
+                    var dateStr = monthYear + '-' + String(mObj.mIndex + 1).padStart(2, '0') + '-' + String(dateNum).padStart(2, '0');
                     var dayEvents = dateMap[dateStr] || [];
 
                     td.innerText = dateNum;
@@ -895,7 +931,7 @@ function renderYearlyGrid() {
         card.appendChild(notesDiv);
 
         container.appendChild(card);
-    }
+    });
 }
 
 // -----------------------------------------------------------------------------
