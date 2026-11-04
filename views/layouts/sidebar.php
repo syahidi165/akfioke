@@ -215,6 +215,18 @@ if (!function_exists('isNavActive')) {
                     <span class="nav-text">Kalender Kerja &amp; MoM</span>
                 </a>
             </div>
+            <div class="nav-item">
+                <a href="<?= $baseUrl ?>/direktur/rekap-supervisi" class="nav-link <?= isNavActive('/direktur/rekap-supervisi', $currentPath) ?>">
+                    <i class="fa-solid fa-chalkboard-user"></i>
+                    <span class="nav-text">Rekap Supervisi Guru (Seluruh Unit)</span>
+                </a>
+            </div>
+            <div class="nav-item">
+                <a href="<?= $baseUrl ?>/kurikulum/struktur" class="nav-link <?= isNavActive('/kurikulum/struktur', $currentPath) ?>">
+                    <i class="fa-solid fa-file-contract"></i>
+                    <span class="nav-text">Struktur Kurikulum Unit</span>
+                </a>
+            </div>
 
         <?php elseif ($role === 'hrd'): ?>
             <div class="nav-section-title">HRD YAYASAN</div>
@@ -255,6 +267,24 @@ if (!function_exists('isNavActive')) {
                 <a href="<?= $baseUrl ?>/deputi/calendar" class="nav-link <?= isNavActive('/deputi/calendar', $currentPath) ?>">
                     <i class="fa-solid fa-calendar-days"></i>
                     <span class="nav-text">Kalender Kerja &amp; MoM</span>
+                </a>
+            </div>
+            <div class="nav-item">
+                <a href="<?= $baseUrl ?>/deputi/deadlines-ks" class="nav-link <?= isNavActive('/deputi/deadlines-ks', $currentPath) ?>">
+                    <i class="fa-solid fa-clock"></i>
+                    <span class="nav-text">Batas Waktu Administrasi KS</span>
+                </a>
+            </div>
+            <div class="nav-item">
+                <a href="<?= $baseUrl ?>/deputi/rekap-supervisi" class="nav-link <?= isNavActive('/deputi/rekap-supervisi', $currentPath) ?>">
+                    <i class="fa-solid fa-chalkboard-user"></i>
+                    <span class="nav-text">Rekap Supervisi Guru</span>
+                </a>
+            </div>
+            <div class="nav-item">
+                <a href="<?= $baseUrl ?>/kurikulum/struktur" class="nav-link <?= isNavActive('/kurikulum/struktur', $currentPath) ?>">
+                    <i class="fa-solid fa-file-contract"></i>
+                    <span class="nav-text">Struktur Kurikulum Unit</span>
                 </a>
             </div>
             <div class="nav-item">
@@ -759,6 +789,12 @@ if (!function_exists('isNavActive')) {
                 <a href="<?= $baseUrl ?>/administrasi/ks" class="nav-link <?= isNavActive('/administrasi/ks', $currentPath) ?>">
                     <i class="fa-solid fa-folder-closed"></i>
                     <span class="nav-text">Dokumen Admin KS (18 Item)</span>
+                </a>
+            </div>
+            <div class="nav-item">
+                <a href="<?= $baseUrl ?>/kurikulum/struktur" class="nav-link <?= isNavActive('/kurikulum/struktur', $currentPath) ?>">
+                    <i class="fa-solid fa-file-contract"></i>
+                    <span class="nav-text">Struktur Kurikulum (FR – 9023a)</span>
                 </a>
             </div>
             <div class="nav-item">

@@ -15,13 +15,26 @@ class SpmbController extends Controller {
         $this->requireRole(['deputi_pendidikan', 'direktur_pendidikan', 'operator_yayasan']);
         $taId = Auth::academicYearId();
 
-        $units = Database::fetchAll("SELECT * FROM units ORDER BY id ASC");
+        if (Auth::hasRole('deputi_pendidikan')) {
+            $deputiUnitIds = \App\Controllers\DeputiController::getDeputiUnitIds(Auth::id());
+            if (empty($deputiUnitIds)) {
+                $units = [];
+                $inClause = "0";
+            } else {
+                $inClause = implode(',', array_map('intval', $deputiUnitIds));
+                $units = Database::fetchAll("SELECT * FROM units WHERE id IN ($inClause) ORDER BY id ASC");
+            }
+        } else {
+            $units = Database::fetchAll("SELECT * FROM units ORDER BY id ASC");
+            $inClause = "SELECT id FROM units";
+        }
+
         $targets = Database::fetchAll(
             "SELECT st.*, u.name as unit_name, 
                     COALESCE(st.actual_count, 0) as actual_registrations 
              FROM spmb_targets st 
              JOIN units u ON st.unit_id = u.id 
-             WHERE st.academic_year_id = ?",
+             WHERE st.academic_year_id = ? AND st.unit_id IN ({$inClause})",
             [$taId]
         );
 
@@ -38,6 +51,15 @@ class SpmbController extends Controller {
         $targetCount = (int)($_POST['target_count'] ?? 100);
         $taId = Auth::academicYearId();
         $userId = Auth::id();
+
+        if (Auth::hasRole('deputi_pendidikan')) {
+            $deputiUnitIds = \App\Controllers\DeputiController::getDeputiUnitIds($userId);
+            if (!in_array($unitId, $deputiUnitIds, true)) {
+                $this->setFlash('danger', 'Akses Ditolak: Unit ini bukan unit binaan Anda.');
+                $this->redirect(Auth::baseUrl() . '/spmb/target');
+                return;
+            }
+        }
 
         if ($unitId && $targetCount > 0) {
             Database::execute(
@@ -59,11 +81,26 @@ class SpmbController extends Controller {
         $taId = Auth::academicYearId();
         $isYayasan = Auth::hasRole('operator_yayasan') || Auth::hasRole('deputi_pendidikan') || Auth::hasRole('direktur_pendidikan');
 
-        if ($isYayasan && isset($_GET['unit_id']) && (int)$_GET['unit_id'] > 0) {
-            $unitId = (int)$_GET['unit_id'];
+        if (Auth::hasRole('deputi_pendidikan')) {
+            $deputiUnitIds = \App\Controllers\DeputiController::getDeputiUnitIds(Auth::id());
+            if (empty($deputiUnitIds)) {
+                $allUnits = [];
+            } else {
+                $inClause = implode(',', array_map('intval', $deputiUnitIds));
+                $allUnits = Database::fetchAll("SELECT * FROM units WHERE id IN ($inClause) ORDER BY id ASC");
+            }
+            if (isset($_GET['unit_id']) && in_array((int)$_GET['unit_id'], $deputiUnitIds, true)) {
+                $unitId = (int)$_GET['unit_id'];
+            } elseif (!in_array($unitId, $deputiUnitIds, true) && !empty($allUnits)) {
+                $unitId = (int)$allUnits[0]['id'];
+            }
+        } else {
+            if ($isYayasan && isset($_GET['unit_id']) && (int)$_GET['unit_id'] > 0) {
+                $unitId = (int)$_GET['unit_id'];
+            }
+            $allUnits = Database::fetchAll("SELECT * FROM units ORDER BY id ASC");
         }
 
-        $allUnits = Database::fetchAll("SELECT * FROM units ORDER BY id ASC");
         $unitInfo = Database::fetch("SELECT * FROM units WHERE id = ?", [$unitId]);
 
         $targetRow = Database::fetch("SELECT * FROM spmb_targets WHERE unit_id = ? AND academic_year_id = ?", [$unitId, $taId]);

@@ -340,7 +340,18 @@ class AuditBackupController extends Controller {
         $taId = Auth::academicYearId();
         $activeTa = Database::fetch("SELECT * FROM academic_years WHERE id = ?", [$taId]);
 
-        $rawUnits = Database::fetchAll("SELECT * FROM units ORDER BY id ASC");
+        // Filter unit binaan jika Deputi Pendidikan yang mengakses
+        if (Auth::hasRole('deputi_pendidikan')) {
+            $deputiUnitIds = \App\Controllers\DeputiController::getDeputiUnitIds(Auth::id());
+            if (empty($deputiUnitIds)) {
+                $rawUnits = [];
+            } else {
+                $inClause = implode(',', array_map('intval', $deputiUnitIds));
+                $rawUnits = Database::fetchAll("SELECT * FROM units WHERE id IN ($inClause) ORDER BY id ASC");
+            }
+        } else {
+            $rawUnits = Database::fetchAll("SELECT * FROM units ORDER BY id ASC");
+        }
         $unitsOverview = [];
 
         $totSiswaYayasan = 0;

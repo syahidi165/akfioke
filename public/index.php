@@ -32,6 +32,7 @@ use App\Controllers\JadwalController;
 use App\Controllers\PwaController;
 use App\Controllers\NotificationController;
 use App\Controllers\DeputiController;
+use App\Controllers\KurikulumController;
 
 // PWA (Progressive Web App) Routes
 Router::get('/manifest.json', [PwaController::class, 'manifest']);
@@ -431,6 +432,21 @@ Router::get('/deputi/rapor', [DeputiController::class, 'rapor']);
 Router::post('/deputi/rapor/save-evaluation', [DeputiController::class, 'saveEvaluation']);
 Router::get('/deputi/rapor/print', [DeputiController::class, 'printRapor']);
 Router::get('/deputi/rapor/pdf', [DeputiController::class, 'exportRaporPdf']);
+
+// Batas Waktu (Due Date) Administrasi KS
+Router::get('/deputi/deadlines-ks', [DeputiController::class, 'deadlinesKs']);
+Router::post('/deputi/deadlines-ks/save', [DeputiController::class, 'saveKsDeadlines']);
+
+// Rekap Data Supervisi Guru (Deputi & Direktur Pendidikan)
+Router::get('/deputi/rekap-supervisi', [DeputiController::class, 'rekapSupervisi']);
+Router::get('/direktur/rekap-supervisi', [DeputiController::class, 'rekapSupervisi']);
+
+// Struktur Kurikulum (FR - 9023a)
+Router::get('/kurikulum/struktur', [KurikulumController::class, 'struktur']);
+Router::post('/kurikulum/struktur/save', [KurikulumController::class, 'saveStruktur']);
+Router::post('/kurikulum/struktur/reset-default', [KurikulumController::class, 'resetDefault']);
+Router::get('/kurikulum/struktur/pdf', [KurikulumController::class, 'pdfStruktur']);
+Router::get('/kurikulum/struktur/print', [KurikulumController::class, 'printStruktur']);
 
 // Run Router
 Router::run();

@@ -1443,7 +1443,7 @@ class AkfiController extends Controller {
             $targetAdminRole = 'GURU_TK';
         } elseif ($positionCode === 'TU') {
             $targetAdminRole = 'TU';
-        } elseif (str_starts_with($positionCode, 'KANIT')) {
+        } elseif (str_starts_with($positionCode, 'KANIT') || str_contains($positionCode, 'KEPSEK') || str_contains($positionCode, 'KEPALA')) {
             $targetAdminRole = 'KEPALA_SEKOLAH';
         } else {
             $targetAdminRole = 'GURU_MAPEL';
@@ -1783,7 +1783,21 @@ class AkfiController extends Controller {
         $ksAdminCount = (int)($ksAdmin['verified_slots'] ?? 0);
         $ksOntimeCount = (int)($ksAdmin['ontime_slots'] ?? 0);
         $ksAdminArchived = round(min(100.0, ($ksAdminCount / $ksTotalSlots) * 100), 1);
-        $ksAdminOntime = $ksAdminCount > 0 ? round(min(100.0, ($ksOntimeCount / $ksAdminCount) * 100), 1) : 0.0;
+
+        // Evaluasi keterikatan batas waktu (due date) yang ditetapkan Deputi Pendidikan
+        $passedDeadlines = Database::fetch("
+            SELECT COUNT(DISTINCT uad.jenis_admin_id) as total_due_passed
+            FROM unit_administrasi_deadlines uad
+            JOIN master_jenis_administrasi mja ON uad.jenis_admin_id = mja.id
+            WHERE uad.unit_id = ? AND uad.academic_year_id = ? AND mja.target_role = 'KEPALA_SEKOLAH'
+              AND (
+                  (uad.deadline_datetime IS NOT NULL AND uad.deadline_datetime < NOW())
+                  OR (uad.deadline_date IS NOT NULL AND uad.deadline_date < CURDATE())
+              )
+        ", [$unitId, $taId]);
+        $passedDueCount = (int)($passedDeadlines['total_due_passed'] ?? 0);
+        $effectiveSlotsEvaluated = max($ksAdminCount, $passedDueCount);
+        $ksAdminOntime = $effectiveSlotsEvaluated > 0 ? round(min(100.0, ($ksOntimeCount / $effectiveSlotsEvaluated) * 100), 1) : 100.0;
 
         $turnover = Database::fetch("SELECT COUNT(id) as cnt FROM employee_turnover_logs WHERE from_unit_id = ?", [$unitId]);
         $turnoverCount = (int)($turnover['cnt'] ?? 0);

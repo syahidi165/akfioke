@@ -44,7 +44,7 @@ $baseUrl = Auth::baseUrl();
             <div class="stat-value"><?= number_format($totSiswaYayasan, 0, ',', '.') ?> <span style="font-size: 13px; font-weight: 500; color: var(--text-muted);">Santri</span></div>
             <div class="stat-label">Total Santri Aktif Yayasan</div>
             <div style="font-size: 11px; color: #2563eb; font-weight: 600; margin-top: 2px;">
-                5 Satuan Pendidikan
+                <?= count($unitsOverview) ?> Satuan Pendidikan Binaan
             </div>
         </div>
     </div>

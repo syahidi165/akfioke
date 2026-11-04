@@ -1546,7 +1546,57 @@ class DeputiController extends Controller {
 
         // 7. Evaluasi Kinerja Kepala Sekolah (Indikator 3.1)
         // Ambil data ketercapaian penilaian sikap & administrasi KS
-        $metrics['3.1'] = ['scale' => 4, 'ach_pct' => 80.0, 'info' => "Evaluasi KS unit binaan tersinkronisasi"];
+        // 7. Evaluasi Kinerja Kepala Sekolah (Indikator 3.1) - Berdasarkan Ketepatan Waktu Administrasi KS
+        $ksDeadlinesCheck = Database::fetch("
+            SELECT 
+                COUNT(DISTINCT CONCAT(uad.unit_id, '-', uad.jenis_admin_id)) as total_deadlines_passed,
+                COUNT(DISTINCT CASE 
+                    WHEN au.id IS NOT NULL AND au.status = 'Disetujui' AND au.is_on_time = 1 
+                    THEN CONCAT(uad.unit_id, '-', uad.jenis_admin_id) 
+                    ELSE NULL 
+                END) as ontime_approved
+            FROM unit_administrasi_deadlines uad
+            JOIN master_jenis_administrasi mja ON uad.jenis_admin_id = mja.id
+            LEFT JOIN administrasi_uploads au ON au.jenis_admin_id = uad.jenis_admin_id 
+                 AND au.unit_id = uad.unit_id AND au.academic_year_id = uad.academic_year_id
+            WHERE uad.unit_id IN ({$inUnits}) AND uad.academic_year_id = ? AND mja.target_role = 'KEPALA_SEKOLAH'
+              AND (
+                  (uad.deadline_datetime IS NOT NULL AND uad.deadline_datetime < NOW())
+                  OR (uad.deadline_date IS NOT NULL AND uad.deadline_date < CURDATE())
+              )
+        ", [$taId]);
+
+        $totPassed = (int)($ksDeadlinesCheck['total_deadlines_passed'] ?? 0);
+        $ontimePassed = (int)($ksDeadlinesCheck['ontime_approved'] ?? 0);
+
+        if ($totPassed > 0) {
+            $ontimeRatio = ($ontimePassed / $totPassed) * 100;
+            $ksScale = $ontimeRatio >= 90 ? 5 : ($ontimeRatio >= 80 ? 4 : ($ontimeRatio >= 65 ? 3 : ($ontimeRatio >= 50 ? 2 : 1)));
+            $ksAchPct = round(($ksScale / 5) * 100, 1);
+            $infoText = "Ketepatan waktu berkas KS binaan: " . round($ontimeRatio, 1) . "% ({$ontimePassed}/{$totPassed} dokumen jatuh tempo on-time)";
+        } else {
+            $allKsUploads = Database::fetch("
+                SELECT 
+                    COUNT(au.id) as total_up,
+                    SUM(CASE WHEN au.is_on_time = 1 THEN 1 ELSE 0 END) as ontime_up
+                FROM administrasi_uploads au
+                JOIN master_jenis_administrasi mja ON au.jenis_admin_id = mja.id
+                WHERE au.unit_id IN ({$inUnits}) AND au.academic_year_id = ? AND mja.target_role = 'KEPALA_SEKOLAH'
+            ", [$taId]);
+            $totUp = (int)($allKsUploads['total_up'] ?? 0);
+            $onUp = (int)($allKsUploads['ontime_up'] ?? 0);
+            if ($totUp > 0) {
+                $ratio = ($onUp / $totUp) * 100;
+                $ksScale = $ratio >= 90 ? 5 : ($ratio >= 80 ? 4 : ($ratio >= 65 ? 3 : 2));
+                $ksAchPct = round(($ksScale / 5) * 100, 1);
+                $infoText = "Ketepatan berkas KS binaan: " . round($ratio, 1) . "% ({$onUp}/{$totUp} berkas tepat waktu)";
+            } else {
+                $ksScale = 4;
+                $ksAchPct = 80.0;
+                $infoText = "Batas waktu administrasi KS diset, menunggu siklus pengumpulan";
+            }
+        }
+        $metrics['3.1'] = ['scale' => $ksScale, 'ach_pct' => $ksAchPct, 'info' => $infoText];
 
         // 8. Pengawasan Penilaian Kinerja Guru PKG (Indikator 3.2)
         $guruStats = Database::fetch(
@@ -1779,5 +1829,323 @@ class DeputiController extends Controller {
         $cleanName = preg_replace('/[^A-Za-z0-9_-]/', '_', $deputiUser['full_name'] ?? 'Deputi');
         $filename = "Rapor_AKFI_Deputi_{$cleanName}_Sem_{$semester}";
         \Core\ExportHelper::pdf($html, $filename, 'A4', 'portrait', true);
+    }
+
+    /**
+     * Menu Pengaturan Batas Waktu (Due Date) Pengumpulan Administrasi KS
+     */
+    public function deadlinesKs(): void {
+        $this->requireRole(['deputi_pendidikan', 'direktur_pendidikan', 'operator_yayasan']);
+        $role = Auth::activeRoleName();
+        $taId = Auth::academicYearId();
+        $userId = Auth::id();
+
+        if ($role === 'deputi_pendidikan') {
+            $deputiUnitIds = self::getDeputiUnitIds($userId);
+            if (empty($deputiUnitIds)) {
+                $deputiUnitIds = [1];
+            }
+            $inClause = implode(',', array_map('intval', $deputiUnitIds));
+            $units = Database::fetchAll("SELECT * FROM units WHERE id IN ($inClause) ORDER BY id ASC");
+        } else {
+            $units = Database::fetchAll("SELECT * FROM units ORDER BY id ASC");
+            $deputiUnitIds = array_column($units, 'id');
+        }
+
+        $selectedUnitId = (int)($_GET['unit_id'] ?? ($units[0]['id'] ?? 1));
+        if ($role === 'deputi_pendidikan' && !in_array($selectedUnitId, $deputiUnitIds, true)) {
+            $selectedUnitId = (int)$deputiUnitIds[0];
+        }
+
+        $unit = Database::fetch("SELECT * FROM units WHERE id = ?", [$selectedUnitId]);
+        if (!$unit) {
+            $this->setFlash('danger', 'Unit sekolah tidak ditemukan.');
+            $this->redirect(Auth::baseUrl() . '/dashboard');
+            return;
+        }
+
+        // Ambil 18 dokumen administrasi Kepala Sekolah
+        $masterItems = Database::fetchAll("
+            SELECT m.*, 
+                   uad.due_info as unit_due_info, 
+                   uad.deadline_date, 
+                   uad.deadline_datetime,
+                   uad.updated_at as deadline_updated_at,
+                   COALESCE(uad.due_info, m.due_info) as effective_due_info
+            FROM master_jenis_administrasi m
+            LEFT JOIN unit_administrasi_deadlines uad 
+                 ON uad.jenis_admin_id = m.id 
+                 AND uad.unit_id = ? 
+                 AND uad.academic_year_id = ?
+            WHERE m.target_role = 'KEPALA_SEKOLAH'
+            ORDER BY m.order_num ASC
+        ", [$selectedUnitId, $taId]);
+
+        // Ambil data pengunggahan KS terkini untuk unit & tahun ajaran ini
+        $ksUploads = Database::fetchAll("
+            SELECT au.*, u.full_name as uploader_name
+            FROM administrasi_uploads au
+            LEFT JOIN users u ON au.user_id = u.id
+            JOIN master_jenis_administrasi mja ON au.jenis_admin_id = mja.id
+            WHERE au.unit_id = ? AND au.academic_year_id = ? AND mja.target_role = 'KEPALA_SEKOLAH'
+            ORDER BY au.id DESC
+        ", [$selectedUnitId, $taId]);
+
+        $uploadsMap = [];
+        foreach ($ksUploads as $up) {
+            $jId = $up['jenis_admin_id'];
+            if (!isset($uploadsMap[$jId])) {
+                $uploadsMap[$jId] = $up;
+            }
+        }
+
+        // Hitung statistik kepatuhan dan status batas waktu
+        $totalDocs = count($masterItems);
+        $totalDeadlinesSet = 0;
+        $totalSubmittedOnTime = 0;
+        $totalLateOrOverdue = 0;
+        $nowTs = time();
+
+        foreach ($masterItems as &$item) {
+            $jId = $item['id'];
+            $up = $uploadsMap[$jId] ?? null;
+            $item['upload'] = $up;
+
+            $dTs = null;
+            if (!empty($item['deadline_datetime'])) {
+                $dTs = strtotime($item['deadline_datetime']);
+                $totalDeadlinesSet++;
+            } elseif (!empty($item['deadline_date'])) {
+                $dTs = strtotime($item['deadline_date'] . ' 23:59:59');
+                $totalDeadlinesSet++;
+            }
+            $item['deadline_ts'] = $dTs;
+
+            if ($up && $up['status'] === 'Disetujui') {
+                if ($up['is_on_time'] == 1) {
+                    $item['status_badge'] = 'ON_TIME';
+                    $totalSubmittedOnTime++;
+                } else {
+                    $item['status_badge'] = 'LATE_SUBMITTED';
+                    $totalLateOrOverdue++;
+                }
+            } elseif ($up && in_array($up['status'], ['Diajukan', 'Perlu Revisi'])) {
+                $item['status_badge'] = 'PENDING_APPROVAL';
+            } elseif ($dTs !== null && $nowTs > $dTs) {
+                $item['status_badge'] = 'OVERDUE_MISSING';
+                $totalLateOrOverdue++;
+            } elseif ($dTs !== null) {
+                $item['status_badge'] = 'AWAITING_SUBMISSION';
+            } else {
+                $item['status_badge'] = 'NO_DEADLINE';
+            }
+        }
+        unset($item);
+
+        $this->view('deputi/deadlines_ks', [
+            'pageTitle'            => 'Batas Waktu Administrasi KS - ' . $unit['name'],
+            'units'                => $units,
+            'selectedUnitId'       => $selectedUnitId,
+            'unit'                 => $unit,
+            'masterItems'          => $masterItems,
+            'totalDocs'            => $totalDocs,
+            'totalDeadlinesSet'    => $totalDeadlinesSet,
+            'totalSubmittedOnTime' => $totalSubmittedOnTime,
+            'totalLateOrOverdue'   => $totalLateOrOverdue,
+            'role'                 => $role
+        ]);
+    }
+
+    /**
+     * Simpan Pengaturan Batas Waktu KS
+     */
+    public function saveKsDeadlines(): void {
+        $this->requireRole(['deputi_pendidikan', 'direktur_pendidikan', 'operator_yayasan']);
+        $role = Auth::activeRoleName();
+        $taId = Auth::academicYearId();
+        $userId = Auth::id();
+
+        $unitId = (int)($_POST['unit_id'] ?? 0);
+        if ($role === 'deputi_pendidikan') {
+            $allowedUnits = self::getDeputiUnitIds($userId);
+            if (!in_array($unitId, $allowedUnits, true)) {
+                $this->setFlash('danger', 'Akses Ditolak: Unit ini tidak berada di bawah binaan Anda.');
+                $this->redirect(Auth::baseUrl() . '/deputi/deadlines-ks');
+                return;
+            }
+        }
+
+        $deadlines = $_POST['deadlines'] ?? [];
+        $savedCount = 0;
+
+        foreach ($deadlines as $jenisId => $d) {
+            $jenisId = (int)$jenisId;
+            $dtLocal = trim($d['deadline_datetime'] ?? '');
+            $dueInfo = trim($d['due_info'] ?? '');
+
+            if ($jenisId <= 0) continue;
+
+            $deadlineDatetime = !empty($dtLocal) ? date('Y-m-d H:i:s', strtotime($dtLocal)) : null;
+            $deadlineDate = $deadlineDatetime ? substr($deadlineDatetime, 0, 10) : (!empty($d['deadline_date']) ? $d['deadline_date'] : null);
+
+            Database::execute("
+                INSERT INTO unit_administrasi_deadlines 
+                    (unit_id, academic_year_id, jenis_admin_id, due_info, deadline_date, deadline_datetime, updated_by_user_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON DUPLICATE KEY UPDATE 
+                    due_info = VALUES(due_info),
+                    deadline_date = VALUES(deadline_date),
+                    deadline_datetime = VALUES(deadline_datetime),
+                    updated_by_user_id = VALUES(updated_by_user_id)
+            ", [$unitId, $taId, $jenisId, $dueInfo, $deadlineDate, $deadlineDatetime, $userId]);
+
+            $savedCount++;
+        }
+
+        AuditLog::log('SAVE_KS_DEADLINES', 'unit_administrasi_deadlines', $unitId, null, [
+            'total_items' => $savedCount
+        ]);
+
+        $this->setFlash('success', "Batas waktu pengumpulan {$savedCount} dokumen administrasi KS berhasil disimpan.");
+        $this->redirect(Auth::baseUrl() . '/deputi/deadlines-ks?unit_id=' . $unitId);
+    }
+
+    /**
+     * Menu Rekap Data Supervisi Guru untuk Deputi & Direktur Pendidikan
+     */
+    public function rekapSupervisi(): void {
+        $this->requireRole(['deputi_pendidikan', 'direktur_pendidikan', 'operator_yayasan']);
+        $role = Auth::activeRoleName();
+        $taId = Auth::academicYearId();
+        $userId = Auth::id();
+
+        $isDirektur = in_array($role, ['direktur_pendidikan', 'operator_yayasan'], true);
+
+        if ($role === 'deputi_pendidikan') {
+            $allowedUnitIds = self::getDeputiUnitIds($userId);
+            if (empty($allowedUnitIds)) {
+                $allowedUnitIds = [1];
+            }
+            $inUnits = implode(',', array_map('intval', $allowedUnitIds));
+            $units = Database::fetchAll("SELECT * FROM units WHERE id IN ($inUnits) ORDER BY id ASC");
+        } else {
+            $units = Database::fetchAll("SELECT * FROM units ORDER BY id ASC");
+            $allowedUnitIds = array_column($units, 'id');
+            $inUnits = !empty($allowedUnitIds) ? implode(',', array_map('intval', $allowedUnitIds)) : '0';
+        }
+
+        // Filter Parameter
+        $filterUnit = (int)($_GET['unit_id'] ?? 0);
+        if ($filterUnit > 0 && in_array($filterUnit, $allowedUnitIds, true)) {
+            $targetUnitIds = [$filterUnit];
+        } else {
+            $targetUnitIds = $allowedUnitIds;
+        }
+        $inTarget = implode(',', array_map('intval', $targetUnitIds));
+
+        $filterPredicate = trim($_GET['predicate'] ?? '');
+        $sortOption = trim($_GET['sort'] ?? 'highest');
+        $searchQuery = trim($_GET['q'] ?? '');
+
+        // Query Detail Supervisi
+        $sql = "
+            SELECT ss.*, 
+                   t.nama as teacher_name, t.nipy as teacher_nipy,
+                   u.name as unit_name, u.code as unit_code,
+                   s.nama as supervisor_name,
+                   sub.name as subject_name,
+                   c.name as class_name
+            FROM supervisi_sessions ss
+            JOIN employees t ON ss.teacher_id = t.id AND t.is_deleted = 0
+            JOIN units u ON ss.unit_id = u.id
+            JOIN subjects sub ON ss.subject_id = sub.id
+            LEFT JOIN employees s ON ss.supervisor_id = s.id
+            LEFT JOIN classes c ON ss.class_id = c.id
+            WHERE ss.unit_id IN ($inTarget) AND ss.academic_year_id = ?
+        ";
+        $params = [$taId];
+
+        if (!empty($filterPredicate)) {
+            $sql .= " AND ss.achievement_predicate = ? ";
+            $params[] = $filterPredicate;
+        }
+
+        if (!empty($searchQuery)) {
+            $sql .= " AND (t.nama LIKE ? OR sub.name LIKE ? OR u.name LIKE ?) ";
+            $term = "%$searchQuery%";
+            $params[] = $term;
+            $params[] = $term;
+            $params[] = $term;
+        }
+
+        switch ($sortOption) {
+            case 'lowest':
+                $sql .= " ORDER BY ss.final_score ASC, t.nama ASC ";
+                break;
+            case 'date_desc':
+                $sql .= " ORDER BY ss.session_date DESC, ss.final_score DESC ";
+                break;
+            case 'date_asc':
+                $sql .= " ORDER BY ss.session_date ASC, ss.final_score DESC ";
+                break;
+            case 'name_asc':
+                $sql .= " ORDER BY t.nama ASC ";
+                break;
+            case 'highest':
+            default:
+                $sql .= " ORDER BY ss.final_score DESC, t.nama ASC ";
+                break;
+        }
+
+        $sessions = Database::fetchAll($sql, $params);
+
+        // Rekap Agregasi & Rata-rata per Unit
+        $unitAverages = Database::fetchAll("
+            SELECT u.id as unit_id, u.name as unit_name, u.code as unit_code,
+                   COUNT(ss.id) as total_sessions,
+                   AVG(ss.final_score) as avg_score,
+                   MAX(ss.final_score) as max_score,
+                   MIN(ss.final_score) as min_score
+            FROM units u
+            LEFT JOIN supervisi_sessions ss ON u.id = ss.unit_id AND ss.academic_year_id = ?
+            WHERE u.id IN ($inTarget)
+            GROUP BY u.id, u.name, u.code
+            ORDER BY avg_score DESC
+        ", [$taId]);
+
+        // Guru dengan nilai tertinggi secara keseluruhan
+        $topTeacher = null;
+        if (!empty($sessions)) {
+            $topTeacher = $sessions[0];
+            foreach ($sessions as $s) {
+                if ((float)$s['final_score'] > (float)$topTeacher['final_score']) {
+                    $topTeacher = $s;
+                }
+            }
+        }
+
+        // Hitung total rata-rata gabungan
+        $totScore = 0;
+        $totCount = count($sessions);
+        foreach ($sessions as $s) {
+            $totScore += (float)$s['final_score'];
+        }
+        $overallAvg = $totCount > 0 ? round($totScore / $totCount, 2) : 0.0;
+
+        $this->view('deputi/rekap_supervisi', [
+            'pageTitle'       => $isDirektur ? 'Rekap Supervisi Guru (Seluruh Unit Yayasan)' : 'Rekap Supervisi Guru (Unit Binaan)',
+            'isDirektur'      => $isDirektur,
+            'units'           => $units,
+            'allowedUnitIds'  => $allowedUnitIds,
+            'filterUnit'      => $filterUnit,
+            'filterPredicate' => $filterPredicate,
+            'sortOption'      => $sortOption,
+            'searchQuery'     => $searchQuery,
+            'sessions'        => $sessions,
+            'unitAverages'    => $unitAverages,
+            'topTeacher'      => $topTeacher,
+            'overallAvg'      => $overallAvg,
+            'totCount'        => $totCount
+        ]);
     }
 }
