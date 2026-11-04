@@ -566,3 +566,4 @@ class KurikulumController extends Controller {
         }
     }
 }
+

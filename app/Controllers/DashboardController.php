@@ -58,12 +58,20 @@ class DashboardController extends Controller {
                 [$taId]
             );
         } elseif ($role === 'deputi_pendidikan') {
-            $data['pendingAdminKs'] = Database::fetch("SELECT COUNT(*) as c FROM administrasi_uploads WHERE status = 'Menunggu Review'")['c'];
-            $data['totalJuaraOsn'] = Database::fetch("SELECT COUNT(*) as c FROM prestasi_siswa WHERE category IN ('OSN','O2SN','FLS2N') AND academic_year_id = ?", [$taId])['c'];
+            $deputiUserId = Auth::id();
+            $deputiUnitIds = \App\Controllers\DeputiController::getDeputiUnitIds($deputiUserId);
+            if (empty($deputiUnitIds)) {
+                $deputiUnitIds = [1];
+            }
+            $inDeputiUnits = implode(',', array_map('intval', $deputiUnitIds));
+
+            $data['pendingAdminKs'] = Database::fetch("SELECT COUNT(*) as c FROM administrasi_uploads WHERE status = 'Menunggu Review' AND unit_id IN ($inDeputiUnits)")['c'] ?? 0;
+            $data['totalJuaraOsn'] = Database::fetch("SELECT COUNT(*) as c FROM prestasi_siswa WHERE category IN ('OSN','O2SN','FLS2N') AND academic_year_id = ? AND unit_id IN ($inDeputiUnits)", [$taId])['c'] ?? 0;
             $data['spmbAchievement'] = Database::fetchAll(
                 "SELECT u.name, COALESCE(t.target_count, 100) as target_count, COALESCE(t.actual_count, 0) as registered 
                  FROM units u 
                  LEFT JOIN spmb_targets t ON u.id = t.unit_id AND t.academic_year_id = ? 
+                 WHERE u.id IN ($inDeputiUnits)
                  GROUP BY u.id",
                 [$taId]
             );
@@ -73,12 +81,12 @@ class DashboardController extends Controller {
                  JOIN employees e ON a.employee_id = e.id 
                  JOIN units u ON a.unit_id = u.id 
                  JOIN akfi_templates t ON a.template_id = t.id 
-                 WHERE a.academic_year_id = ? AND t.id IN (8, 9, 10)",
+                 WHERE a.academic_year_id = ? AND t.id IN (8, 9, 10) AND a.unit_id IN ($inDeputiUnits)",
                 [$taId]
             );
 
-            // --- 1. PERSENTASE KEHADIRAN GURU & SISWA SETIAP SEKOLAH ---
-            $allUnits = Database::fetchAll("SELECT * FROM units ORDER BY id ASC");
+            // --- 1. PERSENTASE KEHADIRAN GURU & SISWA SETIAP SEKOLAH (KHUSUS UNIT BINAAN DEPUTI) ---
+            $allUnits = Database::fetchAll("SELECT * FROM units WHERE id IN ($inDeputiUnits) ORDER BY id ASC");
             $teacherAttendanceByUnit = [];
             $studentAttendanceByUnit = [];
 

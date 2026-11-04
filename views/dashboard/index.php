@@ -268,12 +268,12 @@ use Core\SecurityHelper;
                     Monitoring & Persentase Kehadiran Guru dan Siswa Setiap Sekolah
                 </h2>
                 <div style="font-size: 13px; color: var(--text-muted);">
-                    Tahun Ajaran: <strong><?= SecurityHelper::escape($_SESSION['academic_year_name'] ?? '2024/2025 Genap') ?></strong> | Perbandingan real-time seluruh satuan lembaga pendidikan Yayasan
+                    Tahun Ajaran: <strong><?= SecurityHelper::escape($_SESSION['academic_year_name'] ?? '2024/2025 Genap') ?></strong> | Perbandingan real-time unit satuan pendidikan binaan
                 </div>
             </div>
             <div>
                 <span class="badge badge-info" style="font-size: 12px; padding: 6px 12px;">
-                    <i class="fa-solid fa-check-double"></i> Rekap Seluruh Unit (<?= count($teacherAttendanceByUnit ?? []) ?> Lembaga)
+                    <i class="fa-solid fa-check-double"></i> Rekap Unit Binaan (<?= count($teacherAttendanceByUnit ?? []) ?> Lembaga)
                 </span>
             </div>
         </div>
@@ -285,9 +285,9 @@ use Core\SecurityHelper;
                     <div>
                         <h3 class="card-title" style="color: #166534;">
                             <i class="fa-solid fa-chalkboard-user" style="color: #16a34a; margin-right: 6px;"></i>
-                            Persentase Kehadiran Guru Setiap Sekolah
+                            Persentase Kehadiran Guru Unit Binaan
                         </h3>
-                        <div style="font-size: 12px; color: #15803d;">Tingkat presensi tenaga pendidik per unit satuan pendidikan</div>
+                        <div style="font-size: 12px; color: #15803d;">Tingkat presensi tenaga pendidik per unit satuan pendidikan binaan</div>
                     </div>
                     <span class="badge badge-success" style="font-size: 11px;">Rata-rata: <?= number_format((float)($avgTeacherAttOverall ?? 0), 1) ?>%</span>
                 </div>
@@ -302,9 +302,9 @@ use Core\SecurityHelper;
                     <div>
                         <h3 class="card-title" style="color: #1e40af;">
                             <i class="fa-solid fa-user-graduate" style="color: #2563eb; margin-right: 6px;"></i>
-                            Persentase Kehadiran Siswa Setiap Sekolah
+                            Persentase Kehadiran Siswa Unit Binaan
                         </h3>
-                        <div style="font-size: 12px; color: #1d4ed8;">Tingkat presensi dan keaktifan peserta didik per unit satuan pendidikan</div>
+                        <div style="font-size: 12px; color: #1d4ed8;">Tingkat presensi dan keaktifan peserta didik per unit satuan pendidikan binaan</div>
                     </div>
                     <span class="badge badge-info" style="font-size: 11px;">Rata-rata: <?= number_format((float)($avgStudentAttOverall ?? 0), 1) ?>%</span>
                 </div>
@@ -319,7 +319,7 @@ use Core\SecurityHelper;
             <div class="card-header">
                 <h3 class="card-title">
                     <i class="fa-solid fa-table-list" style="color: var(--primary); margin-right: 6px;"></i>
-                    Tabel Rekapitulasi Rincian Presensi Guru & Siswa per Unit Sekolah
+                    Tabel Rekapitulasi Rincian Presensi Guru &amp; Siswa Unit Binaan
                 </h3>
                 <span style="font-size: 12px; color: var(--text-muted);">Diperbarui secara live count</span>
             </div>
@@ -405,7 +405,7 @@ use Core\SecurityHelper;
             <div class="card-header">
                 <h3 class="card-title">
                     <i class="fa-solid fa-user-graduate" style="color: var(--primary); margin-right: 6px;"></i>
-                    Ringkasan Kinerja AKFI Kepala Sekolah
+                    Ringkasan Kinerja AKFI Kepala Sekolah Unit Binaan
                 </h3>
                 <a href="<?= $baseUrl ?>/akfi/kanit-preview" class="btn btn-outline btn-sm">Lihat Detail</a>
             </div>

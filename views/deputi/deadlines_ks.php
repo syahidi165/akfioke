@@ -5,22 +5,22 @@ use Core\SecurityHelper;
 $now = time();
 ?>
 
-<div class="page-header d-print-none mb-4">
-    <div class="row align-items-center">
-        <div class="col">
-            <div class="page-pretitle text-muted">Manajemen Kontrak Kinerja & Administrasi Satuan</div>
-            <h2 class="page-title text-primary d-flex align-items-center gap-2">
-                <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-clock-edit" width="28" height="28" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M21 12a9 9 0 1 0 -9.972 8.948c.32 .034 .644 .052 .972 .052" /><path d="M12 7v5l2 2" /><path d="M18.42 15.61a2.1 2.1 0 0 1 2.97 2.97l-3.39 3.42h-3v-3l3.42 -3.39z" /></svg>
-                Atur Batas Waktu (Due Date) Administrasi Kepala Sekolah
-            </h2>
-            <div class="text-muted small mt-1">
-                Tentukan batas tanggal &amp; jam pengumpulan 18 dokumen wajib Kepala Sekolah. Keterlambatan atau dokumen belum terkumpul otomatis memengaruhi <strong>Penilaian AKFI KS</strong> dan <strong>Rapor AKFI Deputi Pendidikan (Indikator 3.1)</strong>.
-            </div>
+<div class="page-header" style="margin-bottom: 20px;">
+    <div>
+        <h1 class="page-title" style="display: flex; align-items: center; gap: 10px;">
+            <i class="fa-solid fa-clock-rotate-left" style="color: var(--primary);"></i>
+            Atur Batas Waktu (Due Date) Administrasi Kepala Sekolah
+        </h1>
+        <div class="page-subtitle">
+            Unit Binaan: <strong><?= SecurityHelper::escape($unit['name']) ?></strong> &bull;
+            Keterlambatan atau dokumen belum diserahkan langsung memengaruhi <strong>Penilaian AKFI KS</strong> dan <strong>Rapor AKFI Deputi (Indikator 3.1)</strong>.
         </div>
-        <div class="col-auto ms-auto">
-            <form method="GET" action="" class="d-flex align-items-center gap-2">
-                <label class="form-label mb-0 fw-bold small text-muted">Pilih Unit Binaan:</label>
-                <select name="unit_id" class="form-select form-select-sm" onchange="this.form.submit()" style="min-width: 220px;">
+    </div>
+    <?php if (!empty($units) && count($units) > 1): ?>
+        <div>
+            <form method="GET" action="" style="display: flex; align-items: center; gap: 8px;">
+                <label class="form-label mb-0" style="font-size: 13px; font-weight: 600; white-space: nowrap; margin-bottom: 0;">Pilih Unit Binaan:</label>
+                <select name="unit_id" class="header-select" onchange="this.form.submit()" style="padding: 7px 14px; border-radius: 8px; border: 1px solid var(--border-color); background: #ffffff; font-weight: 600; font-size: 13px; color: var(--text-main); cursor: pointer;">
                     <?php foreach ($units as $u): ?>
                         <option value="<?= $u['id'] ?>" <?= $u['id'] == $selectedUnitId ? 'selected' : '' ?>>
                             <?= SecurityHelper::escape($u['code'] . ' - ' . $u['name']) ?>
@@ -29,106 +29,71 @@ $now = time();
                 </select>
             </form>
         </div>
-    </div>
+    <?php endif; ?>
 </div>
 
-<!-- STATISTIK KEPATUHAN & DAMPAK AKFI -->
-<div class="row row-cards mb-4">
-    <div class="col-sm-6 col-lg-3">
-        <div class="card card-sm">
-            <div class="card-body">
-                <div class="row align-items-center">
-                    <div class="col-auto">
-                        <span class="bg-primary text-white avatar">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M14 3v4a1 1 0 0 0 1 1h4" /><path d="M17 21h-10a2 2 0 0 1 -2 -2v-14a2 2 0 0 1 2 -2h7l5 5v11a2 2 0 0 1 -2 2z" /></svg>
-                        </span>
-                    </div>
-                    <div class="col">
-                        <div class="font-weight-medium">Total Dokumen KS</div>
-                        <div class="text-muted small"><?= $totalDocs ?> Dokumen Wajib</div>
-                    </div>
-                </div>
-            </div>
+<!-- STAT CARDS (4 KOLOM DENGAN APP.CSS NATIVE) -->
+<div class="grid-cols-4" style="margin-bottom: 20px;">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i class="fa-solid fa-folder-closed"></i>
+        </div>
+        <div>
+            <div class="stat-value"><?= $totalDocs ?></div>
+            <div class="stat-label">Dokumen Wajib KS</div>
         </div>
     </div>
 
-    <div class="col-sm-6 col-lg-3">
-        <div class="card card-sm">
-            <div class="card-body">
-                <div class="row align-items-center">
-                    <div class="col-auto">
-                        <span class="bg-info text-white avatar">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><circle cx="12" cy="12" r="9" /><polyline points="12 7 12 12 15 15" /></svg>
-                        </span>
-                    </div>
-                    <div class="col">
-                        <div class="font-weight-medium">Deadline Terpasang</div>
-                        <div class="text-muted small"><strong><?= $totalDeadlinesSet ?></strong> dari <?= $totalDocs ?> Berkas</div>
-                    </div>
-                </div>
-            </div>
+    <div class="stat-card">
+        <div class="stat-icon emerald">
+            <i class="fa-solid fa-calendar-check"></i>
+        </div>
+        <div>
+            <div class="stat-value"><?= $totalDeadlinesSet ?> / <?= $totalDocs ?></div>
+            <div class="stat-label">Batas Waktu Terpasang</div>
         </div>
     </div>
 
-    <div class="col-sm-6 col-lg-3">
-        <div class="card card-sm">
-            <div class="card-body">
-                <div class="row align-items-center">
-                    <div class="col-auto">
-                        <span class="bg-success text-white avatar">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 12l5 5l10 -10" /></svg>
-                        </span>
-                    </div>
-                    <div class="col">
-                        <div class="font-weight-medium">Tepat Waktu (On-Time)</div>
-                        <div class="text-success small fw-bold"><?= $totalSubmittedOnTime ?> Berkas Terverifikasi</div>
-                    </div>
-                </div>
-            </div>
+    <div class="stat-card">
+        <div class="stat-icon emerald">
+            <i class="fa-solid fa-circle-check"></i>
+        </div>
+        <div>
+            <div class="stat-value" style="color: #10b981;"><?= $totalSubmittedOnTime ?></div>
+            <div class="stat-label">Terkumpul Tepat Waktu</div>
         </div>
     </div>
 
-    <div class="col-sm-6 col-lg-3">
-        <div class="card card-sm">
-            <div class="card-body">
-                <div class="row align-items-center">
-                    <div class="col-auto">
-                        <span class="bg-danger text-white avatar">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 9v2m0 4v.01" /><path d="M5 19h14a2 2 0 0 0 1.84 -2.75l-7.1 -12.25a2 2 0 0 0 -3.5 0l-7.1 12.25a2 2 0 0 0 1.75 2.75" /></svg>
-                        </span>
-                    </div>
-                    <div class="col">
-                        <div class="font-weight-medium">Terlewat / Terlambat</div>
-                        <div class="text-danger small fw-bold"><?= $totalLateOrOverdue ?> Berkas (Penalti AKFI)</div>
-                    </div>
-                </div>
-            </div>
+    <div class="stat-card">
+        <div class="stat-icon rose">
+            <i class="fa-solid fa-triangle-exclamation"></i>
+        </div>
+        <div>
+            <div class="stat-value" style="color: #ef4444;"><?= $totalLateOrOverdue ?></div>
+            <div class="stat-label">Lewat Batas / Penalti</div>
         </div>
     </div>
 </div>
 
-<!-- QUICK BATCH SETTER CARD -->
-<div class="card mb-4 border-dashed bg-white shadow-sm">
-    <div class="card-body p-3">
-        <div class="row align-items-center g-3">
-            <div class="col-auto">
-                <div class="avatar bg-primary-lt">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="22" height="22" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 5h3.5a5 5 0 0 1 0 10h-8.5" /><path d="M15 15l-3 -3l3 -3" /></svg>
+<!-- QUICK BATCH SETTER BOX -->
+<div class="card" style="margin-bottom: 20px; background: #ffffff; border: 1px dashed #cbd5e1; box-shadow: 0 1px 3px rgba(0,0,0,0.03);">
+    <div class="card-body" style="padding: 16px 20px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px;">
+            <div style="display: flex; align-items: center; gap: 12px;">
+                <div style="width: 40px; height: 40px; border-radius: 10px; background: #e0f2fe; color: #0369a1; display: flex; align-items: center; justify-content: center; font-size: 18px;">
+                    <i class="fa-solid fa-wand-magic-sparkles"></i>
+                </div>
+                <div>
+                    <strong style="font-size: 14px; color: var(--text-main);">Atur Batas Waktu Cepat (Batch Setter)</strong>
+                    <div style="font-size: 12px; color: var(--text-muted); margin-top: 2px;">
+                        Terapkan tanggal dan jam yang sama ke seluruh 18 instrumen di bawah secara otomatis.
+                    </div>
                 </div>
             </div>
-            <div class="col-md-4">
-                <strong class="d-block text-dark">Atur Batas Waktu Cepat (Batch Setter)</strong>
-                <span class="text-muted small">Terapkan tanggal &amp; jam yang sama ke seluruh baris dokumen di bawah ini.</span>
-            </div>
-            <div class="col-md-4">
-                <div class="input-group input-group-sm">
-                    <span class="input-group-text"><i class="fa-solid fa-calendar-clock"></i></span>
-                    <input type="datetime-local" id="batchDateTimeInput" class="form-control" value="<?= date('Y-m-d\T23:59', strtotime('+14 days')) ?>">
-                </div>
-            </div>
-            <div class="col-md-2">
-                <button type="button" class="btn btn-outline-primary btn-sm w-100" id="btnApplyBatch">
-                    Terapkan ke Semua
+            <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                <input type="datetime-local" id="batchDateTimeInput" style="padding: 7px 12px; border-radius: 6px; border: 1px solid var(--border-color); font-size: 13px; color: var(--text-main);" value="<?= date('Y-m-d\T23:59', strtotime('+14 days')) ?>">
+                <button type="button" class="btn btn-outline" id="btnApplyBatch" style="padding: 7px 14px; font-weight: 600; font-size: 12px;">
+                    <i class="fa-solid fa-angles-down"></i> Terapkan ke Semua Baris
                 </button>
             </div>
         </div>
@@ -139,28 +104,28 @@ $now = time();
 <form method="POST" action="<?= SecurityHelper::baseUrl() ?>/deputi/deadlines-ks/save" id="formDeadlines">
     <input type="hidden" name="unit_id" value="<?= $selectedUnitId ?>">
 
-    <div class="card shadow-sm mb-4">
-        <div class="card-header d-flex justify-content-between align-items-center py-3 bg-light">
-            <h3 class="card-title mb-0 text-dark fw-bold">
+    <div class="card">
+        <div class="card-header" style="background: #ffffff; display: flex; justify-content: space-between; align-items: center; padding: 16px 20px;">
+            <h3 class="card-title" style="margin: 0; display: flex; align-items: center; gap: 8px;">
+                <i class="fa-solid fa-list-check" style="color: var(--primary);"></i>
                 18 Dokumen Wajib Kepala Sekolah - <?= SecurityHelper::escape($unit['name']) ?>
             </h3>
-            <button type="submit" class="btn btn-primary btn-sm px-4">
-                <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M6 4h10l4 4v10a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2v-12a2 2 0 0 1 2 -2" /><circle cx="12" cy="14" r="2" /><polyline points="14 4 14 8 8 8 8 4" /></svg>
-                Simpan Seluruh Batas Waktu
+            <button type="submit" class="btn btn-primary" style="padding: 8px 20px; font-weight: 600;">
+                <i class="fa-solid fa-floppy-disk"></i> Simpan Seluruh Batas Waktu
             </button>
         </div>
 
         <div class="table-responsive">
-            <table class="table table-vcenter table-bordered table-hover mb-0">
-                <thead class="bg-light text-center small">
+            <table class="table">
+                <thead>
                     <tr>
-                        <th style="width: 35px;">No</th>
-                        <th style="width: 75px;">Kode</th>
-                        <th>Nama Dokumen Administrasi KS</th>
-                        <th style="width: 140px;">Periode / Keterangan</th>
-                        <th style="width: 220px;">Batas Waktu (Tanggal &amp; Jam)</th>
-                        <th style="width: 180px;">Status Kepatuhan KS</th>
-                        <th style="width: 130px;">Bukti Berkas</th>
+                        <th style="width: 40px; text-align: center;">No</th>
+                        <th style="width: 85px; text-align: center;">Kode</th>
+                        <th>Bentuk Administrasi KS</th>
+                        <th style="width: 170px;">Periode / Catatan</th>
+                        <th style="width: 250px;">Batas Waktu (Tanggal &amp; Jam)</th>
+                        <th style="width: 200px;">Status Kepatuhan KS</th>
+                        <th style="width: 110px; text-align: center;">Berkas KS</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -173,89 +138,87 @@ $now = time();
                         }
                         $up = $m['upload'];
                     ?>
-                        <tr>
-                            <td class="text-center text-muted small"><?= $idx + 1 ?></td>
-                            <td class="text-center fw-bold text-secondary small"><?= SecurityHelper::escape($m['code']) ?></td>
+                        <tr style="transition: background-color 0.2s;">
+                            <td style="text-align: center; color: var(--text-muted); font-weight: 600;"><?= $idx + 1 ?></td>
+                            <td style="text-align: center;">
+                                <code style="font-size: 11.5px; font-weight: 700; color: #475569; background: #f1f5f9; padding: 2px 6px; border-radius: 4px;"><?= SecurityHelper::escape($m['code']) ?></code>
+                            </td>
                             <td>
-                                <div class="fw-bold text-dark"><?= SecurityHelper::escape($m['name']) ?></div>
-                                <div class="text-muted small" style="font-size: 11px;">
-                                    Format: <?= SecurityHelper::escape($m['file_format'] ?? 'PDF') ?> &bull; Bobot: <?= SecurityHelper::escape($m['frequency'] ?? '1x setahun') ?>
+                                <strong style="color: var(--text-main); font-size: 13.5px;"><?= SecurityHelper::escape($m['name']) ?></strong>
+                                <div style="font-size: 11.5px; color: var(--text-muted); margin-top: 3px;">
+                                    Format: <span style="font-weight: 600;"><?= SecurityHelper::escape($m['file_format'] ?? 'PDF') ?></span> &bull; 
+                                    Frekuensi: <span><?= SecurityHelper::escape($m['frequency'] ?? '1x setahun') ?></span>
                                 </div>
                             </td>
                             <td>
                                 <input type="text" 
                                        name="deadlines[<?= $m['id'] ?>][due_info]" 
-                                       class="form-control form-control-sm" 
+                                       style="width: 100%; padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border-color); font-size: 12.5px;" 
                                        value="<?= SecurityHelper::escape($m['effective_due_info'] ?? $m['due_info']) ?>" 
                                        placeholder="Contoh: Awal Semester">
                             </td>
                             <td>
-                                <div class="input-group input-group-sm">
-                                    <input type="datetime-local" 
-                                           name="deadlines[<?= $m['id'] ?>][deadline_datetime]" 
-                                           class="form-control form-control-sm deadline-input" 
-                                           value="<?= $dtVal ?>">
-                                </div>
+                                <input type="datetime-local" 
+                                       name="deadlines[<?= $m['id'] ?>][deadline_datetime]" 
+                                       class="deadline-input" 
+                                       style="width: 100%; padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border-color); font-size: 12.5px; color: var(--text-main);" 
+                                       value="<?= $dtVal ?>">
                                 <?php if (!empty($dtVal)): ?>
-                                    <div class="text-muted small mt-1" style="font-size: 10.5px;">
-                                        <i class="fa-regular fa-clock me-1"></i>
+                                    <div style="font-size: 11px; color: var(--text-muted); margin-top: 3px;">
+                                        <i class="fa-regular fa-clock" style="color: #f59e0b; margin-right: 4px;"></i>
                                         <?= date('d M Y, H:i', strtotime($dtVal)) ?> WIB
                                     </div>
                                 <?php endif; ?>
                             </td>
                             <td>
                                 <?php if ($m['status_badge'] === 'ON_TIME'): ?>
-                                    <span class="badge bg-success text-white p-1 px-2 d-inline-flex align-items-center gap-1">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="14" height="14" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><polyline points="9 11 12 14 20 6" /><path d="M20 12v6a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2v-12a2 2 0 0 1 2 -2h9" /></svg>
-                                        Tepat Waktu
+                                    <span class="badge badge-success" style="font-size: 11px; padding: 4px 10px;">
+                                        <i class="fa-solid fa-circle-check"></i> Tepat Waktu
                                     </span>
-                                    <div class="text-muted small mt-1" style="font-size: 10px;">
-                                        Disetujui: <?= date('d/m/Y H:i', strtotime($up['created_at'])) ?>
+                                    <div style="font-size: 11px; color: #166534; margin-top: 3px;">
+                                        Unggah: <?= date('d/m/Y H:i', strtotime($up['created_at'])) ?>
                                     </div>
                                 <?php elseif ($m['status_badge'] === 'LATE_SUBMITTED'): ?>
-                                    <span class="badge bg-warning text-dark p-1 px-2 d-inline-flex align-items-center gap-1">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="14" height="14" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><circle cx="12" cy="12" r="9" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></svg>
-                                        Terlambat Diserahkan
+                                    <span class="badge badge-warning" style="font-size: 11px; padding: 4px 10px;">
+                                        <i class="fa-solid fa-triangle-exclamation"></i> Terlambat
                                     </span>
-                                    <div class="text-danger small mt-1" style="font-size: 10px;">
+                                    <div style="font-size: 11px; color: #92400e; margin-top: 3px;">
                                         Unggah: <?= date('d/m/Y H:i', strtotime($up['created_at'])) ?>
                                     </div>
                                 <?php elseif ($m['status_badge'] === 'OVERDUE_MISSING'): ?>
-                                    <span class="badge bg-danger text-white p-1 px-2 d-inline-flex align-items-center gap-1 animate-pulse">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="14" height="14" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><circle cx="12" cy="12" r="9" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></svg>
-                                        Lewat Batas Waktu!
+                                    <span class="badge badge-danger" style="font-size: 11px; padding: 4px 10px; font-weight: 700;">
+                                        <i class="fa-solid fa-circle-xmark"></i> Lewat Batas Waktu!
                                     </span>
-                                    <div class="text-danger small mt-1 fw-bold" style="font-size: 10px;">
+                                    <div style="font-size: 11px; color: #dc2626; font-weight: 600; margin-top: 3px;">
                                         Belum Dikumpulkan (Penalti)
                                     </div>
                                 <?php elseif ($m['status_badge'] === 'PENDING_APPROVAL'): ?>
-                                    <span class="badge bg-info text-white p-1 px-2">
-                                        Menunggu Approval
+                                    <span class="badge badge-info" style="font-size: 11px; padding: 4px 10px;">
+                                        <i class="fa-solid fa-clock"></i> Menunggu Approval
                                     </span>
-                                    <div class="text-muted small mt-1" style="font-size: 10px;">
-                                        Oleh KS: <?= date('d/m/Y H:i', strtotime($up['created_at'])) ?>
+                                    <div style="font-size: 11px; color: var(--text-muted); margin-top: 3px;">
+                                        Unggah: <?= date('d/m/Y H:i', strtotime($up['created_at'])) ?>
                                     </div>
                                 <?php elseif ($m['status_badge'] === 'AWAITING_SUBMISSION'): ?>
                                     <?php 
                                         $diffDays = ceil(($m['deadline_ts'] - $now) / 86400);
                                     ?>
-                                    <span class="badge bg-secondary-lt p-1 px-2 text-dark">
+                                    <span class="badge badge-secondary" style="font-size: 11px; padding: 4px 10px;">
                                         Belum Dikumpul (Sisa <?= max(0, $diffDays) ?> hari)
                                     </span>
                                 <?php else: ?>
-                                    <span class="badge bg-light text-muted p-1 px-2">
+                                    <span class="badge badge-secondary" style="font-size: 11px; padding: 4px 10px; opacity: 0.7;">
                                         Belum Ada Batas
                                     </span>
                                 <?php endif; ?>
                             </td>
-                            <td class="text-center">
+                            <td style="text-align: center;">
                                 <?php if ($up && !empty($up['file_path'])): ?>
-                                    <a href="<?= SecurityHelper::baseUrl() . '/' . ltrim($up['file_path'], '/') ?>" target="_blank" class="btn btn-ghost-primary btn-sm py-1 px-2" title="Lihat Berkas Unggahan KS">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="15" height="15" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><circle cx="12" cy="12" r="2" /><path d="M22 12c-2.4 4 -5.4 6 -9 6c-3.6 0 -6.6 -2 -9 -6c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6" /></svg>
-                                        Lihat
+                                    <a href="<?= SecurityHelper::baseUrl() . '/' . ltrim($up['file_path'], '/') ?>" target="_blank" class="btn btn-outline btn-sm" style="padding: 4px 8px; font-size: 11px;" title="Lihat Dokumen KS">
+                                        <i class="fa-solid fa-eye"></i> Lihat
                                     </a>
                                 <?php else: ?>
-                                    <span class="text-muted small">-</span>
+                                    <span style="color: var(--text-muted); font-size: 12px;">-</span>
                                 <?php endif; ?>
                             </td>
                         </tr>
@@ -264,13 +227,13 @@ $now = time();
             </table>
         </div>
 
-        <div class="card-footer bg-light d-flex justify-content-between align-items-center py-3">
-            <span class="text-muted small">
-                Perubahan batas waktu akan dicatat dalam Audit Trail dan langsung mengikat kalkulasi AKFI KS &amp; Deputi.
-            </span>
-            <button type="submit" class="btn btn-primary px-4">
-                <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M6 4h10l4 4v10a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2v-12a2 2 0 0 1 2 -2" /><circle cx="12" cy="14" r="2" /><polyline points="14 4 14 8 8 8 8 4" /></svg>
-                Simpan Seluruh Batas Waktu
+        <div style="padding: 16px 20px; background: #f8fafc; border-top: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+            <div style="font-size: 12px; color: var(--text-muted);">
+                <i class="fa-solid fa-shield-halved" style="color: var(--primary); margin-right: 4px;"></i>
+                Setiap perubahan batas waktu dicatat pada Audit Trail dan langsung mengikat kalkulasi indikator AKFI KS &amp; Deputi.
+            </div>
+            <button type="submit" class="btn btn-primary" style="padding: 8px 24px; font-weight: 600;">
+                <i class="fa-solid fa-floppy-disk"></i> Simpan Seluruh Batas Waktu
             </button>
         </div>
     </div>
@@ -286,10 +249,10 @@ document.addEventListener('DOMContentLoaded', function() {
         btnApplyBatch.addEventListener('click', function() {
             const val = batchInput.value;
             if (!val) {
-                alert('Silakan pilih tanggal dan jam batas waktu terlebih dahulu.');
+                alert('Silakan tentukan tanggal dan jam batas waktu terlebih dahulu.');
                 return;
             }
-            if (confirm('Apakah Anda yakin ingin menerapkan batas waktu (' + val.replace('T', ' ') + ') ke seluruh 18 dokumen administrasi KS di bawah ini?')) {
+            if (confirm('Terapkan batas waktu (' + val.replace('T', ' ') + ') ke seluruh 18 instrumen dokumen KS?')) {
                 deadlineInputs.forEach(input => {
                     input.value = val;
                 });
