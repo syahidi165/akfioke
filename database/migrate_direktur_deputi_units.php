@@ -50,11 +50,16 @@ if (!$hasRole) {
 
 $direkturEmp = Core\Database::fetch("SELECT * FROM employees WHERE user_id = ?", [$direkturUserId]);
 if (!$direkturEmp) {
-    $pdo->prepare("
-        INSERT INTO employees (user_id, nipy, nama, gender, tingkat_pendidikan, level_posisi, position, contact_phone, email, status, is_deleted, created_at, updated_at)
-        VALUES (?, '197508152005011001', 'Dr. H. Muhammad Ridwan, M.Pd', 'L', 'S3', 'Direktur Pendidikan', 'Direktur Pendidikan Yayasan', '08117000002', 'direktur@alkahfi.sch.id', 'Aktif', 0, NOW(), NOW())
-    ")->execute([$direkturUserId]);
-    $direkturEmpId = (int)$pdo->lastInsertId();
+    try {
+        $pdo->prepare("
+            INSERT INTO employees (user_id, nipy, nama, gender, tingkat_pendidikan, tmt, level_posisi, contact_phone, email, status, is_deleted, created_at, updated_at)
+            VALUES (?, '197508152005011001', 'Dr. H. Muhammad Ridwan, M.Pd', 'L', 'S3', '2010-07-01', 'Direktur Pendidikan Yayasan', '08117000002', 'direktur@alkahfi.sch.id', 'Aktif', 0, NOW(), NOW())
+        ")->execute([$direkturUserId]);
+        $direkturEmpId = (int)$pdo->lastInsertId();
+    } catch (\Throwable $e) {
+        $direkturEmp = Core\Database::fetch("SELECT * FROM employees WHERE user_id = ? OR nipy = '197508152005011001'", [$direkturUserId]);
+        $direkturEmpId = (int)($direkturEmp['id'] ?? 0);
+    }
 } else {
     $direkturEmpId = (int)$direkturEmp['id'];
 }
@@ -81,11 +86,16 @@ if (!$hasRoleDepB) {
 
 $deputiBEmp = Core\Database::fetch("SELECT * FROM employees WHERE user_id = ?", [$deputiBUserId]);
 if (!$deputiBEmp) {
-    $pdo->prepare("
-        INSERT INTO employees (user_id, nipy, nama, gender, tingkat_pendidikan, level_posisi, position, atasan_langsung_id, contact_phone, email, status, is_deleted, created_at, updated_at)
-        VALUES (?, '198503152015071001', 'Dr. Hendra Wijaya, M.Pd', 'L', 'S3', 'Deputi Pendidikan Menengah', 'Deputi Pendidikan Menengah (SMP & SMA)', ?, '08127000003', 'deputi.menengah@alkahfi.sch.id', 'Aktif', 0, NOW(), NOW())
-    ")->execute([$deputiBUserId, $direkturEmpId]);
-    $deputiBEmpId = (int)$pdo->lastInsertId();
+    try {
+        $pdo->prepare("
+            INSERT INTO employees (user_id, nipy, nama, gender, tingkat_pendidikan, tmt, level_posisi, atasan_langsung_id, contact_phone, email, status, is_deleted, created_at, updated_at)
+            VALUES (?, '198503152015071001', 'Dr. Hendra Wijaya, M.Pd', 'L', 'S3', '2015-07-01', 'Deputi Pendidikan Menengah (SMP & SMA)', ?, '08127000003', 'deputi.menengah@alkahfi.sch.id', 'Aktif', 0, NOW(), NOW())
+        ")->execute([$deputiBUserId, $direkturEmpId]);
+        $deputiBEmpId = (int)$pdo->lastInsertId();
+    } catch (\Throwable $e) {
+        $deputiBEmp = Core\Database::fetch("SELECT * FROM employees WHERE user_id = ? OR nipy = '198503152015071001'", [$deputiBUserId]);
+        $deputiBEmpId = (int)($deputiBEmp['id'] ?? 0);
+    }
 } else {
     $pdo->prepare("UPDATE employees SET atasan_langsung_id = ? WHERE id = ?")->execute([$direkturEmpId, $deputiBEmp['id']]);
 }
@@ -98,6 +108,18 @@ if ($deputiAEmp) {
 
 // 4. Update deputi_units assignments
 echo "4. Assigning distinct units...\n";
+$pdo->exec("
+    CREATE TABLE IF NOT EXISTS deputi_units (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        user_id INT NOT NULL,
+        unit_id INT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY unique_deputi_unit (user_id, unit_id),
+        INDEX idx_user (user_id),
+        INDEX idx_unit (unit_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+");
+
 // Deputi A (User 38): KB (1), TK (2), SD (6)
 $pdo->prepare("DELETE FROM deputi_units WHERE user_id = 38")->execute();
 $pdo->prepare("INSERT INTO deputi_units (user_id, unit_id, created_at) VALUES (38, 1, NOW()), (38, 2, NOW()), (38, 6, NOW())")->execute();
