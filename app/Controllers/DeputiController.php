@@ -142,8 +142,33 @@ class DeputiController extends Controller {
     // =========================================================================
     // 2. PENGATURAN BOBOT RAPOR DINAMIS (WAJIB TOTAL 100%)
     // =========================================================================
+    /**
+     * Memastikan tabel master indikator rapor deputi sudah terisi (self-seeding)
+     */
+    public static function ensureRaporIndicatorsSeeded(): void {
+        try {
+            $chk = (int)(Database::fetch("SELECT COUNT(*) as c FROM deputi_rapor_indicators")['c'] ?? 0);
+            if ($chk === 0) {
+                $seedFile = dirname(__DIR__, 2) . '/database/seed_deputi_indicators.php';
+                if (file_exists($seedFile)) {
+                    $pdo = Database::connect();
+                    require_once $seedFile;
+                }
+            }
+        } catch (\Throwable $e) {
+            try {
+                $seedFile = dirname(__DIR__, 2) . '/database/seed_deputi_indicators.php';
+                if (file_exists($seedFile)) {
+                    $pdo = Database::connect();
+                    require_once $seedFile;
+                }
+            } catch (\Throwable $e2) {}
+        }
+    }
+
     public function bobot(): void {
         $this->requireRole(['operator_yayasan', 'direktur_pendidikan']);
+        self::ensureRaporIndicatorsSeeded();
         $taId = Auth::academicYearId();
 
         $indicators = Database::fetchAll("SELECT * FROM deputi_rapor_indicators ORDER BY area_no ASC, id ASC");
@@ -1308,6 +1333,7 @@ class DeputiController extends Controller {
     // =========================================================================
     public function rapor(): void {
         $this->requireRole(['direktur_pendidikan', 'operator_yayasan', 'deputi_pendidikan']);
+        self::ensureRaporIndicatorsSeeded();
         $taId = Auth::academicYearId();
         $deputiUserId = $this->resolveDeputiUserId();
 
@@ -1374,6 +1400,7 @@ class DeputiController extends Controller {
 
     public function saveEvaluation(): void {
         $this->requireRole(['direktur_pendidikan', 'operator_yayasan']);
+        self::ensureRaporIndicatorsSeeded();
         $taId = Auth::academicYearId();
         $deputiUserId = (int)($_POST['deputi_user_id'] ?? 0);
         $semester = $_POST['semester'] ?? 'Genap';
@@ -1698,6 +1725,7 @@ class DeputiController extends Controller {
 
     public function printRapor(): void {
         $this->requireRole(['direktur_pendidikan', 'operator_yayasan', 'deputi_pendidikan']);
+        self::ensureRaporIndicatorsSeeded();
         $taId = Auth::academicYearId();
         $deputiUserId = $this->resolveDeputiUserId();
         $semester = $_GET['semester'] ?? 'Genap';
@@ -1772,6 +1800,7 @@ class DeputiController extends Controller {
      */
     public function exportRaporPdf(): void {
         $this->requireRole(['direktur_pendidikan', 'operator_yayasan', 'deputi_pendidikan', 'pembina_yayasan']);
+        self::ensureRaporIndicatorsSeeded();
         $taId = Auth::academicYearId();
         $deputiUserId = $this->resolveDeputiUserId();
         $semester = $_GET['semester'] ?? 'Genap';

@@ -219,13 +219,20 @@ try {
     echo "[SKIP] Kurikulum Struktur migration: " . $e->getMessage() . "\n";
 }
 
-// 10. Migrasi Deputi, Direktur Pendidikan, & RAPBS
+// 10. Migrasi Deputi & Direktur Pendidikan
 try {
     require_once __DIR__ . '/migrate_direktur_deputi_units.php';
-    require_once __DIR__ . '/migrate_deputi_rapbs.php';
-    echo "[OK] Migrasi Terpadu Deputi, Direktur, dan RAPBS selesai.\n";
+    echo "[OK] Migrasi Direktur & Deputi Units selesai.\n";
 } catch (\Throwable $e) {
-    echo "[SKIP] Deputi/Direktur/RAPBS: " . $e->getMessage() . "\n";
+    echo "[SKIP] Migrasi Direktur/Deputi: " . $e->getMessage() . "\n";
+}
+
+// 11. Migrasi RAPBS & Master Indikator Rapor Deputi
+try {
+    require_once __DIR__ . '/migrate_deputi_rapbs.php';
+    echo "[OK] Migrasi RAPBS & Master Indikator Rapor Deputi selesai.\n";
+} catch (\Throwable $e) {
+    echo "[SKIP] Migrasi RAPBS/Indikator Deputi: " . $e->getMessage() . "\n";
 }
 
 echo "=== MIGRASI SELESAI DENGAN SUKSES! ===\n";

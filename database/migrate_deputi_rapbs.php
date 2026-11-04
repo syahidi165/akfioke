@@ -197,5 +197,8 @@ $pdo->exec("CREATE TABLE IF NOT EXISTS deputi_rapor_details (
     INDEX idx_ind (indicator_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
+// 14. Seed master indicators for deputi_rapor_indicators
+require __DIR__ . '/seed_deputi_indicators.php';
+
 echo "Tables checked.\n";
 
