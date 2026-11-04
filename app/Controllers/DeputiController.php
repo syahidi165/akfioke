@@ -18,11 +18,12 @@ class DeputiController extends Controller {
      * Jika belum di-assign spesifik, fallback ke semua unit.
      */
     public static function getDeputiUnitIds(int $userId): array {
+        try {
         $rows = Database::fetchAll(
             "SELECT du.unit_id 
              FROM deputi_units du
              JOIN units u ON du.unit_id = u.id
-             WHERE du.user_id = ? AND u.is_active = 1",
+             WHERE du.user_id = ?",
             [$userId]
         );
         if (!empty($rows)) {
@@ -36,6 +37,14 @@ class DeputiController extends Controller {
             return array_column($allUnits, 'id');
         }
         return [];
+        } catch (\Throwable $e) {
+            try {
+                $allUnits = Database::fetchAll("SELECT id FROM units ORDER BY id ASC");
+                return array_column($allUnits, 'id');
+            } catch (\Throwable $e2) {
+                return [1];
+            }
+        }
 
 
 

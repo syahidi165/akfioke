@@ -24,6 +24,10 @@ $unitCols = [
     'akreditasi_expired_at'       => "DATE NULL AFTER `nomor_akreditasi`",
     'nomor_izin_operasional'      => "VARCHAR(100) NULL AFTER `akreditasi_expired_at`",
     'izin_operasional_expired_at' => "DATE NULL AFTER `nomor_izin_operasional`",
+    'is_active'                   => "TINYINT(1) NOT NULL DEFAULT 1 AFTER `logo_path`",
+    'deleted_at'                  => "DATETIME NULL DEFAULT NULL AFTER `updated_at`",
+    'deleted_by'                  => "INT NULL DEFAULT NULL AFTER `deleted_at`",
+    'deletion_reason'             => "VARCHAR(255) NULL DEFAULT NULL AFTER `deleted_by`",
 ];
 
 foreach ($unitCols as $col => $def) {
@@ -213,6 +217,15 @@ try {
     echo "[OK] Tabel kurikulum_struktur_items siap.\n";
 } catch (\Throwable $e) {
     echo "[SKIP] Kurikulum Struktur migration: " . $e->getMessage() . "\n";
+}
+
+// 10. Migrasi Deputi, Direktur Pendidikan, & RAPBS
+try {
+    require_once __DIR__ . '/migrate_direktur_deputi_units.php';
+    require_once __DIR__ . '/migrate_deputi_rapbs.php';
+    echo "[OK] Migrasi Terpadu Deputi, Direktur, dan RAPBS selesai.\n";
+} catch (\Throwable $e) {
+    echo "[SKIP] Deputi/Direktur/RAPBS: " . $e->getMessage() . "\n";
 }
 
 echo "=== MIGRASI SELESAI DENGAN SUKSES! ===\n";

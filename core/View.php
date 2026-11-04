@@ -29,18 +29,22 @@ class View {
         $isOperatorYayasanOrImpersonating = Auth::hasRole('operator_yayasan') || $isImpersonating;
         $switchableUsers = [];
         if ($isOperatorYayasanOrImpersonating) {
-            $switchableUsers = Database::fetchAll("
-                SELECT u.id, u.username, u.full_name, u.email,
-                       (SELECT r.display_name FROM roles r JOIN user_roles ur ON r.id = ur.role_id WHERE ur.user_id = u.id ORDER BY ur.is_primary DESC, r.id ASC LIMIT 1) as role_display,
-                       (SELECT r.name FROM roles r JOIN user_roles ur ON r.id = ur.role_id WHERE ur.user_id = u.id ORDER BY ur.is_primary DESC, r.id ASC LIMIT 1) as role_name,
-                       COALESCE(un.name, 'Yayasan / Lintas Unit') as unit_name
-                FROM users u
-                LEFT JOIN employees e ON u.id = e.user_id AND e.is_deleted = 0
-                LEFT JOIN units un ON COALESCE(u.unit_id, e.unit_id) = un.id
-                WHERE u.is_active = 1
-                GROUP BY u.id
-                ORDER BY un.name ASC, role_display ASC, u.full_name ASC
-            ");
+            try {
+                $switchableUsers = Database::fetchAll("
+                    SELECT u.id, u.username, u.full_name, u.email,
+                           COALESCE(un.name, 'Yayasan / Lintas Unit') as unit_name,
+                           (SELECT r.display_name FROM roles r JOIN user_roles ur ON r.id = ur.role_id WHERE ur.user_id = u.id ORDER BY ur.is_primary DESC, r.id ASC LIMIT 1) as role_display,
+                           (SELECT r.name FROM roles r JOIN user_roles ur ON r.id = ur.role_id WHERE ur.user_id = u.id ORDER BY ur.is_primary DESC, r.id ASC LIMIT 1) as role_name
+                    FROM users u
+                    LEFT JOIN employees e ON u.id = e.user_id AND e.is_deleted = 0
+                    LEFT JOIN units un ON COALESCE(u.unit_id, e.unit_id) = un.id
+                    WHERE u.is_active = 1
+                    GROUP BY u.id, u.username, u.full_name, u.email, un.name
+                    ORDER BY un.name ASC, role_display ASC, u.full_name ASC
+                ");
+            } catch (\Throwable $e) {
+                $switchableUsers = [];
+            }
         }
 
         // Daftar tahun ajaran & unit untuk switcher global di header
