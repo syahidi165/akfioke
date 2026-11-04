@@ -291,3 +291,4 @@ function closeAddItemModal() {
     document.getElementById('addItemModal').classList.remove('active');
 }
 </script>
+

@@ -195,3 +195,4 @@ function closeAddKpiModal() {
     document.getElementById('addKpiModal').classList.remove('active');
 }
 </script>
+

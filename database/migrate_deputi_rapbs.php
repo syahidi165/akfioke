@@ -198,3 +198,4 @@ $pdo->exec("CREATE TABLE IF NOT EXISTS deputi_rapor_details (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
 echo "Tables checked.\n";
+

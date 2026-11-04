@@ -151,6 +151,69 @@ $baseUrl = Auth::baseUrl();
     </div>
 </div>
 
+<!-- Box 4: Rekap Ketepatan Pengumpulan Laporan Bulanan KS (tgl 28) -->
+<div class="card" style="background: var(--bg-card, #ffffff); border-radius: 12px; border: 1px solid var(--border-color, #e2e8f0); padding: 20px; margin-bottom: 24px;">
+    <h3 style="margin: 0 0 14px 0; font-size: 1rem; font-weight: 700; color: #1e293b; display: flex; align-items: center; gap: 8px;">
+        <i class="fa-solid fa-clock" style="color: #059669;"></i> Riwayat Pengumpulan Laporan Bulanan Unit Pendidikan (SOP 8.8.1 - Target Tgl 28)
+    </h3>
+    <div class="table-responsive">
+        <table class="table" style="width: 100%; border-collapse: collapse; font-size: 0.8125rem;">
+            <thead>
+                <tr style="background: #f8fafc; text-align: left; font-size: 0.75rem; text-transform: uppercase; color: #64748b; border-bottom: 1px solid #e2e8f0;">
+                    <th style="padding: 8px 12px;">Unit Sekolah</th>
+                    <th style="padding: 8px 12px;">Jenis Laporan</th>
+                    <th style="padding: 8px 12px;">Bulan</th>
+                    <th style="padding: 8px 12px;">Tanggal Upload</th>
+                    <th style="padding: 8px 12px; text-align: center;">Ketepatan Waktu</th>
+                    <th style="padding: 8px 12px; text-align: center;">Status Verifikasi</th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php if (empty($monthlyUploads)): ?>
+                    <tr>
+                        <td colspan="6" style="padding: 20px; text-align: center; color: var(--text-muted); font-style: italic;">
+                            Belum ada riwayat unggahan laporan administrasi bulanan dari Kepala Sekolah binaan.
+                        </td>
+                    </tr>
+                <?php else: ?>
+                    <?php foreach ($monthlyUploads as $upl): ?>
+                        <tr style="border-bottom: 1px solid #f1f5f9;">
+                            <td style="padding: 8px 12px; font-weight: 600; color: #1e293b;">
+                                <?= SecurityHelper::escape($upl['unit_name']) ?>
+                            </td>
+                            <td style="padding: 8px 12px;">
+                                <?= SecurityHelper::escape($upl['nama_administrasi'] ?: ($upl['sub_title'] ?: 'Laporan Bulanan')) ?>
+                            </td>
+                            <td style="padding: 8px 12px; color: #475569;">
+                                Bulan ke-<?= (int)$upl['month_num'] ?>
+                            </td>
+                            <td style="padding: 8px 12px; color: #64748b;">
+                                <?= date('d M Y H:i', strtotime($upl['uploaded_at'])) ?>
+                            </td>
+                            <td style="padding: 8px 12px; text-align: center;">
+                                <?php if (!empty($upl['is_on_time'])): ?>
+                                    <span class="badge" style="background: #dcfce7; color: #15803d; font-size: 11px;">
+                                        <i class="fa-solid fa-check"></i> Tepat Waktu (&le; Tgl 28)
+                                    </span>
+                                <?php else: ?>
+                                    <span class="badge" style="background: #fee2e2; color: #b91c1c; font-size: 11px;">
+                                        <i class="fa-solid fa-clock-rotate-left"></i> Terlambat
+                                    </span>
+                                <?php endif; ?>
+                            </td>
+                            <td style="padding: 8px 12px; text-align: center;">
+                                <span class="badge" style="background: #f1f5f9; color: #475569; font-size: 11px;">
+                                    <?= SecurityHelper::escape($upl['status']) ?>
+                                </span>
+                            </td>
+                        </tr>
+                    <?php endforeach; ?>
+                <?php endif; ?>
+            </tbody>
+        </table>
+    </div>
+</div>
+
 <!-- Modal Berikan Badge -->
 <div class="modal-overlay" id="awardBadgeModal">
     <div class="modal-container" style="max-width: 500px;">
@@ -202,3 +265,4 @@ function closeAwardBadgeModal() {
     document.getElementById('awardBadgeModal').classList.remove('active');
 }
 </script>
+

@@ -856,7 +856,7 @@ class DeputiController extends Controller {
 
         // 6. Rekap Ketepatan Laporan Bulanan Administrasi Kepala Sekolah (tgl 28)
         $monthlyUploads = Database::fetchAll(
-            "SELECT au.*, u.name as unit_name, mja.nama_administrasi
+            "SELECT au.*, u.name as unit_name, mja.title as nama_administrasi
              FROM administrasi_uploads au
              JOIN units u ON au.unit_id = u.id
              LEFT JOIN master_jenis_administrasi mja ON au.jenis_admin_id = mja.id
