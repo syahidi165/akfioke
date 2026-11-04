@@ -89,7 +89,7 @@ class KurikulumController extends Controller {
             'masterSubjects'  => $masterSubjects,
             'ksEmp'           => $ksEmp,
             'deputiUser'      => $deputiUser,
-            'canEdit'         => in_array($role, ['kepala_sekolah', 'waka_kurikulum', 'operator_yayasan', 'operator_sekolah'], true)
+            'canEdit'         => in_array($role, ['kepala_sekolah', 'waka_kurikulum', 'operator_yayasan', 'operator_sekolah', 'deputi_pendidikan'], true)
         ]);
     }
 
@@ -97,11 +97,12 @@ class KurikulumController extends Controller {
      * Simpan Pengaturan Struktur Kurikulum
      */
     public function saveStruktur(): void {
-        $this->requireRole(['kepala_sekolah', 'waka_kurikulum', 'operator_yayasan', 'operator_sekolah']);
+        $this->requireRole(['kepala_sekolah', 'waka_kurikulum', 'operator_yayasan', 'operator_sekolah', 'deputi_pendidikan', 'direktur_pendidikan']);
         $taId = Auth::academicYearId();
         $role = Auth::activeRoleName();
 
-        $unitId = in_array($role, ['operator_yayasan'], true) ? (int)($_POST['unit_id'] ?? 0) : Auth::unitId();
+        $isPimpinan = in_array($role, ['operator_yayasan', 'deputi_pendidikan', 'direktur_pendidikan'], true);
+        $unitId = $isPimpinan ? (int)($_POST['unit_id'] ?? 0) : Auth::unitId();
         if ($unitId <= 0) {
             $unitId = Auth::unitId();
         }
@@ -261,10 +262,10 @@ class KurikulumController extends Controller {
      * Reset Struktur Kurikulum kembali ke standar approved lampiran
      */
     public function resetDefault(): void {
-        $this->requireRole(['kepala_sekolah', 'operator_yayasan']);
+        $this->requireRole(['kepala_sekolah', 'operator_yayasan', 'deputi_pendidikan']);
         $taId = Auth::academicYearId();
         $role = Auth::activeRoleName();
-        $unitId = in_array($role, ['operator_yayasan'], true) ? (int)($_POST['unit_id'] ?? 0) : Auth::unitId();
+        $unitId = in_array($role, ['operator_yayasan', 'deputi_pendidikan'], true) ? (int)($_POST['unit_id'] ?? 0) : Auth::unitId();
         if ($unitId <= 0) $unitId = Auth::unitId();
 
         Database::execute("DELETE FROM kurikulum_struktur_items WHERE unit_id = ? AND academic_year_id = ?", [$unitId, $taId]);

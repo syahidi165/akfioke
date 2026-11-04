@@ -3,6 +3,10 @@
 namespace Core;
 
 class SecurityHelper {
+    public static function baseUrl(): string {
+        return Auth::baseUrl();
+    }
+
     public static function escape(?string $string): string {
         return htmlspecialchars((string)$string, ENT_QUOTES, 'UTF-8');
     }

@@ -160,8 +160,8 @@ foreach ($items as $it) {
                 <tr>
                     <td class="text-center"><?= SecurityHelper::escape($it['item_number']) ?></td>
                     <td><?= SecurityHelper::escape($it['nama_mapel']) ?></td>
-                    <td class="text-center"><?= SecurityHelper::escape($it['jp_kb'] ?: '-') ?></td>
-                    <td class="text-center"><?= SecurityHelper::escape($it['jp_tk'] ?: '-') ?></td>
+                    <td class="text-center"><?= SecurityHelper::escape($it['jp_1'] ?: '-') ?></td>
+                    <td class="text-center"><?= SecurityHelper::escape($it['jp_2'] ?: '-') ?></td>
                     <td><?= SecurityHelper::escape($it['keterangan'] ?? '') ?></td>
                 </tr>
             <?php endforeach; ?>

@@ -101,7 +101,7 @@ $now = time();
 </div>
 
 <!-- FORM UTAMA PENGATURAN DUE DATE -->
-<form method="POST" action="<?= SecurityHelper::baseUrl() ?>/deputi/deadlines-ks/save" id="formDeadlines">
+<form method="POST" action="<?= $baseUrl ?>/deputi/deadlines-ks/save" id="formDeadlines">
     <input type="hidden" name="unit_id" value="<?= $selectedUnitId ?>">
 
     <div class="card">
@@ -144,10 +144,10 @@ $now = time();
                                 <code style="font-size: 11.5px; font-weight: 700; color: #475569; background: #f1f5f9; padding: 2px 6px; border-radius: 4px;"><?= SecurityHelper::escape($m['code']) ?></code>
                             </td>
                             <td>
-                                <strong style="color: var(--text-main); font-size: 13.5px;"><?= SecurityHelper::escape($m['name']) ?></strong>
+                                <strong style="color: var(--text-main); font-size: 13.5px;"><?= SecurityHelper::escape($m['title'] ?? $m['name'] ?? 'Dokumen Administrasi KS') ?></strong>
                                 <div style="font-size: 11.5px; color: var(--text-muted); margin-top: 3px;">
-                                    Format: <span style="font-weight: 600;"><?= SecurityHelper::escape($m['file_format'] ?? 'PDF') ?></span> &bull; 
-                                    Frekuensi: <span><?= SecurityHelper::escape($m['frequency'] ?? '1x setahun') ?></span>
+                                    Frekuensi: <span style="font-weight: 600;"><?= SecurityHelper::escape($m['frequency'] ?? '1x setahun') ?></span> &bull;
+                                    Target Default: <span><?= SecurityHelper::escape($m['due_info'] ?? '-') ?></span>
                                 </div>
                             </td>
                             <td>
@@ -214,7 +214,7 @@ $now = time();
                             </td>
                             <td style="text-align: center;">
                                 <?php if ($up && !empty($up['file_path'])): ?>
-                                    <a href="<?= SecurityHelper::baseUrl() . '/' . ltrim($up['file_path'], '/') ?>" target="_blank" class="btn btn-outline btn-sm" style="padding: 4px 8px; font-size: 11px;" title="Lihat Dokumen KS">
+                                    <a href="<?= $baseUrl . '/' . ltrim($up['file_path'], '/') ?>" target="_blank" class="btn btn-outline btn-sm" style="padding: 4px 8px; font-size: 11px;" title="Lihat Dokumen KS">
                                         <i class="fa-solid fa-eye"></i> Lihat
                                     </a>
                                 <?php else: ?>

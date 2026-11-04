@@ -44,10 +44,10 @@ $signDateDeputi = $meta['sign_date_deputi'] ?? date('Y-m-d');
             </form>
         <?php endif; ?>
 
-        <a href="<?= SecurityHelper::baseUrl() ?>/kurikulum/struktur/pdf?unit_id=<?= $unitId ?>" target="_blank" class="btn btn-danger btn-sm" style="padding: 7px 14px; font-weight: 600;">
+        <a href="<?= $baseUrl ?>/kurikulum/struktur/pdf?unit_id=<?= $unitId ?>" target="_blank" class="btn btn-danger btn-sm" style="padding: 7px 14px; font-weight: 600;">
             <i class="fa-solid fa-file-pdf"></i> Download PDF (FR – 9023a)
         </a>
-        <a href="<?= SecurityHelper::baseUrl() ?>/kurikulum/struktur/print?unit_id=<?= $unitId ?>" target="_blank" class="btn btn-outline btn-sm" style="padding: 7px 14px; font-weight: 600;">
+        <a href="<?= $baseUrl ?>/kurikulum/struktur/print?unit_id=<?= $unitId ?>" target="_blank" class="btn btn-outline btn-sm" style="padding: 7px 14px; font-weight: 600;">
             <i class="fa-solid fa-print"></i> Cetak Web
         </a>
     </div>
@@ -65,7 +65,7 @@ $signDateDeputi = $meta['sign_date_deputi'] ?? date('Y-m-d');
             </button>
         </div>
         <?php if ($canEdit): ?>
-            <form method="POST" action="<?= SecurityHelper::baseUrl() ?>/kurikulum/struktur/reset-default" onsubmit="return confirm('Kembalikan struktur kurikulum ke format standar approved lampiran? Seluruh perubahan baris akan diatur ulang.')" style="margin: 0;">
+            <form method="POST" action="<?= $baseUrl ?>/kurikulum/struktur/reset-default" onsubmit="return confirm('Kembalikan struktur kurikulum ke format standar approved lampiran? Seluruh perubahan baris akan diatur ulang.')" style="margin: 0;">
                 <input type="hidden" name="unit_id" value="<?= $unitId ?>">
                 <button type="submit" class="btn btn-outline btn-sm" style="color: #d97706; border-color: #fde68a; background: #fffbeb;">
                     <i class="fa-solid fa-rotate-left"></i> Reset ke Standar Approved
@@ -83,7 +83,7 @@ $signDateDeputi = $meta['sign_date_deputi'] ?? date('Y-m-d');
             </div>
         <?php endif; ?>
 
-        <form method="POST" action="<?= SecurityHelper::baseUrl() ?>/kurikulum/struktur/save" id="formStruktur">
+        <form method="POST" action="<?= $baseUrl ?>/kurikulum/struktur/save" id="formStruktur">
             <input type="hidden" name="unit_id" value="<?= $unitId ?>">
 
             <!-- META HEADER GRID -->
@@ -233,8 +233,8 @@ $signDateDeputi = $meta['sign_date_deputi'] ?? date('Y-m-d');
                                         <input type="text" name="nama_mapel[]" style="width: 100%; padding: 5px 8px; border-radius: 5px; border: 1px solid var(--border-color); font-size: 12.5px; font-weight: 700; color: var(--text-main);" value="<?= SecurityHelper::escape($it['nama_mapel']) ?>" required <?= $canEdit ? '' : 'readonly' ?>>
                                     </td>
                                     <?php if ($isKbtk): ?>
-                                        <td><input type="text" name="jp_kb[]" style="width: 100%; padding: 5px 4px; border-radius: 5px; border: 1px solid var(--border-color); font-size: 12px; text-align: center;" value="<?= SecurityHelper::escape($it['jp_kb'] ?? '') ?>" <?= $canEdit ? '' : 'readonly' ?>></td>
-                                        <td><input type="text" name="jp_tk[]" style="width: 100%; padding: 5px 4px; border-radius: 5px; border: 1px solid var(--border-color); font-size: 12px; text-align: center;" value="<?= SecurityHelper::escape($it['jp_tk'] ?? '') ?>" <?= $canEdit ? '' : 'readonly' ?>></td>
+                                        <td><input type="text" name="jp_1[]" style="width: 100%; padding: 5px 4px; border-radius: 5px; border: 1px solid var(--border-color); font-size: 12px; text-align: center;" value="<?= SecurityHelper::escape($it['jp_1'] ?? '') ?>" <?= $canEdit ? '' : 'readonly' ?>></td>
+                                        <td><input type="text" name="jp_2[]" style="width: 100%; padding: 5px 4px; border-radius: 5px; border: 1px solid var(--border-color); font-size: 12px; text-align: center;" value="<?= SecurityHelper::escape($it['jp_2'] ?? '') ?>" <?= $canEdit ? '' : 'readonly' ?>></td>
                                     <?php elseif ($isSd): ?>
                                         <td><input type="text" name="jp_1[]" style="width: 100%; padding: 5px 4px; border-radius: 5px; border: 1px solid var(--border-color); font-size: 12px; text-align: center;" value="<?= SecurityHelper::escape($it['jp_1'] ?? '') ?>" <?= $canEdit ? '' : 'readonly' ?>></td>
                                         <td><input type="text" name="jp_2[]" style="width: 100%; padding: 5px 4px; border-radius: 5px; border: 1px solid var(--border-color); font-size: 12px; text-align: center;" value="<?= SecurityHelper::escape($it['jp_2'] ?? '') ?>" <?= $canEdit ? '' : 'readonly' ?>></td>
@@ -350,8 +350,8 @@ $signDateDeputi = $meta['sign_date_deputi'] ?? date('Y-m-d');
                             <tr>
                                 <td style="border: 1px solid #334155; padding: 5px; text-align: center;"><?= SecurityHelper::escape($it['item_number']) ?></td>
                                 <td style="border: 1px solid #334155; padding: 5px;"><?= SecurityHelper::escape($it['nama_mapel']) ?></td>
-                                <td style="border: 1px solid #334155; padding: 5px; text-align: center;"><?= SecurityHelper::escape($it['jp_kb'] ?: '-') ?></td>
-                                <td style="border: 1px solid #334155; padding: 5px; text-align: center;"><?= SecurityHelper::escape($it['jp_tk'] ?: '-') ?></td>
+                                <td style="border: 1px solid #334155; padding: 5px; text-align: center;"><?= SecurityHelper::escape($it['jp_1'] ?: '-') ?></td>
+                                <td style="border: 1px solid #334155; padding: 5px; text-align: center;"><?= SecurityHelper::escape($it['jp_2'] ?: '-') ?></td>
                                 <td style="border: 1px solid #334155; padding: 5px;"><?= SecurityHelper::escape($it['keterangan'] ?? '') ?></td>
                             </tr>
                         <?php endforeach; ?>
@@ -623,8 +623,8 @@ document.addEventListener('DOMContentLoaded', function() {
             let jpColsHtml = '';
             if (isKbtk) {
                 jpColsHtml = `
-                    <td><input type="text" name="jp_kb[]" style="width: 100%; padding: 5px 4px; border-radius: 5px; border: 1px solid var(--border-color); font-size: 12px; text-align: center;" value="2"></td>
-                    <td><input type="text" name="jp_tk[]" style="width: 100%; padding: 5px 4px; border-radius: 5px; border: 1px solid var(--border-color); font-size: 12px; text-align: center;" value="2"></td>
+                    <td><input type="text" name="jp_1[]" style="width: 100%; padding: 5px 4px; border-radius: 5px; border: 1px solid var(--border-color); font-size: 12px; text-align: center;" value="2"></td>
+                    <td><input type="text" name="jp_2[]" style="width: 100%; padding: 5px 4px; border-radius: 5px; border: 1px solid var(--border-color); font-size: 12px; text-align: center;" value="2"></td>
                 `;
             } else if (isSd) {
                 jpColsHtml = `
