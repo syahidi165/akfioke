@@ -84,6 +84,14 @@ if (!$isYayasanOfficer && !empty($currentUnit['logo_path'])) {
     </div>
 
     <div class="header-right">
+        <!-- Tombol Switch User Khusus Operator Yayasan -->
+        <?php if (!empty($isOperatorYayasanOrImpersonating)): ?>
+            <button type="button" class="btn-switch-user" onclick="openSwitchUserModal()" title="Switch User / Masuk Sebagai Pengguna Lain (Khusus Operator Yayasan)" style="display: inline-flex; align-items: center; gap: 6px; background: linear-gradient(135deg, #0284c7, #2563eb); color: #ffffff; border: none; border-radius: 8px; padding: 6px 12px; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s; box-shadow: 0 2px 4px rgba(37,99,235,0.2);">
+                <i class="fa-solid fa-people-arrows"></i>
+                <span>Switch User</span>
+            </button>
+        <?php endif; ?>
+
         <!-- Tombol Pasang Aplikasi (PWA Install Button) -->
         <button type="button" class="btn-pwa-nav pwa-install-btn" id="pwaInstallBtn" onclick="window.promptPwaInstall()" title="Pasang Aplikasi di HP">
             <i class="fa-solid fa-mobile-screen-button"></i>

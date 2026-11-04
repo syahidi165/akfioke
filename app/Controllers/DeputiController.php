@@ -28,9 +28,17 @@ class DeputiController extends Controller {
         if (!empty($rows)) {
             return array_column($rows, 'unit_id');
         }
-        // Fallback: semua unit aktif
-        $all = Database::fetchAll("SELECT id FROM units WHERE is_active = 1 ORDER BY id ASC");
-        return array_column($all, 'id');
+        // Cek apakah tabel penugasan deputi_units sudah pernah dikonfigurasi
+        $hasAnyConfigured = (int)(Database::fetch("SELECT COUNT(*) as c FROM deputi_units")['c'] ?? 0);
+        if ($hasAnyConfigured === 0) {
+    
+            $allUnits = Database::fetchAll("SELECT id FROM units WHERE is_active = 1 ORDER BY id ASC");
+            return array_column($allUnits, 'id');
+        }
+        return [];
+
+
+
     }
 
     /**

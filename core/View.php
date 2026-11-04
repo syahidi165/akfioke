@@ -23,6 +23,26 @@ class View {
         $unreadNotifCount = $currentUser ? Notification::countUnread($currentUser['id']) : 0;
         $unreadNotifs = $currentUser ? Notification::getUnread($currentUser['id'], 5) : [];
 
+        // Fitur Switch User Khusus Operator Yayasan (atau saat dalam mode impersonasi)
+        $isImpersonating = Auth::isImpersonating();
+        $impersonator = Auth::impersonator();
+        $isOperatorYayasanOrImpersonating = Auth::hasRole('operator_yayasan') || $isImpersonating;
+        $switchableUsers = [];
+        if ($isOperatorYayasanOrImpersonating) {
+            $switchableUsers = Database::fetchAll("
+                SELECT u.id, u.username, u.full_name, u.email,
+                       (SELECT r.display_name FROM roles r JOIN user_roles ur ON r.id = ur.role_id WHERE ur.user_id = u.id ORDER BY ur.is_primary DESC, r.id ASC LIMIT 1) as role_display,
+                       (SELECT r.name FROM roles r JOIN user_roles ur ON r.id = ur.role_id WHERE ur.user_id = u.id ORDER BY ur.is_primary DESC, r.id ASC LIMIT 1) as role_name,
+                       COALESCE(un.name, 'Yayasan / Lintas Unit') as unit_name
+                FROM users u
+                LEFT JOIN employees e ON u.id = e.user_id AND e.is_deleted = 0
+                LEFT JOIN units un ON COALESCE(u.unit_id, e.unit_id) = un.id
+                WHERE u.is_active = 1
+                GROUP BY u.id
+                ORDER BY un.name ASC, role_display ASC, u.full_name ASC
+            ");
+        }
+
         // Daftar tahun ajaran & unit untuk switcher global di header
         $globalAcademicYears = Database::fetchAll("SELECT * FROM academic_years ORDER BY id DESC");
         $globalUnits = Database::fetchAll("SELECT * FROM units ORDER BY id ASC");

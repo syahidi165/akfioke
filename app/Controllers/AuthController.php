@@ -131,6 +131,43 @@ class AuthController extends Controller {
         $this->redirect($referer);
     }
 
+    /**
+     * Alih peran masuk sebagai pengguna lain (Khusus Operator Yayasan)
+     */
+    public function switchUser(): void {
+        Auth::requireAuth();
+        if (!Auth::hasRole('operator_yayasan') && !Auth::isImpersonating()) {
+            http_response_code(403);
+            die('Akses Ditolak (403): Fitur alih peran pengguna ini hanya dapat diakses oleh Operator Yayasan.');
+        }
+
+        $userId = (int)($_POST['user_id'] ?? 0);
+        $res = Auth::impersonate($userId);
+
+        if (!$res['success']) {
+            $this->setFlash('error', $res['message']);
+            $this->redirect($_SERVER['HTTP_REFERER'] ?? (Auth::baseUrl() . '/dashboard'));
+            return;
+        }
+
+        $this->setFlash('success', $res['message']);
+        $this->redirect(Auth::baseUrl() . '/dashboard');
+    }
+
+    /**
+     * Kembali ke akun Operator Yayasan asli
+     */
+    public function revertImpersonate(): void {
+        Auth::requireAuth();
+        $res = Auth::revertImpersonate();
+        if ($res['success']) {
+            $this->setFlash('success', $res['message']);
+        } else {
+            $this->setFlash('error', $res['message']);
+        }
+        $this->redirect(Auth::baseUrl() . '/dashboard');
+    }
+
     public function logout(): void {
         Auth::logout();
         $this->redirect(Auth::baseUrl() . '/login');

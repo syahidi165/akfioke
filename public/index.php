@@ -47,6 +47,9 @@ Router::get('/change-password', [AuthController::class, 'showChangePassword']);
 Router::post('/change-password', [AuthController::class, 'changePassword']);
 Router::post('/switch-role', [AuthController::class, 'switchRole']);
 Router::post('/switch-ta', [AuthController::class, 'switchTa']);
+Router::post('/switch-user', [AuthController::class, 'switchUser']);
+Router::post('/revert-impersonate', [AuthController::class, 'revertImpersonate']);
+Router::get('/revert-impersonate', [AuthController::class, 'revertImpersonate']);
 
 // 2. Dashboard & Panduan
 Router::get('/dashboard', [DashboardController::class, 'index']);

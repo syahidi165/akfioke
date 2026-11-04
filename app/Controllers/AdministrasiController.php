@@ -214,6 +214,22 @@ class AdministrasiController extends Controller {
         $this->requireRole('deputi_pendidikan');
         $unitFilter = (int)($_GET['unit_id'] ?? 0);
         $taId = Auth::academicYearId();
+        $deputiId = Auth::id();
+
+        // 0. Ambil daftar unit binaan yang secara resmi ditugaskan kepada Deputi ini
+        $deputiUnitIds = \App\Controllers\DeputiController::getDeputiUnitIds($deputiId);
+        if (empty($deputiUnitIds)) {
+            $units = [];
+            $deputiUnitClause = "0";
+        } else {
+            $deputiUnitClause = implode(',', array_map('intval', $deputiUnitIds));
+            $units = Database::fetchAll("SELECT * FROM units WHERE id IN ($deputiUnitClause) ORDER BY id ASC");
+        }
+
+        // Jika unitFilter di luar unit binaan, reset filter
+        if ($unitFilter > 0 && !in_array($unitFilter, $deputiUnitIds, true)) {
+            $unitFilter = 0;
+        }
 
         // 1. Ambil 18 Master Jenis Administrasi untuk Kepala Sekolah
         $masterItems = Database::fetchAll("SELECT * FROM master_jenis_administrasi WHERE target_role = 'KEPALA_SEKOLAH' ORDER BY order_num ASC");
@@ -222,14 +238,16 @@ class AdministrasiController extends Controller {
             $masterById[(int)$m['id']] = $m;
         }
 
-        // 2. Ambil seluruh upload dokumen KS pada TA aktif
+        // 2. Ambil seluruh upload dokumen KS pada TA aktif HANYA dari unit binaan Deputi
         $sql = "SELECT au.*, m.title as jenis_title, m.code as jenis_code, m.frequency, m.order_num,
                        u.name as unit_name, usr.full_name as kepsek_name 
                 FROM administrasi_uploads au 
                 JOIN master_jenis_administrasi m ON au.jenis_admin_id = m.id 
                 JOIN units u ON au.unit_id = u.id 
                 JOIN users usr ON au.user_id = usr.id 
-                WHERE m.target_role = 'KEPALA_SEKOLAH' AND au.academic_year_id = ?
+                WHERE m.target_role = 'KEPALA_SEKOLAH' 
+                  AND au.academic_year_id = ?
+                  AND au.unit_id IN ($deputiUnitClause)
                 ORDER BY au.uploaded_at DESC";
         $allUploads = Database::fetchAll($sql, [$taId]);
 
@@ -238,8 +256,7 @@ class AdministrasiController extends Controller {
             $uploadsByUnit[(int)$up['unit_id']][] = $up;
         }
 
-        // 3. Ambil data Unit & Kepala Sekolah
-        $units = Database::fetchAll("SELECT * FROM units ORDER BY id ASC");
+        // 3. Ambil data Unit & Kepala Sekolah HANYA dari unit binaan Deputi
         $kepsekRows = Database::fetchAll("
             SELECT u.id as unit_id, u.name as unit_name, u.level as unit_level,
                    e.id as employee_id, e.nama as kepsek_nama, e.nipy as kepsek_nipy,
@@ -249,6 +266,7 @@ class AdministrasiController extends Controller {
                  AND (e.level_posisi = 'Kepala Sekolah' OR e.position LIKE '%Kepala Sekolah%')
                  AND e.is_deleted = 0
             LEFT JOIN users usr ON e.user_id = usr.id
+            WHERE u.id IN ($deputiUnitClause)
             ORDER BY u.id ASC
         ");
 
@@ -999,6 +1017,15 @@ class AdministrasiController extends Controller {
             return;
         }
 
+        if ($isDeputi && $unitId > 0) {
+            $deputiUnitIds = \App\Controllers\DeputiController::getDeputiUnitIds($reviewerId);
+            if (!in_array($unitId, $deputiUnitIds, true)) {
+                $this->setFlash('error', 'Akses Ditolak: Unit ini bukan unit binaan Anda.');
+                $this->redirect($_SERVER['HTTP_REFERER'] ?? (Auth::baseUrl() . '/administrasi/review-ks'));
+                return;
+            }
+        }
+
         $sql = "SELECT id, original_filename FROM administrasi_uploads 
                 WHERE academic_year_id = ? AND status = 'Menunggu Review'";
         $params = [$taId];
@@ -1110,6 +1137,17 @@ class AdministrasiController extends Controller {
         $notes = trim($_POST['review_notes'] ?? '');
         $userId = Auth::id();
 
+        // Validasi Otoritas Unit Binaan untuk Deputi Pendidikan
+        if (Auth::hasRole('deputi_pendidikan')) {
+            $deputiUnitIds = \App\Controllers\DeputiController::getDeputiUnitIds($userId);
+            $doc = Database::fetch("SELECT unit_id FROM administrasi_uploads WHERE id = ?", [$id]);
+            if (!$doc || !in_array((int)$doc['unit_id'], $deputiUnitIds, true)) {
+                $this->setFlash('danger', 'Akses Ditolak: Dokumen ini bukan dari unit binaan Anda.');
+                $this->redirect($_SERVER['HTTP_REFERER'] ?? (Auth::baseUrl() . '/administrasi/review-ks'));
+                return;
+            }
+        }
+
         Database::execute(
             "UPDATE administrasi_uploads SET status = ?, reviewer_user_id = ?, review_notes = ?, reviewed_at = NOW() WHERE id = ?",
             [$status, $userId, $notes, $id]
@@ -1159,7 +1197,17 @@ class AdministrasiController extends Controller {
         $units = [];
 
         if (in_array($role, ['deputi_pendidikan', 'direktur_pendidikan', 'operator_yayasan'], true)) {
-            $units = Database::fetchAll("SELECT * FROM units ORDER BY id ASC");
+            if ($role === 'deputi_pendidikan') {
+                $deputiUnitIds = \App\Controllers\DeputiController::getDeputiUnitIds(Auth::id());
+                if (!empty($deputiUnitIds)) {
+                    $inClause = implode(',', array_map('intval', $deputiUnitIds));
+                    $units = Database::fetchAll("SELECT * FROM units WHERE id IN ($inClause) ORDER BY id ASC");
+                } else {
+                    $units = [];
+                }
+            } else {
+                $units = Database::fetchAll("SELECT * FROM units ORDER BY id ASC");
+            }
             $selectedUnitId = (int)($_GET['unit_id'] ?? ($units[0]['id'] ?? $userUnitId));
             $unit = Database::fetch("SELECT * FROM units WHERE id = ?", [$selectedUnitId]);
             $unitLevel = $unit['level'] ?? 'SD';

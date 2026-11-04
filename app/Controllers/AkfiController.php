@@ -535,7 +535,18 @@ class AkfiController extends Controller {
         $this->requireRole(['deputi_pendidikan', 'direktur_pendidikan', 'operator_yayasan', 'pembina_yayasan']);
         $taId = Auth::academicYearId();
 
-        $units = Database::fetchAll("SELECT * FROM units ORDER BY id ASC");
+        // Filter unit binaan jika Deputi Pendidikan yang mengakses
+        if (Auth::hasRole('deputi_pendidikan')) {
+            $deputiUnitIds = \App\Controllers\DeputiController::getDeputiUnitIds(Auth::id());
+            if (empty($deputiUnitIds)) {
+                $units = [];
+            } else {
+                $inClause = implode(',', array_map('intval', $deputiUnitIds));
+                $units = Database::fetchAll("SELECT * FROM units WHERE id IN ($inClause) ORDER BY id ASC");
+            }
+        } else {
+            $units = Database::fetchAll("SELECT * FROM units ORDER BY id ASC");
+        }
         $kanitList = [];
 
         foreach ($units as $u) {
@@ -871,6 +882,17 @@ class AkfiController extends Controller {
             [$taId]
         );
 
+        // Filter rekap unit jika Deputi Pendidikan yang mengakses
+        if (Auth::hasRole('deputi_pendidikan')) {
+            $deputiUnitIds = \App\Controllers\DeputiController::getDeputiUnitIds(Auth::id());
+            $unitsSummary = array_values(array_filter($unitsSummary, function($u) use ($deputiUnitIds) {
+                return in_array((int)$u['id'], $deputiUnitIds, true);
+            }));
+            $allEmployees = array_values(array_filter($allEmployees, function($emp) use ($deputiUnitIds) {
+                return in_array((int)$emp['unit_id'], $deputiUnitIds, true);
+            }));
+        }
+
         $this->view('akfi/rekap_yayasan', [
             'pageTitle'      => 'Rekapitulasi Kinerja AKFI Seluruh Unit Yayasan',
             'unitsSummary'   => $unitsSummary,
@@ -903,6 +925,14 @@ class AkfiController extends Controller {
         if ($role === 'kepala_sekolah') {
             $query .= "AND e.unit_id = ? ";
             $params[] = $unitId;
+        } elseif ($role === 'deputi_pendidikan') {
+            $deputiUnitIds = \App\Controllers\DeputiController::getDeputiUnitIds(Auth::id());
+            if (!empty($deputiUnitIds)) {
+                $inClause = implode(',', array_map('intval', $deputiUnitIds));
+                $query .= "AND e.unit_id IN ($inClause) ";
+            } else {
+                $query .= "AND 1=0 ";
+            }
         }
         $query .= "ORDER BY COALESCE(u.id, 0) ASC, e.nama ASC";
 

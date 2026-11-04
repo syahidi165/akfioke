@@ -54,6 +54,12 @@ if (!function_exists('isNavActive')) {
         <?php if ($role === 'operator_yayasan'): ?>
             <div class="nav-section-title">YAYASAN & MASTER</div>
             <div class="nav-item">
+                <a href="javascript:void(0)" onclick="openSwitchUserModal()" class="nav-link" style="color: #0284c7; font-weight: 600;">
+                    <i class="fa-solid fa-people-arrows" style="color: #0284c7;"></i>
+                    <span class="nav-text">Switch User (Akses Akun)</span>
+                </a>
+            </div>
+            <div class="nav-item">
                 <a href="<?= $baseUrl ?>/master/units" class="nav-link <?= isNavActive('/master/units', $currentPath) ?>">
                     <i class="fa-solid fa-school"></i>
                     <span class="nav-text">Sekolah & Unit</span>

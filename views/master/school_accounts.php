@@ -113,6 +113,17 @@ if ($isYayasan) {
                                     </td>
                                     <td class="text-center">
                                         <div style="display: flex; gap: 4px; justify-content: center;">
+                                            <?php if (\Core\Auth::hasRole('operator_yayasan') && (int)$op['id'] !== \Core\Auth::id()): ?>
+                                                <!-- Switch User (Khusus Operator Yayasan) -->
+                                                <form method="POST" action="<?= $baseUrl ?>/switch-user" style="display: inline;" onsubmit="return confirm('Beralih masuk sebagai operator <?= SecurityHelper::escape($op['full_name']) ?> (@<?= SecurityHelper::escape($op['username']) ?>)?')">
+                                                    <?= CSRF::inputField() ?>
+                                                    <input type="hidden" name="user_id" value="<?= $op['id'] ?>">
+                                                    <button type="submit" class="btn btn-sm" style="background: #0284c7; color: #ffffff; border: 1px solid #0284c7;" title="Masuk Sebagai Operator Ini">
+                                                        <i class="fa-solid fa-user-ninja"></i>
+                                                    </button>
+                                                </form>
+                                            <?php endif; ?>
+
                                             <!-- Edit Akun Operator -->
                                             <button type="button" class="btn btn-outline btn-sm" data-user="<?= htmlspecialchars(json_encode($op, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP), ENT_QUOTES, 'UTF-8') ?>" onclick="openEditAccountModal(JSON.parse(this.getAttribute('data-user')))" title="Edit Akun Operator">
                                                 <i class="fa-solid fa-pen-to-square"></i>
@@ -290,6 +301,17 @@ if ($isYayasan) {
                             </td>
                             <td class="text-center">
                                 <div style="display: flex; gap: 4px; justify-content: center;">
+                                    <?php if (\Core\Auth::hasRole('operator_yayasan') && (int)$u['id'] !== \Core\Auth::id()): ?>
+                                        <!-- Switch User (Khusus Operator Yayasan) -->
+                                        <form method="POST" action="<?= $baseUrl ?>/switch-user" style="display: inline;" onsubmit="return confirm('Beralih masuk sebagai pengguna <?= SecurityHelper::escape($u['full_name']) ?> (@<?= SecurityHelper::escape($u['username']) ?>)?')">
+                                            <?= CSRF::inputField() ?>
+                                            <input type="hidden" name="user_id" value="<?= $u['id'] ?>">
+                                            <button type="submit" class="btn btn-sm" style="background: #0284c7; color: #ffffff; border: 1px solid #0284c7;" title="Masuk Sebagai Pengguna Ini">
+                                                <i class="fa-solid fa-user-ninja"></i>
+                                            </button>
+                                        </form>
+                                    <?php endif; ?>
+
                                     <!-- Edit Akun -->
                                     <button type="button" class="btn btn-outline btn-sm" data-user="<?= htmlspecialchars(json_encode($u, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP), ENT_QUOTES, 'UTF-8') ?>" onclick="openEditAccountModal(JSON.parse(this.getAttribute('data-user')))" title="Edit Akun Pengguna">
                                         <i class="fa-solid fa-pen-to-square"></i>

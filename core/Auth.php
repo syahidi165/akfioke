@@ -488,4 +488,163 @@ class Auth {
 
         return ['valid' => true, 'message' => 'Kata sandi memenuhi standar keamanan.'];
     }
+
+    /**
+     * Cek apakah saat ini sedang dalam mode alih akun / penyamaran (impersonation).
+     */
+    public static function isImpersonating(): bool {
+        self::startSession();
+        return !empty($_SESSION['impersonator_user_id']);
+    }
+
+    /**
+     * Dapatkan data Operator Yayasan asal saat berada dalam mode impersonasi.
+     */
+    public static function impersonator(): ?array {
+        self::startSession();
+        if (empty($_SESSION['impersonator_user_id'])) {
+            return null;
+        }
+        return [
+            'id'       => (int)$_SESSION['impersonator_user_id'],
+            'username' => $_SESSION['impersonator_username'] ?? '',
+            'name'     => $_SESSION['impersonator_name'] ?? '',
+        ];
+    }
+
+    /**
+     * Beralih peran / masuk sebagai pengguna lain (Impersonate).
+     * Fitur ini HANYA dapat diakses oleh akun dengan peran operator_yayasan (atau sesi impersonasi aktif).
+     */
+    public static function impersonate(int $targetUserId): array {
+        self::startSession();
+
+        $canImpersonate = self::hasRole('operator_yayasan') || self::isImpersonating();
+        if (!$canImpersonate) {
+            return [
+                'success' => false,
+                'message' => 'Akses ditolak: Fitur beralih akun (switch user) hanya dimiliki oleh Operator Yayasan.'
+            ];
+        }
+
+        if ($targetUserId <= 0) {
+            return ['success' => false, 'message' => 'ID pengguna target tidak valid.'];
+        }
+
+        $targetUser = Database::fetch("SELECT * FROM users WHERE id = ? AND is_active = 1", [$targetUserId]);
+        if (!$targetUser) {
+            return ['success' => false, 'message' => 'Pengguna target tidak ditemukan atau sedang dinonaktifkan.'];
+        }
+
+        // Ambil peran user target
+        $roles = Database::fetchAll(
+            "SELECT r.*, ur.is_primary FROM roles r 
+             JOIN user_roles ur ON r.id = ur.role_id 
+             WHERE ur.user_id = ? ORDER BY ur.is_primary DESC, r.id ASC",
+            [$targetUser['id']]
+        );
+
+        if (empty($roles)) {
+            return ['success' => false, 'message' => 'Pengguna target belum memiliki peran (role) yang ditugaskan.'];
+        }
+
+        // Jika belum ada identitas impersonator, catat identitas asli Operator Yayasan
+        if (empty($_SESSION['impersonator_user_id'])) {
+            $_SESSION['impersonator_user_id'] = (int)$_SESSION['user_id'];
+            $_SESSION['impersonator_username'] = $_SESSION['user_username'] ?? '';
+            $_SESSION['impersonator_name'] = $_SESSION['user_name'] ?? '';
+        }
+
+        // Ambil data pegawai/siswa untuk unit_id
+        $employee = Database::fetch("SELECT * FROM employees WHERE user_id = ? AND is_deleted = 0", [$targetUser['id']]);
+        $student = Database::fetch("SELECT * FROM students WHERE student_user_id = ?", [$targetUser['id']]);
+
+        // Alihkan sesi ke user target
+        $_SESSION['user_id'] = (int)$targetUser['id'];
+        $_SESSION['user_username'] = $targetUser['username'];
+        $_SESSION['user_name'] = $targetUser['full_name'];
+        $_SESSION['user_email'] = $targetUser['email'];
+        $_SESSION['force_change_password'] = false;
+        $_SESSION['roles'] = $roles;
+        $_SESSION['active_role'] = $roles[0];
+        $_SESSION['last_activity'] = time();
+
+        $primaryRole = $roles[0]['name'] ?? '';
+        $isYayasanRole = in_array($primaryRole, ['operator_yayasan', 'direktur_pendidikan', 'deputi_pendidikan', 'ketua_yayasan', 'pembina_yayasan'], true);
+        $_SESSION['unit_id'] = $isYayasanRole ? null : ($targetUser['unit_id'] ?? ($employee['unit_id'] ?? ($student['unit_id'] ?? null)));
+
+        session_regenerate_id(true);
+
+        AuditLog::log('IMPERSONATE_USER', 'users', $targetUser['id'], null, [
+            'target_username' => $targetUser['username'],
+            'target_role'     => $roles[0]['name'],
+            'by_operator_id'  => $_SESSION['impersonator_user_id']
+        ]);
+
+        return [
+            'success' => true,
+            'message' => "Berhasil beralih akun sebagai {$targetUser['full_name']} ({$roles[0]['display_name']})."
+        ];
+    }
+
+    /**
+     * Kembali ke akun Operator Yayasan asli dari mode penyamaran/impersonasi.
+     */
+    public static function revertImpersonate(): array {
+        self::startSession();
+
+        if (empty($_SESSION['impersonator_user_id'])) {
+            return ['success' => false, 'message' => 'Anda sedang tidak dalam mode alih pengguna.'];
+        }
+
+        $origUserId = (int)$_SESSION['impersonator_user_id'];
+        $origUser = Database::fetch("SELECT * FROM users WHERE id = ?", [$origUserId]);
+
+        if (!$origUser) {
+            return ['success' => false, 'message' => 'Data Operator Yayasan asal tidak ditemukan di database.'];
+        }
+
+        $roles = Database::fetchAll(
+            "SELECT r.*, ur.is_primary FROM roles r 
+             JOIN user_roles ur ON r.id = ur.role_id 
+             WHERE ur.user_id = ? ORDER BY ur.is_primary DESC, r.id ASC",
+            [$origUserId]
+        );
+
+        $opRole = null;
+        foreach ($roles as $r) {
+            if ($r['name'] === 'operator_yayasan') {
+                $opRole = $r;
+                break;
+            }
+        }
+        if (!$opRole && !empty($roles)) {
+            $opRole = $roles[0];
+        }
+
+        $_SESSION['user_id'] = (int)$origUser['id'];
+        $_SESSION['user_username'] = $origUser['username'];
+        $_SESSION['user_name'] = $origUser['full_name'];
+        $_SESSION['user_email'] = $origUser['email'];
+        $_SESSION['force_change_password'] = (bool)$origUser['force_change_password'];
+        $_SESSION['roles'] = $roles;
+        $_SESSION['active_role'] = $opRole;
+        $_SESSION['unit_id'] = null;
+        $_SESSION['last_activity'] = time();
+
+        unset(
+            $_SESSION['impersonator_user_id'],
+            $_SESSION['impersonator_username'],
+            $_SESSION['impersonator_name']
+        );
+
+        session_regenerate_id(true);
+
+        AuditLog::log('REVERT_IMPERSONATE', 'users', $origUserId);
+
+        return [
+            'success' => true,
+            'message' => 'Berhasil kembali ke akun Operator Yayasan.'
+        ];
+    }
 }
