@@ -3399,13 +3399,20 @@ class MasterController extends Controller {
             [$unitId, Auth::academicYearId()]
         );
 
+        $taId = Auth::academicYearId();
+        $kpiStandards = Database::fetchAll(
+            "SELECT * FROM deputi_kpi_standards WHERE unit_id = ? AND academic_year_id = ? ORDER BY kpi_category ASC",
+            [$unitId, $taId]
+        );
+
         $this->view('master/subjects', [
-            'pageTitle'   => 'Mata Pelajaran & Penugasan Guru Pengampu',
-            'subjects'    => $subjects,
-            'teachers'    => $teachers,
-            'classes'     => $classes,
-            'assignments' => $assignments,
-            'unitId'      => $unitId
+            'pageTitle'    => 'Mata Pelajaran & Penugasan Guru Pengampu',
+            'subjects'     => $subjects,
+            'teachers'     => $teachers,
+            'classes'      => $classes,
+            'assignments'  => $assignments,
+            'unitId'       => $unitId,
+            'kpiStandards' => $kpiStandards
         ]);
     }
 

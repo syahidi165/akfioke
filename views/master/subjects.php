@@ -6,6 +6,12 @@ use Core\Auth;
 
 $canEdit = Auth::hasRole('operator_sekolah') || Auth::hasRole('operator_yayasan');
 $baseUrl = Auth::baseUrl();
+
+$kpiStandards = $kpiStandards ?? [];
+$kpiMap = [];
+foreach ($kpiStandards as $ks) {
+    $kpiMap[$ks['kpi_category']] = $ks;
+}
 $assignments = $assignments ?? [];
 $subjects = $subjects ?? [];
 $teachers = $teachers ?? [];
@@ -248,9 +254,17 @@ foreach ($assignments as $asg) {
                                     <td>
                                         <span class="badge <?= $badgeClass ?>"><?= SecurityHelper::escape($sub['type']) ?></span>
                                         <?php if (!empty($sub['deputi_kpi_category'])): ?>
-                                            <span class="badge" style="background: #f5f3ff; color: #7c3aed; font-size: 10px; margin-top: 2px; display: inline-block;">
-                                                <i class="fa-solid fa-bullseye"></i> <?= SecurityHelper::escape($sub['deputi_kpi_category']) ?>
-                                            </span>
+                                            <?php $std = $kpiMap[$sub['deputi_kpi_category']] ?? null; ?>
+                                            <?php if ($std): ?>
+                                                <span class="badge" style="background: #f5f3ff; color: #7c3aed; font-size: 11px; margin-top: 3px; display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 6px;">
+                                                    <i class="fa-solid fa-bullseye"></i> <?= SecurityHelper::escape($sub['deputi_kpi_category']) ?> 
+                                                    <span style="font-weight: 500; color: #6b21a8; font-size: 10px;">(KKM: <?= (int)$std['kkm_score'] ?>, Lulus: <?= (int)$std['target_achievement_pct'] ?>%)</span>
+                                                </span>
+                                            <?php else: ?>
+                                                <span class="badge" style="background: #fffbeb; color: #b45309; font-size: 10px; margin-top: 3px; display: inline-block;">
+                                                    <i class="fa-solid fa-triangle-exclamation"></i> <?= SecurityHelper::escape($sub['deputi_kpi_category']) ?> (Standar Belum Diset)
+                                                </span>
+                                            <?php endif; ?>
                                         <?php endif; ?>
                                     </td>
                                     <td style="text-align: center;">
@@ -314,23 +328,27 @@ foreach ($assignments as $asg) {
                 <div class="form-group" style="margin-bottom: 14px;">
                     <label class="form-label" style="font-weight: 600;">Kategori Standar Mutu (KPI Deputi)</label>
                     <select name="deputi_kpi_category" id="sub_deputi_kpi_category" class="form-control">
-                        <option value="">-- Tanpa Kategori Khusus --</option>
-                        <option value="TAHFIZH">TAHFIZH (Hafalan Al-Qur'an)</option>
-                        <option value="TAHSIN">TAHSIN (Membaca Al-Qur'an &amp; Tajwid)</option>
-                        <option value="TUHFATUL ATHFAL">TUHFATUL ATHFAL (Matan Tajwid)</option>
-                        <option value="INDONESIAN">INDONESIAN (Bahasa Indonesia)</option>
-                        <option value="SCIENCE">SCIENCE (IPA / Sains)</option>
-                        <option value="MATH">MATH (Matematika)</option>
-                        <option value="ENGLISH">ENGLISH (Bahasa Inggris)</option>
-                        <option value="ARABIC">ARABIC (Bahasa Arab)</option>
-                        <option value="PHYSIC">PHYSIC (Fisika)</option>
-                        <option value="CHEMISTRY">CHEMISTRY (Kimia)</option>
-                        <option value="BIOLOGY">BIOLOGY (Biologi)</option>
-                        <option value="DINIYAH">DINIYAH (Fiqih / Aqidah / SKI)</option>
+                        <option value="">-- Tanpa Kategori Standar Mutu --</option>
+                        <?php if (!empty($kpiStandards)): ?>
+                            <?php foreach ($kpiStandards as $kpi): ?>
+                                <option value="<?= SecurityHelper::escape($kpi['kpi_category']) ?>">
+                                    <?= SecurityHelper::escape($kpi['kpi_category']) ?> (KKM: <?= (int)$kpi['kkm_score'] ?> &bull; Syarat Kelulusan: <?= (int)$kpi['target_achievement_pct'] ?>%)
+                                </option>
+                            <?php endforeach; ?>
+                        <?php else: ?>
+                            <option value="" disabled style="color: #94a3b8; font-style: italic;">(Belum ada Standar KPI yang diinput Deputi)</option>
+                        <?php endif; ?>
                     </select>
-                    <div style="font-size: 11px; color: var(--text-muted); margin-top: 3px;">
-                        Kategori ini dipakai Deputi Pendidikan untuk mengakumulasi ketercapaian KKM mutu secara otomatis.
-                    </div>
+                    <?php if (empty($kpiStandards)): ?>
+                        <div style="background: #fffbeb; border: 1px solid #fde68a; border-radius: 6px; padding: 8px 12px; margin-top: 6px; font-size: 11px; color: #92400e; line-height: 1.4;">
+                            <i class="fa-solid fa-triangle-exclamation" style="color: #d97706;"></i>
+                            <strong>Pemberitahuan:</strong> Deputi Pendidikan belum menginput Standar KPI Mutu &amp; Syarat Kelulusan untuk unit sekolah ini. Pilihan kategori KPI baru akan muncul setelah Deputi menetapkannya di menu Standar KPI Mutu.
+                        </div>
+                    <?php else: ?>
+                        <div style="font-size: 11px; color: #15803d; margin-top: 4px;">
+                            <i class="fa-solid fa-circle-check"></i> Pilihan kategori KPI di atas disinkronkan langsung dari Standar Mutu yang ditetapkan oleh Deputi Pendidikan.
+                        </div>
+                    <?php endif; ?>
                 </div>
             </div>
             <div class="modal-footer">

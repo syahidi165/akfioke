@@ -29,6 +29,17 @@ $baseUrl = Auth::baseUrl();
     </div>
 </div>
 
+<!-- Skema KPI Info Banner -->
+<div style="background: #eff6ff; border: 1px solid #bfdbfe; border-left: 4px solid #2563eb; border-radius: 8px; padding: 12px 18px; margin-bottom: 20px; font-size: 0.875rem; color: #1e3a8a;">
+    <div style="font-weight: 700; margin-bottom: 4px; display: flex; align-items: center; gap: 8px;">
+        <i class="fa-solid fa-circle-info" style="color: #2563eb;"></i>
+        Skema Standar Mutu &amp; Keterkaitan Mapel Sekolah:
+    </div>
+    <div style="color: #334155; line-height: 1.5;">
+        Standar KPI yang Anda tetapkan di bawah ini (Kategori, Standar KKM, &amp; % Syarat Kelulusan) akan menjadi referensi baku dan <strong>hanya akan muncul sebagai opsi</strong> saat Operator Sekolah mengatur mata pelajaran pada unit ini. Jika Anda belum menginput standar KPI pada suatu unit, maka pilihan KPI tidak akan tersedia bagi Operator Sekolah.
+    </div>
+</div>
+
 <!-- Unit Selector Tabs -->
 <div style="display: flex; gap: 8px; margin-bottom: 20px; overflow-x: auto; padding-bottom: 4px;">
     <?php foreach ($units as $u): ?>
@@ -116,6 +127,9 @@ $baseUrl = Auth::baseUrl();
                                 <?php endif; ?>
                             </td>
                             <td style="padding: 12px 16px; text-align: right; white-space: nowrap;">
+                                <button type="button" class="btn btn-outline" style="padding: 4px 8px; font-size: 0.8125rem; color: #4338ca; border-color: #c7d2fe; margin-right: 4px;" onclick='openEditKpiModal(<?= json_encode($std) ?>)' title="Edit Standar KPI Ini">
+                                    <i class="fa-solid fa-pen-to-square"></i>
+                                </button>
                                 <form action="<?= $baseUrl ?>/deputi/kpi-mutu/delete" method="POST" style="display: inline-block;" onsubmit="return confirm('Hapus standar KPI ini?')">
                                     <?= CSRF::inputField() ?>
                                     <input type="hidden" name="id" value="<?= $std['id'] ?>">
@@ -133,54 +147,60 @@ $baseUrl = Auth::baseUrl();
     </div>
 </div>
 
-<!-- Modal Tambah KPI -->
-<div class="modal-overlay" id="addKpiModal">
-    <div class="modal-container" style="max-width: 500px;">
+<!-- Modal Tambah / Edit KPI -->
+<div class="modal-overlay" id="kpiModal">
+    <div class="modal-container" style="max-width: 520px;">
         <form action="<?= $baseUrl ?>/deputi/kpi-mutu/save" method="POST">
             <?= CSRF::inputField() ?>
+            <input type="hidden" name="id" id="kpi_id" value="0">
             <input type="hidden" name="unit_id" value="<?= $selectedUnitId ?>">
             <input type="hidden" name="deputi_user_id" value="<?= $deputiUserId ?>">
 
             <div class="modal-header">
-                <h3 class="card-title" style="margin: 0; font-size: 1.125rem;">
+                <h3 class="card-title" id="kpiModalTitle" style="margin: 0; font-size: 1.125rem;">
                     <i class="fa-solid fa-plus-circle" style="color: #7c3aed;"></i> Tambah Standar Mutu KPI Mapel
                 </h3>
             </div>
             <div class="modal-body" style="display: flex; flex-direction: column; gap: 14px;">
                 <div class="form-group">
                     <label class="form-label" style="font-weight: 600;">Kategori Mata Pelajaran *</label>
-                    <select name="kpi_category" class="form-control" required>
-                        <option value="TAHFIZH">TAHFIZH (Hafalan Al-Qur'an)</option>
-                        <option value="TAHSIN">TAHSIN (Membaca Al-Qur'an / Tajwid)</option>
-                        <option value="TUHFATUL ATHFAL">TUHFATUL ATHFAL (Matan Tajwid)</option>
-                        <option value="INDONESIAN">INDONESIAN (Bahasa Indonesia)</option>
-                        <option value="SCIENCE">SCIENCE (IPA / Sains)</option>
-                        <option value="MATH">MATH (Matematika)</option>
-                        <option value="ENGLISH">ENGLISH (Bahasa Inggris)</option>
-                        <option value="ARABIC">ARABIC (Bahasa Arab)</option>
-                        <option value="PHYSIC">PHYSIC (Fisika)</option>
-                        <option value="CHEMISTRY">CHEMISTRY (Kimia)</option>
-                        <option value="BIOLOGY">BIOLOGY (Biologi)</option>
-                        <option value="DINIYAH">DINIYAH / FIQIH / AQIDAH</option>
-                    </select>
+                    <div style="display: flex; gap: 8px;">
+                        <select id="kpi_category_select" class="form-control" onchange="syncKpiCategory(this.value)">
+                            <option value="TAHFIZH">TAHFIZH (Hafalan Al-Qur'an)</option>
+                            <option value="TAHSIN">TAHSIN (Membaca Al-Qur'an / Tajwid)</option>
+                            <option value="TUHFATUL ATHFAL">TUHFATUL ATHFAL (Matan Tajwid)</option>
+                            <option value="INDONESIAN">INDONESIAN (Bahasa Indonesia)</option>
+                            <option value="SCIENCE">SCIENCE (IPA / Sains)</option>
+                            <option value="MATH">MATH (Matematika)</option>
+                            <option value="ENGLISH">ENGLISH (Bahasa Inggris)</option>
+                            <option value="ARABIC">ARABIC (Bahasa Arab)</option>
+                            <option value="PHYSIC">PHYSIC (Fisika)</option>
+                            <option value="CHEMISTRY">CHEMISTRY (Kimia)</option>
+                            <option value="BIOLOGY">BIOLOGY (Biologi)</option>
+                            <option value="DINIYAH">DINIYAH (Fiqih / Aqidah / SKI)</option>
+                            <option value="CUSTOM">-- Kategori Lainnya (Ketik Manual) --</option>
+                        </select>
+                    </div>
+                    <input type="text" name="kpi_category" id="kpi_category_input" class="form-control" style="margin-top: 6px; text-transform: uppercase;" placeholder="Nama Kategori KPI..." value="TAHFIZH" required>
+                    <small style="color: #64748b; font-size: 11px;">Kategori ini yang akan dipilih oleh Operator Sekolah saat menambahkan/mengatur mata pelajaran.</small>
                 </div>
                 <div class="row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
                     <div class="form-group">
-                        <label class="form-label" style="font-weight: 600;">Nilai KKM Minimum *</label>
-                        <input type="number" step="1" min="50" max="100" name="kkm_score" class="form-control" value="80" required>
+                        <label class="form-label" style="font-weight: 600;">Standar KKM Minimum *</label>
+                        <input type="number" step="1" min="50" max="100" name="kkm_score" id="kpi_kkm_score" class="form-control" value="80" required>
                     </div>
                     <div class="form-group">
-                        <label class="form-label" style="font-weight: 600;">Target Ketuntasan (%) *</label>
-                        <input type="number" step="1" min="10" max="100" name="target_achievement_pct" class="form-control" value="85" required>
+                        <label class="form-label" style="font-weight: 600;">% Syarat Kelulusan (Target) *</label>
+                        <input type="number" step="1" min="10" max="100" name="target_achievement_pct" id="kpi_target_pct" class="form-control" value="85" required>
                     </div>
                 </div>
                 <div class="form-group">
                     <label class="form-label" style="font-weight: 600;">Deskripsi Sasaran Mutu (Objective)</label>
-                    <input type="text" name="objective_description" class="form-control" placeholder="Contoh: 1/2 juz 30, properly reading, min score 80">
+                    <input type="text" name="objective_description" id="kpi_desc" class="form-control" placeholder="Contoh: 1/2 juz 30, properly reading, min score 80">
                 </div>
             </div>
             <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 8px;">
-                <button type="button" class="btn btn-outline" onclick="closeAddKpiModal()">Batal</button>
+                <button type="button" class="btn btn-outline" onclick="closeKpiModal()">Batal</button>
                 <button type="submit" class="btn btn-primary"><i class="fa-solid fa-save"></i> Simpan Standar KPI</button>
             </div>
         </form>
@@ -188,11 +208,52 @@ $baseUrl = Auth::baseUrl();
 </div>
 
 <script>
-function openAddKpiModal() {
-    document.getElementById('addKpiModal').classList.add('active');
+function syncKpiCategory(val) {
+    var inp = document.getElementById('kpi_category_input');
+    if (val === 'CUSTOM') {
+        inp.value = '';
+        inp.focus();
+    } else {
+        inp.value = val;
+    }
 }
-function closeAddKpiModal() {
-    document.getElementById('addKpiModal').classList.remove('active');
+
+function openAddKpiModal() {
+    document.getElementById('kpi_id').value = '0';
+    document.getElementById('kpiModalTitle').innerHTML = '<i class="fa-solid fa-plus-circle" style="color: #7c3aed;"></i> Tambah Standar Mutu KPI Mapel';
+    document.getElementById('kpi_category_select').value = 'TAHFIZH';
+    document.getElementById('kpi_category_input').value = 'TAHFIZH';
+    document.getElementById('kpi_kkm_score').value = '80';
+    document.getElementById('kpi_target_pct').value = '85';
+    document.getElementById('kpi_desc').value = '';
+    document.getElementById('kpiModal').classList.add('active');
+}
+
+function openEditKpiModal(std) {
+    document.getElementById('kpi_id').value = std.id;
+    document.getElementById('kpiModalTitle').innerHTML = '<i class="fa-solid fa-pen-to-square" style="color: #4338ca;"></i> Edit Standar Mutu KPI Mapel';
+    
+    var sel = document.getElementById('kpi_category_select');
+    var found = false;
+    for (var i = 0; i < sel.options.length; i++) {
+        if (sel.options[i].value === std.kpi_category) {
+            sel.selectedIndex = i;
+            found = true;
+            break;
+        }
+    }
+    if (!found) {
+        sel.value = 'CUSTOM';
+    }
+    document.getElementById('kpi_category_input').value = std.kpi_category;
+    document.getElementById('kpi_kkm_score').value = parseInt(std.kkm_score) || 80;
+    document.getElementById('kpi_target_pct').value = parseInt(std.target_achievement_pct) || 85;
+    document.getElementById('kpi_desc').value = std.objective_description || '';
+    document.getElementById('kpiModal').classList.add('active');
+}
+
+function closeKpiModal() {
+    document.getElementById('kpiModal').classList.remove('active');
 }
 </script>
 

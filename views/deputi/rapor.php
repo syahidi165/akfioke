@@ -23,9 +23,12 @@ $baseUrl = Auth::baseUrl();
             </p>
         </div>
 
-        <div style="display: flex; gap: 10px; align-items: center;">
-            <a href="<?= $baseUrl ?>/deputi/rapor/print?deputi_id=<?= $deputiUserId ?>&semester=<?= $semester ?>" target="_blank" class="btn btn-outline" style="font-weight: 600;">
-                <i class="fa-solid fa-print"></i> Cetak Lembar Rapor Resmi
+        <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+            <a href="<?= $baseUrl ?>/deputi/rapor/pdf?deputi_id=<?= (int)$deputiUserId ?>&semester=<?= SecurityHelper::escape($semester) ?>" target="_blank" class="btn btn-outline" style="font-weight: 600; color: #dc2626; border-color: #fca5a5; background: #fff5f5;" title="Unduh File Rapor Resmi ke Format PDF">
+                <i class="fa-solid fa-file-pdf"></i> Download PDF Rapor Resmi
+            </a>
+            <a href="<?= $baseUrl ?>/deputi/rapor/print?deputi_id=<?= (int)$deputiUserId ?>&semester=<?= SecurityHelper::escape($semester) ?>" target="_blank" class="btn btn-outline" style="font-weight: 600;">
+                <i class="fa-solid fa-print"></i> Pratinjau &amp; Cetak
             </a>
             <?php if ($isDirektur): ?>
                 <button type="button" class="btn btn-outline" onclick="applyAutoMetrics()" style="font-weight: 600; color: #0284c7; border-color: #bae6fd; background: #f0f9ff;">

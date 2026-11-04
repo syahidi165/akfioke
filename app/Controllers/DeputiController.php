@@ -47,9 +47,9 @@ class DeputiController extends Controller {
         if (Auth::hasRole('kepala_sekolah')) {
             $ksUnitId = Auth::unitId();
             if ($ksUnitId) {
-                $depAssigned = Database::fetch("SELECT deputi_user_id FROM deputi_units WHERE unit_id = ? LIMIT 1", [$ksUnitId]);
-                if ($depAssigned && !empty($depAssigned['deputi_user_id'])) {
-                    return (int)$depAssigned['deputi_user_id'];
+                $depAssigned = Database::fetch("SELECT user_id FROM deputi_units WHERE unit_id = ? LIMIT 1", [$ksUnitId]);
+                if ($depAssigned && !empty($depAssigned['user_id'])) {
+                    return (int)$depAssigned['user_id'];
                 }
             }
         }
@@ -799,18 +799,19 @@ class DeputiController extends Controller {
             // Query siswa yang mengambil mata pelajaran dengan kategori ini di unit tersebut
             $scoreStats = Database::fetch(
                 "SELECT COUNT(DISTINCT s.id) as total_students,
-                        SUM(CASE WHEN mg.avg_score >= ? THEN 1 ELSE 0 END) as passed_students
+                        COALESCE(SUM(CASE WHEN mg.avg_score >= ? THEN 1 ELSE 0 END), 0) as passed_students
                  FROM students s
                  JOIN class_students cs ON s.id = cs.student_id AND cs.status = 'Aktif'
                  JOIN classes c ON cs.class_id = c.id AND c.unit_id = ? AND c.academic_year_id = ?
                  JOIN subjects sub ON sub.unit_id = c.unit_id AND (sub.deputi_kpi_category = ? OR sub.name LIKE ?)
                  LEFT JOIN (
                      SELECT student_id, subject_id, AVG(score) as avg_score 
-                     FROM monthly_grades 
+                     FROM student_grades 
+                     WHERE academic_year_id = ?
                      GROUP BY student_id, subject_id
                  ) mg ON mg.student_id = s.id AND mg.subject_id = sub.id
                  WHERE s.unit_id = ? AND s.status = 'Aktif'",
-                [$kkm, $selectedUnitId, $taId, $cat, "%{$cat}%", $selectedUnitId]
+                [$kkm, $selectedUnitId, $taId, $cat, "%{$cat}%", $taId, $selectedUnitId]
             );
 
             $tot = (int)($scoreStats['total_students'] ?? 0);
@@ -1634,8 +1635,12 @@ class DeputiController extends Controller {
         $deputiUserId = $this->resolveDeputiUserId();
         $semester = $_GET['semester'] ?? 'Genap';
 
-        $deputiUser = Database::fetch("SELECT u.*, e.nama as emp_nama, e.level_posisi, e.nipy FROM users u LEFT JOIN employees e ON e.user_id = u.id WHERE u.id = ?", [$deputiUserId]);
+        $deputiUser = Database::fetch("SELECT u.*, e.nama as emp_nama, e.level_posisi, e.nipy, e.signature_path as emp_sig FROM users u LEFT JOIN employees e ON e.user_id = u.id WHERE u.id = ?", [$deputiUserId]);
         $ta = Database::fetch("SELECT * FROM academic_years WHERE id = ?", [$taId]);
+
+        $assignedUnitIds = self::getDeputiUnitIds($deputiUserId);
+        $inAssigned = !empty($assignedUnitIds) ? implode(',', $assignedUnitIds) : '0';
+        $assignedUnits = Database::fetchAll("SELECT * FROM units WHERE id IN ({$inAssigned}) AND is_active = 1 ORDER BY id ASC");
 
         $evaluation = Database::fetch(
             "SELECT e.*, d.full_name as deputi_name, ev.full_name as evaluator_name, ev_e.nama as evaluator_emp_name,
@@ -1680,15 +1685,91 @@ class DeputiController extends Controller {
         );
 
         $this->view('deputi/print_rapor', [
-            'pageTitle'    => 'Cetak Rapor Kinerja Deputi Divisi Pendidikan',
-            'deputiUser'   => $deputiUser,
-            'currentTa'    => $ta,
-            'semester'     => $semester,
-            'evaluation'   => $evaluation,
-            'indicators'   => $indicators,
-            'details'      => $details,
-            'direktur'     => $direktur,
-            'ketuaYayasan' => $ketuaYayasan
+            'pageTitle'     => 'Cetak Rapor Kinerja Deputi Divisi Pendidikan',
+            'deputiUser'    => $deputiUser,
+            'deputiUserId'  => $deputiUserId,
+            'currentTa'     => $ta,
+            'semester'      => $semester,
+            'assignedUnits' => $assignedUnits,
+            'evaluation'    => $evaluation,
+            'indicators'    => $indicators,
+            'details'       => $details,
+            'direktur'      => $direktur,
+            'ketuaYayasan'  => $ketuaYayasan,
+            'isPdfMode'     => false
         ]);
+    }
+
+    /**
+     * Ekspor Dokumen Rapor Kinerja Deputi Divisi Pendidikan ke format PDF (Dompdf)
+     */
+    public function exportRaporPdf(): void {
+        $this->requireRole(['direktur_pendidikan', 'operator_yayasan', 'deputi_pendidikan', 'pembina_yayasan']);
+        $taId = Auth::academicYearId();
+        $deputiUserId = $this->resolveDeputiUserId();
+        $semester = $_GET['semester'] ?? 'Genap';
+
+        $deputiUser = Database::fetch("SELECT u.*, e.nama as emp_nama, e.level_posisi, e.nipy, e.signature_path as emp_sig FROM users u LEFT JOIN employees e ON e.user_id = u.id WHERE u.id = ?", [$deputiUserId]);
+        $currentTa = Database::fetch("SELECT * FROM academic_years WHERE id = ?", [$taId]);
+        $taName = $currentTa['name'] ?? (date('Y') . '/' . (date('Y') + 1));
+
+        $assignedUnitIds = self::getDeputiUnitIds($deputiUserId);
+        $inAssigned = !empty($assignedUnitIds) ? implode(',', $assignedUnitIds) : '0';
+        $assignedUnits = Database::fetchAll("SELECT * FROM units WHERE id IN ({$inAssigned}) AND is_active = 1 ORDER BY id ASC");
+
+        $evaluation = Database::fetch(
+            "SELECT e.*, d.full_name as deputi_name, ev.full_name as evaluator_name, ev_e.nama as evaluator_emp_name,
+                    yay.full_name as yayasan_name, yay_e.nama as yayasan_emp_name
+             FROM deputi_rapor_evaluations e
+             JOIN users d ON e.deputi_user_id = d.id
+             LEFT JOIN users ev ON e.evaluator_user_id = ev.id
+             LEFT JOIN employees ev_e ON ev_e.user_id = ev.id
+             LEFT JOIN users yay ON e.approved_by_ketua_yayasan_id = yay.id
+             LEFT JOIN employees yay_e ON yay_e.user_id = yay.id
+             WHERE e.deputi_user_id = ? AND e.academic_year_id = ? AND e.semester = ?",
+            [$deputiUserId, $taId, $semester]
+        );
+
+        $indicators = Database::fetchAll("SELECT * FROM deputi_rapor_indicators ORDER BY area_no ASC, id ASC");
+        $details = [];
+        if ($evaluation) {
+            $rawD = Database::fetchAll("SELECT * FROM deputi_rapor_details WHERE evaluation_id = ?", [$evaluation['id']]);
+            foreach ($rawD as $rd) {
+                $details[$rd['indicator_id']] = $rd;
+            }
+        }
+
+        $direktur = Database::fetch(
+            "SELECT u.full_name, e.nama, e.signature_path, u.signature_path as user_sig
+             FROM users u 
+             JOIN user_roles ur ON u.id = ur.user_id 
+             JOIN roles r ON ur.role_id = r.id 
+             LEFT JOIN employees e ON e.user_id = u.id 
+             WHERE r.name = 'direktur_pendidikan' LIMIT 1"
+        );
+
+        $ketuaYayasan = Database::fetch(
+            "SELECT u.full_name, e.nama, e.signature_path, u.signature_path as user_sig
+             FROM users u 
+             JOIN user_roles ur ON u.id = ur.user_id 
+             JOIN roles r ON ur.role_id = r.id 
+             LEFT JOIN employees e ON e.user_id = u.id 
+             WHERE r.name IN ('ketua_yayasan', 'pembina_yayasan') LIMIT 1"
+        );
+
+        $logoBase64 = null;
+        $logoPath = dirname(__DIR__, 2) . '/public/images/logo_alkahfi.png';
+        if (file_exists($logoPath)) {
+            $logoBase64 = 'data:image/png;base64,' . base64_encode(file_get_contents($logoPath));
+        }
+
+        $isPdfMode = true;
+        ob_start();
+        require dirname(__DIR__, 2) . '/views/deputi/print_rapor.php';
+        $html = ob_get_clean();
+
+        $cleanName = preg_replace('/[^A-Za-z0-9_-]/', '_', $deputiUser['full_name'] ?? 'Deputi');
+        $filename = "Rapor_AKFI_Deputi_{$cleanName}_Sem_{$semester}";
+        \Core\ExportHelper::pdf($html, $filename, 'A4', 'portrait', true);
     }
 }

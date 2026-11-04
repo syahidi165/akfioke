@@ -427,6 +427,7 @@ Router::post('/deputi/badges/delete', [DeputiController::class, 'deleteBadge']);
 Router::get('/deputi/rapor', [DeputiController::class, 'rapor']);
 Router::post('/deputi/rapor/save-evaluation', [DeputiController::class, 'saveEvaluation']);
 Router::get('/deputi/rapor/print', [DeputiController::class, 'printRapor']);
+Router::get('/deputi/rapor/pdf', [DeputiController::class, 'exportRaporPdf']);
 
 // Run Router
 Router::run();
