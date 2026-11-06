@@ -145,6 +145,23 @@ class DeputiController extends Controller {
     /**
      * Memastikan tabel master indikator rapor deputi sudah terisi (self-seeding)
      */
+    /**
+     * Memastikan kolom progress_pct dan source_action_id pada deputi_meeting_actions tersedia
+     */
+    public static function ensureMeetingActionColumns(): void {
+        try {
+            $chk = Database::fetch("SHOW COLUMNS FROM deputi_meeting_actions LIKE 'progress_pct'");
+            if (!$chk) {
+                Database::execute("ALTER TABLE deputi_meeting_actions ADD COLUMN progress_pct TINYINT UNSIGNED NOT NULL DEFAULT 0 AFTER due_date");
+                Database::execute("UPDATE deputi_meeting_actions SET progress_pct = 100 WHERE status = 'Completed'");
+            }
+            $chk2 = Database::fetch("SHOW COLUMNS FROM deputi_meeting_actions LIKE 'source_action_id'");
+            if (!$chk2) {
+                Database::execute("ALTER TABLE deputi_meeting_actions ADD COLUMN source_action_id INT NULL DEFAULT NULL AFTER mom_id");
+            }
+        } catch (\Throwable $e) {}
+    }
+
     public static function ensureRaporIndicatorsSeeded(): void {
         try {
             $chk = (int)(Database::fetch("SELECT COUNT(*) as c FROM deputi_rapor_indicators")['c'] ?? 0);
@@ -240,6 +257,7 @@ class DeputiController extends Controller {
         $this->requireRole(['deputi_pendidikan', 'direktur_pendidikan', 'operator_yayasan', 'kepala_sekolah']);
         $taId = Auth::academicYearId();
         $deputiUserId = $this->resolveDeputiUserId();
+        self::ensureMeetingActionColumns();
 
         $deputiUser = Database::fetch("SELECT id, full_name, username FROM users WHERE id = ?", [$deputiUserId]);
         $deputiList = Database::fetchAll(
@@ -608,6 +626,7 @@ class DeputiController extends Controller {
      */
     public function saveMom(): void {
         $this->requireRole(['deputi_pendidikan', 'direktur_pendidikan', 'operator_yayasan']);
+        self::ensureMeetingActionColumns();
         $eventId = (int)($_POST['event_id'] ?? 0);
         $meetingDate = $_POST['meeting_date'] ?? date('Y-m-d');
         $momContent = trim($_POST['mom_content'] ?? '');
@@ -657,22 +676,59 @@ class DeputiController extends Controller {
             $momId = (int)Database::lastInsertId();
         }
 
-        // Simpan komitmen/action items jika ada input baru
+        // Simpan komitmen/action items
+        $actionIds = $_POST['action_ids'] ?? [];
+        $actionSourceIds = $_POST['action_source_ids'] ?? [];
         $actionTopics = $_POST['action_topics'] ?? [];
         $actionPics = $_POST['action_pics'] ?? [];
         $actionDueDates = $_POST['action_due_dates'] ?? [];
+        $actionProgress = $_POST['action_progress'] ?? [];
+
+        $keptActionIds = [];
+
         if (!empty($actionTopics) && is_array($actionTopics)) {
             foreach ($actionTopics as $idx => $topic) {
                 $topic = trim($topic);
-                if (!empty($topic)) {
-                    $pic = trim($actionPics[$idx] ?? '');
-                    $due = !empty($actionDueDates[$idx]) ? $actionDueDates[$idx] : null;
+                if (empty($topic)) continue;
+
+                $actId = !empty($actionIds[$idx]) ? (int)$actionIds[$idx] : 0;
+                $srcId = !empty($actionSourceIds[$idx]) ? (int)$actionSourceIds[$idx] : null;
+                $pic = trim($actionPics[$idx] ?? '');
+                $due = !empty($actionDueDates[$idx]) ? $actionDueDates[$idx] : null;
+                $prog = isset($actionProgress[$idx]) ? (int)$actionProgress[$idx] : 0;
+                if ($prog < 0) $prog = 0;
+                if ($prog > 100) $prog = 100;
+                $status = ($prog >= 100) ? 'Completed' : (($prog > 0) ? 'In Progress' : 'Pending');
+
+                if ($actId > 0) {
+                    // Update existing action in this MoM
                     Database::execute(
-                        "INSERT INTO deputi_meeting_actions (mom_id, action_topic, pic_name, due_date, status) VALUES (?, ?, ?, ?, 'Pending')",
-                        [$momId, $topic, $pic, $due]
+                        "UPDATE deputi_meeting_actions 
+                         SET action_topic = ?, pic_name = ?, due_date = ?, progress_pct = ?, status = ? 
+                         WHERE id = ? AND mom_id = ?",
+                        [$topic, $pic, $due, $prog, $status, $actId, $momId]
                     );
+                    $keptActionIds[] = $actId;
+                } else {
+                    // Insert new or carried action into this MoM
+                    Database::execute(
+                        "INSERT INTO deputi_meeting_actions 
+                         (mom_id, source_action_id, action_topic, pic_name, due_date, progress_pct, status) 
+                         VALUES (?, ?, ?, ?, ?, ?, ?)",
+                        [$momId, $srcId, $topic, $pic, $due, $prog, $status]
+                    );
+                    $newId = (int)Database::lastInsertId();
+                    $keptActionIds[] = $newId;
                 }
             }
+        }
+
+        // Hapus action item yang dihapus oleh user pada modal MoM ini
+        if (!empty($keptActionIds)) {
+            $inKept = implode(',', $keptActionIds);
+            Database::execute("DELETE FROM deputi_meeting_actions WHERE mom_id = ? AND id NOT IN ({$inKept})", [$momId]);
+        } elseif (isset($_POST['action_topics'])) {
+            Database::execute("DELETE FROM deputi_meeting_actions WHERE mom_id = ?", [$momId]);
         }
 
         // Update rekap realisasi MoM
@@ -686,13 +742,22 @@ class DeputiController extends Controller {
 
     public function toggleActionStatus(): void {
         $this->requireRole(['deputi_pendidikan', 'direktur_pendidikan', 'operator_yayasan']);
+        self::ensureMeetingActionColumns();
         $actionId = (int)($_POST['action_id'] ?? 0);
         $newStatus = $_POST['status'] ?? 'Pending';
+        $newProgress = isset($_POST['progress_pct']) ? (int)$_POST['progress_pct'] : ($newStatus === 'Completed' ? 100 : 0);
         $deputiId = (int)($_POST['deputi_id'] ?? Auth::id());
 
         $action = Database::fetch("SELECT * FROM deputi_meeting_actions WHERE id = ?", [$actionId]);
         if ($action) {
-            Database::execute("UPDATE deputi_meeting_actions SET status = ? WHERE id = ?", [$newStatus, $actionId]);
+            if ($newProgress >= 100) {
+                $newStatus = 'Completed';
+            } elseif ($newProgress > 0) {
+                $newStatus = 'In Progress';
+            } else {
+                $newStatus = 'Pending';
+            }
+            Database::execute("UPDATE deputi_meeting_actions SET status = ?, progress_pct = ? WHERE id = ?", [$newStatus, $newProgress, $actionId]);
             self::recalculateMomRealization((int)$action['mom_id']);
         }
 
@@ -701,15 +766,19 @@ class DeputiController extends Controller {
     }
 
     private static function recalculateMomRealization(int $momId): void {
-        $actions = Database::fetchAll("SELECT status FROM deputi_meeting_actions WHERE mom_id = ?", [$momId]);
+        self::ensureMeetingActionColumns();
+        $actions = Database::fetchAll("SELECT status, progress_pct FROM deputi_meeting_actions WHERE mom_id = ?", [$momId]);
         $total = count($actions);
         $completed = 0;
+        $totalProgress = 0;
         foreach ($actions as $a) {
-            if ($a['status'] === 'Completed') {
+            $prog = (int)($a['progress_pct'] ?? ($a['status'] === 'Completed' ? 100 : 0));
+            $totalProgress += $prog;
+            if ($prog >= 100 || $a['status'] === 'Completed') {
                 $completed++;
             }
         }
-        $pct = $total > 0 ? round(($completed / $total) * 100, 2) : 100.00;
+        $pct = $total > 0 ? round(($totalProgress / $total), 2) : 100.00;
         Database::execute(
             "UPDATE deputi_meeting_moms 
              SET total_commitments = ?, completed_commitments = ?, realization_pct = ? 
@@ -768,6 +837,7 @@ class DeputiController extends Controller {
      * AJAX Endpoint untuk data detail Notula MoM
      */
     public function getEventDetails(): void {
+        self::ensureMeetingActionColumns();
         $id = (int)($_GET['id'] ?? 0);
         $event = Database::fetch("SELECT e.*, u.name as unit_name FROM deputi_calendar_events e LEFT JOIN units u ON e.unit_id = u.id WHERE e.id = ?", [$id]);
         if (!$event) {
@@ -778,18 +848,64 @@ class DeputiController extends Controller {
         $mom = Database::fetch("SELECT * FROM deputi_meeting_moms WHERE event_id = ?", [$id]);
         $actions = [];
         if ($mom) {
-            $actions = Database::fetchAll("SELECT * FROM deputi_meeting_actions WHERE mom_id = ? ORDER BY id ASC", [$mom['id']]);
+            $actions = Database::fetchAll(
+                "SELECT a.*, 
+                        src.action_topic as src_topic, 
+                        prev_e.title as src_event_title, 
+                        prev_e.start_date as src_event_date
+                 FROM deputi_meeting_actions a
+                 LEFT JOIN deputi_meeting_actions src ON a.source_action_id = src.id
+                 LEFT JOIN deputi_meeting_moms prev_m ON src.mom_id = prev_m.id
+                 LEFT JOIN deputi_calendar_events prev_e ON prev_m.event_id = prev_e.id
+                 WHERE a.mom_id = ? 
+                 ORDER BY a.id ASC",
+                [$mom['id']]
+            );
         }
 
-        // Ambil komitmen rapat sebelumnya yang belum tuntas dengan topik/kategori yang sama
+        // Ambil komitmen rapat sebelumnya yang belum tuntas dengan kategori SAMA & unit SAMA (atau sama-sama semua unit)
+        $whereUnit = ($event['unit_id'] !== null && $event['unit_id'] !== '' && (int)$event['unit_id'] > 0)
+            ? "e.unit_id = " . (int)$event['unit_id']
+            : "(e.unit_id IS NULL OR e.unit_id = 0)";
+
+        $deputiClause = "";
+        $params = [$event['category']];
+        if (!empty($event['deputi_user_id'])) {
+            $deputiClause = "AND (e.deputi_user_id = ? OR e.deputi_user_id = 0)";
+            $params[] = (int)$event['deputi_user_id'];
+        }
+
+        $params[] = $id;
+        $params[] = $event['start_date'];
+
+        $savedSourceIds = !empty($actions) ? array_filter(array_column($actions, 'source_action_id')) : [];
+        $notInClause = "";
+        if (!empty($savedSourceIds)) {
+            $inList = implode(',', array_map('intval', $savedSourceIds));
+            $notInClause = "AND a.id NOT IN ({$inList})";
+        }
+
         $unfinishedPrevious = Database::fetchAll(
-            "SELECT a.*, e.title as prev_event_title, e.start_date as prev_date 
+            "SELECT a.*, e.title as prev_event_title, e.start_date as prev_date, u.name as unit_name
              FROM deputi_meeting_actions a 
              JOIN deputi_meeting_moms m ON a.mom_id = m.id 
              JOIN deputi_calendar_events e ON m.event_id = e.id 
-             WHERE e.category = ? AND e.id != ? AND e.start_date <= ? AND a.status != 'Completed' 
-             ORDER BY e.start_date DESC LIMIT 10",
-            [$event['category'], $id, $event['start_date']]
+             LEFT JOIN units u ON e.unit_id = u.id
+             WHERE e.category = ? 
+               AND {$whereUnit} 
+               {$deputiClause}
+               AND e.id != ? 
+               AND e.start_date <= ? 
+               AND (a.progress_pct < 100 AND a.status != 'Completed')
+               AND NOT EXISTS (
+                   SELECT 1 FROM deputi_meeting_actions child 
+                   JOIN deputi_meeting_moms cm ON child.mom_id = cm.id
+                   JOIN deputi_calendar_events ce ON cm.event_id = ce.id
+                   WHERE child.source_action_id = a.id AND ce.id != ?
+               )
+               {$notInClause}
+             ORDER BY e.start_date DESC, a.id ASC LIMIT 25",
+            array_merge($params, [$id])
         );
 
         echo json_encode([
@@ -801,7 +917,6 @@ class DeputiController extends Controller {
         ]);
         exit;
     }
-
     // =========================================================================
     // 4. STANDAR KPI KKM MAPEL DEPUTI & TAGGING MAPEL (OPERATOR SEKOLAH)
     // =========================================================================

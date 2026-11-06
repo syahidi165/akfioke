@@ -68,15 +68,13 @@ $renderMiniMonth = function($mNum, $mName, $year, $evList, $catColors, $isKepsek
 
                             if (!empty($dayEvs)) {
                                 $dotColor = $catColors[$dayEvs[0]['category']]['bg'] ?? '#2563eb';
-                                $tdClick = count($dayEvs) === 1 
-                                    ? 'onclick="openMomModal(' . (int)$dayEvs[0]['id'] . ')"'
-                                    : 'onclick="openAddEventModalWithDate(\'' . $dateStr . '\')"';
+                                $tdClick = 'onclick="handleDateCellClick(\'' . $dateStr . '\')" style="cursor: pointer;"';
                                 $rowHtml .= '<td class="has-event' . ($isSun ? ' sun-td' : '') . '" ' . $tdClick . '>' . $dateNum . '<span class="mini-event-dot" style="background: ' . $dotColor . ';"></span></td>';
                                 foreach ($dayEvs as $ev) {
                                     $monthNotes[] = ['date' => $dateNum, 'title' => $ev['title'], 'id' => $ev['id'], 'cat' => $ev['category']];
                                 }
                             } else {
-                                $tdAdd = !empty($isKepsek) ? '' : ' onclick="openAddEventModalWithDate(\'' . $dateStr . '\')"';
+                                $tdAdd = !empty($isKepsek) ? '' : ' onclick="handleDateCellClick(\'' . $dateStr . '\')" style="cursor: pointer;"';
                                 $rowHtml .= '<td' . $sunClass . $tdAdd . '>' . $dateNum . '</td>';
                             }
                             $dateNum++;
@@ -715,20 +713,50 @@ $eventsJson = json_encode($events, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS |
 </div>
 
 <!-- ========================================================================= -->
+<!-- MODAL 0: DAFTAR AGENDA PADA TANGGAL (MULTI-AGENDA SUPPORT)               -->
+<!-- ========================================================================= -->
+<div class="modal-overlay" id="dayEventsModal" style="display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.65); z-index: 9998; align-items: center; justify-content: center; padding: 20px;">
+    <div class="modal-container" style="max-width: 650px; max-height: 85vh; overflow-y: auto; border-radius: 12px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.2);">
+        <div class="modal-header" style="display: flex; justify-content: space-between; align-items: flex-start; padding: 16px 20px; border-bottom: 1px solid #e2e8f0; background: #f8fafc;">
+            <div>
+                <h3 class="card-title" id="dayEventsModalTitle" style="margin: 0; font-size: 1.125rem; color: #1e293b; font-weight: 700;">
+                    <i class="fa-solid fa-calendar-day" style="color: #2563eb;"></i> Agenda Tanggal
+                </h3>
+                <div id="dayEventsModalSubtitle" style="font-size: 0.8125rem; color: #64748b; margin-top: 2px;"></div>
+            </div>
+            <button type="button" class="btn btn-outline" onclick="closeDayEventsModal()" style="padding: 4px 10px; font-size: 1rem; line-height: 1; border-color: #cbd5e1;">&times;</button>
+        </div>
+        <div class="modal-body" style="padding: 18px 20px;">
+            <div id="dayEventsList" style="display: flex; flex-direction: column; gap: 10px;"></div>
+            
+            <div style="margin-top: 18px; padding-top: 14px; border-top: 1px dashed #cbd5e1; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                <span style="font-size: 0.8125rem; color: #64748b; font-weight: 500;">
+                    <i class="fa-solid fa-circle-question" style="color: #3b82f6;"></i> Ingin menjadwalkan rapat unit lain di tanggal ini?
+                </span>
+                <button type="button" class="btn btn-primary" id="btnAddNewEventOnDate" style="font-size: 0.8125rem; font-weight: 600; padding: 6px 14px;">
+                    <i class="fa-solid fa-plus-circle"></i> + Tambah Agenda Baru
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ========================================================================= -->
 <!-- MODAL 1: TAMBAH / EDIT AGENDA                                              -->
 <!-- ========================================================================= -->
 <div class="modal-overlay" id="addEventModal" style="display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.65); z-index: 9999; align-items: center; justify-content: center; padding: 20px;">
-    <div class="modal-container" style="max-width: 600px;">
+    <div class="modal-container" style="max-width: 600px; border-radius: 12px;">
         <form action="<?= $baseUrl ?>/deputi/calendar/save-event" method="POST">
             <?= CSRF::inputField() ?>
+            <input type="hidden" name="id" id="event_modal_id" value="0">
             <input type="hidden" name="deputi_user_id" value="<?= $deputiUserId ?>">
 
-            <div class="modal-header">
-                <h3 class="card-title" style="margin: 0; font-size: 1.125rem;">
+            <div class="modal-header" style="padding: 16px 20px; border-bottom: 1px solid #e2e8f0; background: #f8fafc;">
+                <h3 class="card-title" id="event_modal_header_title" style="margin: 0; font-size: 1.125rem; font-weight: 700;">
                     <i class="fa-solid fa-calendar-plus" style="color: #2563eb;"></i> Tambah Agenda Rapat &amp; Kegiatan
                 </h3>
             </div>
-            <div class="modal-body" style="display: flex; flex-direction: column; gap: 14px;">
+            <div class="modal-body" style="display: flex; flex-direction: column; gap: 14px; padding: 18px 20px;">
                 <div class="form-group">
                     <label class="form-label" style="font-weight: 600;">Judul Agenda / Rapat *</label>
                     <input type="text" name="title" id="event_modal_title" class="form-control" placeholder="Contoh: Weekly Meeting WM 1 - Pembahasan Kesiapan KBM" required>
@@ -749,7 +777,7 @@ $eventsJson = json_encode($events, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS |
                     </div>
                     <div class="form-group">
                         <label class="form-label" style="font-weight: 600;">Unit Terkait</label>
-                        <select name="unit_id" class="form-control">
+                        <select name="unit_id" id="event_modal_unit_id" class="form-control">
                             <option value="">-- Semua Unit / Lintas Yayasan --</option>
                             <?php foreach ($units as $u): ?>
                                 <option value="<?= $u['id'] ?>"><?= SecurityHelper::escape($u['name']) ?></option>
@@ -764,21 +792,21 @@ $eventsJson = json_encode($events, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS |
                     </div>
                     <div class="form-group">
                         <label class="form-label" style="font-weight: 600;">Waktu Mulai</label>
-                        <input type="time" name="start_time" class="form-control" value="08:30">
+                        <input type="time" name="start_time" id="event_modal_start_time" class="form-control" value="08:30">
                     </div>
                 </div>
                 <div class="form-group">
                     <label class="form-label" style="font-weight: 600;">Lokasi / Tautan Rapat</label>
-                    <input type="text" name="location" class="form-control" placeholder="Contoh: Ruang Rapat Yayasan / Google Meet">
+                    <input type="text" name="location" id="event_modal_location" class="form-control" placeholder="Contoh: Ruang Rapat Yayasan / Google Meet">
                 </div>
                 <div class="form-group">
                     <label class="form-label" style="font-weight: 600;">Deskripsi &amp; Pokok Bahasan</label>
-                    <textarea name="description" class="form-control" rows="2" placeholder="Tuliskan pokok agenda yang akan dibahas..."></textarea>
+                    <textarea name="description" id="event_modal_description" class="form-control" rows="2" placeholder="Tuliskan pokok agenda yang akan dibahas..."></textarea>
                 </div>
             </div>
-            <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 8px;">
+            <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 8px; padding: 14px 20px; border-top: 1px solid #e2e8f0; background: #f8fafc;">
                 <button type="button" class="btn btn-outline" onclick="closeAddEventModal()">Batal</button>
-                <button type="submit" class="btn btn-primary"><i class="fa-solid fa-save"></i> Jadwalkan Agenda</button>
+                <button type="submit" id="event_modal_submit_btn" class="btn btn-primary"><i class="fa-solid fa-save"></i> Jadwalkan Agenda</button>
             </div>
         </form>
     </div>
@@ -788,28 +816,28 @@ $eventsJson = json_encode($events, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS |
 <!-- MODAL 2: POP-UP NOTULA MoM & DAFTAR KOMITMEN TINDAK LANJUT                -->
 <!-- ========================================================================= -->
 <div class="modal-overlay" id="momModal" style="display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.65); z-index: 9999; align-items: center; justify-content: center; padding: 20px;">
-    <div class="modal-container" style="max-width: 800px; max-height: 90vh; overflow-y: auto;">
+    <div class="modal-container" style="max-width: 950px; width: 95vw; max-height: 92vh; overflow-y: auto; border-radius: 12px;">
         <form action="<?= $baseUrl ?>/deputi/calendar/save-mom" method="POST" enctype="multipart/form-data">
             <?= CSRF::inputField() ?>
             <input type="hidden" name="event_id" id="mom_event_id" value="0">
             <input type="hidden" name="deputi_id" value="<?= $deputiUserId ?>">
 
-            <div class="modal-header">
+            <div class="modal-header" style="padding: 16px 20px; border-bottom: 1px solid #e2e8f0; background: #f8fafc;">
                 <div>
-                    <h3 class="card-title" id="momModalTitle" style="margin: 0; font-size: 1.125rem;">
+                    <h3 class="card-title" id="momModalTitle" style="margin: 0; font-size: 1.125rem; font-weight: 700;">
                         <i class="fa-solid fa-file-signature" style="color: #0d9488;"></i> Notula Rapat (MoM) &amp; Komitmen Tindak Lanjut
                     </h3>
                     <div id="momEventSubtitle" style="font-size: 0.8125rem; color: #64748b; margin-top: 2px;"></div>
                 </div>
             </div>
 
-            <div class="modal-body" style="display: flex; flex-direction: column; gap: 16px;">
-                <!-- Rekap Agenda Belum Tuntas dari Rapat Lalu -->
-                <div id="prevUnfinishedBox" style="display: none; background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; padding: 12px 14px;">
-                    <div style="font-weight: 700; color: #92400e; font-size: 0.8125rem; margin-bottom: 6px;">
-                        <i class="fa-solid fa-clock-rotate-left"></i> Catatan Komitmen yang Belum Tuntas dari Rapat Sebelumnya:
+            <div class="modal-body" style="display: flex; flex-direction: column; gap: 16px; padding: 18px 20px;">
+                <!-- Rekap Komitmen Belum Tuntas Otomatis -->
+                <div id="prevUnfinishedBox" style="display: none; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 12px 14px;">
+                    <div style="font-weight: 700; color: #1e40af; font-size: 0.8125rem; margin-bottom: 4px;">
+                        <i class="fa-solid fa-clock-rotate-left"></i> Komitmen Terbawa Otomatis dari Rapat Sejenis Sebelumnya:
                     </div>
-                    <ul id="prevUnfinishedList" style="margin: 0; padding-left: 20px; font-size: 0.8125rem; color: #78350f;"></ul>
+                    <div id="prevUnfinishedInfo" style="font-size: 0.8125rem; color: #1e3a8a;"></div>
                 </div>
 
                 <div class="row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
@@ -826,37 +854,55 @@ $eventsJson = json_encode($events, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS |
 
                 <div class="form-group">
                     <label class="form-label" style="font-weight: 600;">Isi Notula Rapat &amp; Keputusan Musyawarah *</label>
-                    <textarea name="mom_content" id="mom_content" class="form-control" rows="4" placeholder="Tuliskan ringkasan jalannya rapat, hasil kesepakatan, dan keputusan rapat..." required></textarea>
+                    <textarea name="mom_content" id="mom_content" class="form-control" rows="3" placeholder="Tuliskan ringkasan jalannya rapat, hasil kesepakatan, dan keputusan rapat..." required></textarea>
                 </div>
 
                 <!-- Action Items Section -->
-                <div style="background: #f8fafc; border-radius: 8px; padding: 14px; border: 1px solid #e2e8f0;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                        <div style="font-weight: 700; font-size: 0.875rem; color: #1e293b;">
-                            <i class="fa-solid fa-list-check" style="color: #4f46e5;"></i> Butir Komitmen / Action Items (Tindak Lanjut)
+                <div style="background: #ffffff; border-radius: 8px; padding: 16px; border: 1px solid #cbd5e1; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span style="font-weight: 700; font-size: 0.9375rem; color: #1e293b;">
+                                <i class="fa-solid fa-list-check" style="color: #4f46e5;"></i> Butir Komitmen / Action Items (Tindak Lanjut)
+                            </span>
+                            <span id="momAvgRealizationWrapper" style="font-size: 0.75rem; font-weight: 600; color: #475569;">
+                                Realisasi Rata-rata: <span id="momAvgScoreBadge" style="display: inline-block; padding: 2px 8px; border-radius: 9999px; background: #e0f2fe; color: #0369a1; font-weight: 800;">0%</span>
+                            </span>
                         </div>
-                        <button type="button" class="btn btn-outline" onclick="addActionItemRow()" style="padding: 2px 8px; font-size: 11px;">
+                        <button type="button" class="btn btn-outline" id="btnMomAddAction" onclick="addActionItemRow()" style="padding: 4px 10px; font-size: 0.8125rem; font-weight: 600; color: #2563eb; border-color: #93c5fd;">
                             <i class="fa-solid fa-plus"></i> Tambah Butir
                         </button>
                     </div>
 
-                    <!-- Existing Actions Table -->
-                    <div id="existingActionsWrapper" style="margin-bottom: 10px;"></div>
-
-                    <!-- New Action Rows Container -->
-                    <div id="newActionsContainer" style="display: flex; flex-direction: column; gap: 8px;"></div>
+                    <!-- Unified Actions Table -->
+                    <div id="momActionsWrapper" style="overflow-x: auto; border: 1px solid #e2e8f0; border-radius: 8px;">
+                        <table id="momActionsTable" style="width: 100%; font-size: 0.8125rem; border-collapse: collapse; min-width: 750px;">
+                            <thead>
+                                <tr style="background: #f8fafc; color: #475569; border-bottom: 2px solid #e2e8f0;">
+                                    <th style="padding: 8px 6px; text-align: center; width: 36px;">No</th>
+                                    <th style="padding: 8px 8px;">Topik Komitmen &amp; Sumber</th>
+                                    <th style="padding: 8px 8px; width: 140px;">PIC</th>
+                                    <th style="padding: 8px 8px; width: 130px;">Tenggat</th>
+                                    <th style="padding: 8px 8px; width: 220px; text-align: center;">Progres Capaian (%)</th>
+                                    <th style="padding: 8px 8px; width: 100px; text-align: center;">Status</th>
+                                    <th style="padding: 8px 6px; width: 44px; text-align: center;">Aksi</th>
+                                </tr>
+                            </thead>
+                            <tbody id="momActionsTbody"></tbody>
+                        </table>
+                        <div id="momActionsEmpty" style="padding: 20px; text-align: center; color: #94a3b8; font-style: italic; font-size: 0.8125rem; display: none;">
+                            Belum ada komitmen untuk agenda ini. Klik <strong>+ Tambah Butir</strong> di atas untuk menambahkan.
+                        </div>
+                    </div>
                 </div>
             </div>
 
-            <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 8px;">
+            <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 8px; padding: 14px 20px; border-top: 1px solid #e2e8f0; background: #f8fafc;">
                 <button type="button" class="btn btn-outline" onclick="closeMomModal()">Tutup</button>
-                <button type="submit" class="btn btn-primary"><i class="fa-solid fa-save"></i> Simpan Notula &amp; Komitmen</button>
+                <button type="submit" id="btnSubmitMom" class="btn btn-primary"><i class="fa-solid fa-save"></i> Simpan Notula &amp; Komitmen</button>
             </div>
         </form>
     </div>
 </div>
-
-<!-- ========================================================================= -->
 <!-- MODAL 3: KIRIM UNDANGAN RAPAT                                             -->
 <!-- ========================================================================= -->
 <div class="modal-overlay" id="inviteModal" style="display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.65); z-index: 9999; align-items: center; justify-content: center; padding: 20px;">
@@ -1066,16 +1112,11 @@ function buildMiniMonthCard(mObj, baseYear, dateMap) {
                     var dotColor = categoryColors[dayEvents[0].category] ? categoryColors[dayEvents[0].category].bg : '#2563eb';
                     td.innerHTML = dateNum + '<span class="mini-event-dot" style="background:' + dotColor + ';"></span>';
 
-                    // Set onclick untuk membuka modal
-                    (function(evList, clickedDate) {
+                    (function(clickedDate) {
                         td.onclick = function() {
-                            if (evList.length === 1) {
-                                openMomModal(evList[0].id);
-                            } else {
-                                openAddEventModalWithDate(clickedDate);
-                            }
+                            handleDateCellClick(clickedDate);
                         };
-                    })(dayEvents, dateStr);
+                    })(dateStr);
 
                     // Kumpulkan catatan agenda bulan ini
                     dayEvents.forEach(function(ev) {
@@ -1085,7 +1126,7 @@ function buildMiniMonthCard(mObj, baseYear, dateMap) {
                     // Klik tanggal kosong -> tambah agenda di tanggal tersebut
                     (function(clickedDate) {
                         td.onclick = function() {
-                            openAddEventModalWithDate(clickedDate);
+                            handleDateCellClick(clickedDate);
                         };
                     })(dateStr);
                 }
@@ -1245,11 +1286,11 @@ function renderMonthlyGrid() {
         var numSpan = '<span class="full-cell-num' + (isToday ? ' today' : '') + '">' + d + '</span>';
         cell.innerHTML = numSpan;
 
-        // Onclick cell -> tambah agenda di tanggal ini
+        // Onclick cell -> buka agenda/tambah agenda di tanggal ini
         (function(clickedDate) {
             cell.onclick = function(e) {
                 if (e.target.closest('.full-event-chip')) return;
-                openAddEventModalWithDate(clickedDate);
+                handleDateCellClick(clickedDate);
             };
         })(dateStr);
 
@@ -1284,12 +1325,174 @@ function renderMonthlyGrid() {
 }
 
 // -----------------------------------------------------------------------------
-// MODAL FUNCTIONS
+// MODAL FUNCTIONS & MULTI-AGENDA + ACTION COMMITMENT WITH PROGRESS
+// -----------------------------------------------------------------------------
+function escapeHtml(str) {
+    if (!str) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
+function formatDateIndonesian(dateStr) {
+    if (!dateStr) return '';
+    var parts = dateStr.split('-');
+    if (parts.length !== 3) return dateStr;
+    var d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+    var days = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+    var dayName = days[d.getDay()] || '';
+    var mName = monthNames[d.getMonth()] || '';
+    return dayName + ', ' + parts[2] + ' ' + mName + ' ' + parts[0];
+}
+
+function getEventsForDate(dateStr) {
+    var evs = getFilteredEvents();
+    return evs.filter(function(e) { return e.start_date === dateStr; });
+}
+
+function getProgressColor(pct) {
+    pct = parseInt(pct, 10) || 0;
+    if (pct >= 100) return '#16a34a'; // Hijau Selesai
+    if (pct >= 70) return '#0284c7';  // Biru Maju
+    if (pct >= 30) return '#d97706';  // Kuning Proses
+    if (pct > 0) return '#ea580c';   // Orange Awal
+    return '#dc2626';                // Merah Pending
+}
+
+function getStatusBadgeStyle(pct) {
+    pct = parseInt(pct, 10) || 0;
+    if (pct >= 100) return 'background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; font-weight: 700;';
+    if (pct > 0) return 'background: #fef3c7; color: #b45309; border: 1px solid #fde68a; font-weight: 700;';
+    return 'background: #fee2e2; color: #b91c1c; border: 1px solid #fecaca; font-weight: 700;';
+}
+
+function getStatusBadgeText(pct) {
+    pct = parseInt(pct, 10) || 0;
+    if (pct >= 100) return '<i class="fa-solid fa-check-circle"></i> Selesai (100%)';
+    if (pct > 0) return '<i class="fa-solid fa-spinner"></i> Proses (' + pct + '%)';
+    return '<i class="fa-solid fa-hourglass-start"></i> Pending (0%)';
+}
+
+// Handler klik cell tanggal (Yearly Mini Calendar & Monthly Full Calendar)
+function handleDateCellClick(dateStr) {
+    var dayEvs = getEventsForDate(dateStr);
+    if (dayEvs.length > 0) {
+        openDayEventsModal(dateStr, dayEvs);
+    } else {
+        if (!isKepsek) {
+            openAddEventModalWithDate(dateStr);
+        }
+    }
+}
+
+// -----------------------------------------------------------------------------
+// MODAL 0: DAY EVENTS LIST (MULTI-AGENDA SUPPORT)
+// -----------------------------------------------------------------------------
+function openDayEventsModal(dateStr, dayEvs) {
+    var m = document.getElementById('dayEventsModal');
+    if (!m) return;
+
+    var formattedDate = formatDateIndonesian(dateStr);
+    document.getElementById('dayEventsModalTitle').innerHTML = '<i class="fa-solid fa-calendar-day" style="color: #2563eb;"></i> Agenda: ' + formattedDate;
+    document.getElementById('dayEventsModalSubtitle').innerText = 'Terdapat ' + dayEvs.length + ' agenda terdaftar pada tanggal ini';
+
+    var container = document.getElementById('dayEventsList');
+    container.innerHTML = '';
+
+    dayEvs.forEach(function(ev, idx) {
+        var cColor = categoryColors[ev.category] || { bg: '#2563eb', text: '#ffffff' };
+        var unitBadge = ev.unit_name 
+            ? '<span class="badge" style="background:#e0f2fe; color:#0369a1; font-weight:600;"><i class="fa-solid fa-school"></i> ' + escapeHtml(ev.unit_name) + '</span>'
+            : '<span class="badge" style="background:#f3e8ff; color:#6b21a8; font-weight:600;"><i class="fa-solid fa-layer-group"></i> Semua Unit / Lintas Yayasan</span>';
+
+        var timeText = (ev.start_time ? ev.start_time.slice(0, 5) : '08:30') + (ev.end_time ? ' - ' + ev.end_time.slice(0, 5) : '');
+        var momTuntas = ev.mom_id 
+            ? '<span class="badge" style="background:#dcfce7; color:#15803d; font-weight:700;"><i class="fa-solid fa-check-circle"></i> Notula MoM (' + Math.round(ev.realization_pct || 0) + '%)</span>'
+            : '<span class="badge" style="background:#fef3c7; color:#b45309;"><i class="fa-solid fa-clock"></i> Belum ada Notula</span>';
+
+        var card = document.createElement('div');
+        card.style.cssText = 'border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px 14px; background: #ffffff; box-shadow: 0 1px 3px rgba(0,0,0,0.05); display: flex; flex-direction: column; gap: 8px; border-left: 4px solid ' + cColor.bg + ';';
+
+        var topHtml = '<div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px;">' +
+                      '  <div>' +
+                      '    <div style="font-weight: 700; font-size: 0.9375rem; color: #1e293b;">' + (idx + 1) + '. ' + escapeHtml(ev.title) + '</div>' +
+                      '    <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 5px;">' +
+                      '      <span class="badge" style="background:' + cColor.bg + '; color:' + cColor.text + '; font-size: 11px;">' + escapeHtml(ev.category) + '</span>' +
+                      '      ' + unitBadge +
+                      '      ' + momTuntas +
+                      '    </div>' +
+                      '  </div>' +
+                      '  <div style="font-size: 0.8125rem; font-weight: 600; color: #475569; white-space: nowrap;"><i class="fa-regular fa-clock"></i> ' + timeText + '</div>' +
+                      '</div>';
+
+        if (ev.location) {
+            topHtml += '<div style="font-size: 0.75rem; color: #64748b;"><i class="fa-solid fa-location-dot"></i> ' + escapeHtml(ev.location) + '</div>';
+        }
+
+        var btnHtml = '<div style="display: flex; gap: 6px; justify-content: flex-end; margin-top: 6px; padding-top: 8px; border-top: 1px dashed #f1f5f9; flex-wrap: wrap;">' +
+                      '  <button type="button" class="btn btn-primary" style="padding: 4px 12px; font-size: 0.8125rem;" onclick="closeDayEventsModal(); openMomModal(' + ev.id + ');">' +
+                      '    <i class="fa-solid fa-file-signature"></i> Notula &amp; Komitmen (MoM)' +
+                      '  </button>';
+
+        if (!isKepsek) {
+            btnHtml += '  <button type="button" class="btn btn-outline" style="padding: 4px 10px; font-size: 0.8125rem;" onclick="closeDayEventsModal(); openEditEventModal(' + ev.id + ');">' +
+                       '    <i class="fa-solid fa-pen-to-square"></i> Edit' +
+                       '  </button>' +
+                       '  <button type="button" class="btn btn-outline" style="padding: 4px 10px; font-size: 0.8125rem;" onclick="closeDayEventsModal(); openInviteModal(' + ev.id + ', \'' + escapeHtml(ev.title).replace(/'/g, "\\'") + '\');">' +
+                       '    <i class="fa-solid fa-paper-plane"></i> Undangan' +
+                       '  </button>';
+        }
+
+        btnHtml += '</div>';
+
+        card.innerHTML = topHtml + btnHtml;
+        container.appendChild(card);
+    });
+
+    var btnAdd = document.getElementById('btnAddNewEventOnDate');
+    if (btnAdd) {
+        if (isKepsek) {
+            btnAdd.style.display = 'none';
+        } else {
+            btnAdd.style.display = 'inline-flex';
+            btnAdd.onclick = function() {
+                closeDayEventsModal();
+                openAddEventModalWithDate(dateStr);
+            };
+        }
+    }
+
+    m.style.display = 'flex';
+    m.classList.add('active');
+}
+
+function closeDayEventsModal() {
+    var m = document.getElementById('dayEventsModal');
+    if (m) {
+        m.style.display = 'none';
+        m.classList.remove('active');
+    }
+}
+
+// -----------------------------------------------------------------------------
+// MODAL 1: TAMBAH / EDIT AGENDA
 // -----------------------------------------------------------------------------
 function openAddEventModal() {
     if (isKepsek) return;
+    document.getElementById('event_modal_id').value = '0';
     document.getElementById('event_modal_title').value = '';
+    document.getElementById('event_modal_category').value = 'Weekly Meeting';
+    document.getElementById('event_modal_unit_id').value = '';
     document.getElementById('event_modal_date').value = new Date().toISOString().slice(0, 10);
+    document.getElementById('event_modal_start_time').value = '08:30';
+    document.getElementById('event_modal_location').value = '';
+    document.getElementById('event_modal_description').value = '';
+    document.getElementById('event_modal_header_title').innerHTML = '<i class="fa-solid fa-calendar-plus" style="color: #2563eb;"></i> Tambah Agenda Rapat &amp; Kegiatan';
+    document.getElementById('event_modal_submit_btn').innerHTML = '<i class="fa-solid fa-save"></i> Jadwalkan Agenda';
+
     var m = document.getElementById('addEventModal');
     m.style.display = 'flex';
     m.classList.add('active');
@@ -1297,8 +1500,27 @@ function openAddEventModal() {
 
 function openAddEventModalWithDate(dateStr) {
     if (isKepsek) return;
-    document.getElementById('event_modal_title').value = '';
+    openAddEventModal();
     document.getElementById('event_modal_date').value = dateStr;
+}
+
+function openEditEventModal(eventId) {
+    if (isKepsek) return;
+    var ev = allEvents.find(function(e) { return parseInt(e.id, 10) === parseInt(eventId, 10); });
+    if (!ev) return;
+
+    document.getElementById('event_modal_id').value = ev.id;
+    document.getElementById('event_modal_title').value = ev.title;
+    document.getElementById('event_modal_category').value = ev.category;
+    document.getElementById('event_modal_unit_id').value = ev.unit_id || '';
+    document.getElementById('event_modal_date').value = ev.start_date;
+    document.getElementById('event_modal_start_time').value = ev.start_time ? ev.start_time.slice(0, 5) : '08:30';
+    document.getElementById('event_modal_location').value = ev.location || '';
+    document.getElementById('event_modal_description').value = ev.description || '';
+
+    document.getElementById('event_modal_header_title').innerHTML = '<i class="fa-solid fa-pen-to-square" style="color: #2563eb;"></i> Edit Agenda Rapat &amp; Kegiatan';
+    document.getElementById('event_modal_submit_btn').innerHTML = '<i class="fa-solid fa-save"></i> Perbarui Agenda';
+
     var m = document.getElementById('addEventModal');
     m.style.display = 'flex';
     m.classList.add('active');
@@ -1306,10 +1528,15 @@ function openAddEventModalWithDate(dateStr) {
 
 function closeAddEventModal() {
     var m = document.getElementById('addEventModal');
-    m.style.display = 'none';
-    m.classList.remove('active');
+    if (m) {
+        m.style.display = 'none';
+        m.classList.remove('active');
+    }
 }
 
+// -----------------------------------------------------------------------------
+// MODAL 3: KIRIM UNDANGAN RAPAT
+// -----------------------------------------------------------------------------
 function openInviteModal(eventId, title) {
     document.getElementById('invite_event_id').value = eventId;
     document.getElementById('inviteEventTitle').innerText = title;
@@ -1317,16 +1544,22 @@ function openInviteModal(eventId, title) {
     m.style.display = 'flex';
     m.classList.add('active');
 }
+
 function closeInviteModal() {
     var m = document.getElementById('inviteModal');
-    m.style.display = 'none';
-    m.classList.remove('active');
+    if (m) {
+        m.style.display = 'none';
+        m.classList.remove('active');
+    }
 }
 
+// -----------------------------------------------------------------------------
+// MODAL 2: NOTULA MoM & BUTIR KOMITMEN TINDAK LANJUT
+// -----------------------------------------------------------------------------
 function openMomModal(eventId) {
     document.getElementById('mom_event_id').value = eventId;
-    document.getElementById('newActionsContainer').innerHTML = '';
-    document.getElementById('existingActionsWrapper').innerHTML = '<div style="text-align:center; padding: 10px;"><i class="fa-solid fa-spinner fa-spin"></i> Memuat data notula...</div>';
+    var tbody = document.getElementById('momActionsTbody');
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding: 20px;"><i class="fa-solid fa-spinner fa-spin"></i> Memuat data notula &amp; komitmen...</td></tr>';
 
     fetch('<?= $baseUrl ?>/deputi/calendar/get-event-details?id=' + eventId)
         .then(function(res) { return res.json(); })
@@ -1336,75 +1569,96 @@ function openMomModal(eventId) {
                 return;
             }
             var readOnly = isKepsek;
-            document.getElementById('momModalTitle').innerText = (readOnly ? 'Detail Notula: ' : 'Notula: ') + data.event.title;
-            document.getElementById('momEventSubtitle').innerText = (data.event.unit_name || 'Lintas Yayasan') + ' • ' + data.event.start_date + ' ' + (data.event.start_time || '');
+            document.getElementById('momModalTitle').innerHTML = '<i class="fa-solid fa-file-signature" style="color: #0d9488;"></i> ' + (readOnly ? 'Detail Notula: ' : 'Notula: ') + escapeHtml(data.event.title);
+            document.getElementById('momEventSubtitle').innerText = (data.event.unit_name || 'Semua Unit / Lintas Yayasan') + ' • ' + data.event.start_date + ' ' + (data.event.start_time ? data.event.start_time.slice(0, 5) : '08:30');
             document.getElementById('mom_meeting_date').value = (data.mom && data.mom.meeting_date) ? data.mom.meeting_date : data.event.start_date;
             document.getElementById('mom_content').value = (data.mom && data.mom.mom_content) ? data.mom.mom_content : '';
 
-            // Kontrol Mode Read-Only untuk Kepala Sekolah
+            // Read-only controls untuk Kepala Sekolah
             document.getElementById('mom_meeting_date').readOnly = readOnly;
             document.getElementById('mom_content').readOnly = readOnly;
-            var fileInputGroup = document.querySelector('input[name="mom_file"]')?.closest('.form-group');
-            if (fileInputGroup) {
-                fileInputGroup.style.display = readOnly ? 'none' : '';
-            }
-            var btnAddAction = document.querySelector('#momModal button[onclick="addActionItemRow()"]');
-            if (btnAddAction) {
-                btnAddAction.style.display = readOnly ? 'none' : '';
-            }
-            var btnSubmitMom = document.querySelector('#momModal button[type="submit"]');
-            if (btnSubmitMom) {
-                btnSubmitMom.style.display = readOnly ? 'none' : '';
-            }
+            var fileGroup = document.querySelector('input[name="mom_file"]')?.closest('.form-group');
+            if (fileGroup) fileGroup.style.display = readOnly ? 'none' : '';
+            var btnAddAction = document.getElementById('btnMomAddAction');
+            if (btnAddAction) btnAddAction.style.display = readOnly ? 'none' : 'inline-flex';
+            var btnSubmitMom = document.getElementById('btnSubmitMom');
+            if (btnSubmitMom) btnSubmitMom.style.display = readOnly ? 'none' : 'inline-flex';
 
             var fileSpan = document.getElementById('momCurrentFile');
             if (data.mom && data.mom.file_path) {
-                fileSpan.innerHTML = '<i class="fa-solid fa-paperclip"></i> File tersimpan: <a href="' + data.mom.file_path + '" target="_blank">Lihat Dokumen</a>';
+                fileSpan.innerHTML = '<i class="fa-solid fa-paperclip"></i> Dokumen terlampir: <a href="' + data.mom.file_path + '" target="_blank" style="font-weight:600; text-decoration:underline;">Buka File Lampiran</a>';
             } else {
                 fileSpan.innerHTML = '';
             }
 
-            // Unfinished from previous
-            var prevBox = document.getElementById('prevUnfinishedBox');
-            var prevList = document.getElementById('prevUnfinishedList');
-            if (data.unfinishedPrevious && data.unfinishedPrevious.length > 0) {
-                prevList.innerHTML = '';
-                data.unfinishedPrevious.forEach(function(item) {
-                    var li = document.createElement('li');
-                    li.innerHTML = '<strong>' + item.action_topic + '</strong> (PIC: ' + (item.pic_name || '-') + ') &bull; <em>Dari: ' + item.prev_event_title + ' (' + item.prev_date + ')</em>';
-                    prevList.appendChild(li);
+            // Bersihkan baris tabel aksi
+            tbody.innerHTML = '';
+
+            var combinedActions = [];
+
+            // 1. Aksi yang sudah tersimpan di MoM ini
+            if (data.actions && data.actions.length > 0) {
+                data.actions.forEach(function(a) {
+                    combinedActions.push({
+                        id: a.id,
+                        source_action_id: a.source_action_id || '',
+                        action_topic: a.action_topic,
+                        pic_name: a.pic_name,
+                        due_date: a.due_date,
+                        progress_pct: (a.progress_pct !== null && a.progress_pct !== undefined) ? parseInt(a.progress_pct, 10) : (a.status === 'Completed' ? 100 : 0),
+                        status: a.status,
+                        src_event_title: a.src_event_title,
+                        src_event_date: a.src_event_date,
+                        is_carried: !!a.source_action_id
+                    });
                 });
+            }
+
+            // 2. Aksi belum tuntas dari rapat sejenis sebelumnya yang BELUM ada di MoM ini (Auto Carry-Over)
+            var autoCarriedCount = 0;
+            if (data.unfinishedPrevious && data.unfinishedPrevious.length > 0) {
+                data.unfinishedPrevious.forEach(function(item) {
+                    var alreadyIn = combinedActions.some(function(ca) {
+                        return ca.source_action_id && parseInt(ca.source_action_id, 10) === parseInt(item.id, 10);
+                    });
+                    if (!alreadyIn) {
+                        combinedActions.push({
+                            id: '', // belum tersimpan pada MoM ini
+                            source_action_id: item.id,
+                            action_topic: item.action_topic,
+                            pic_name: item.pic_name,
+                            due_date: item.due_date,
+                            progress_pct: parseInt(item.progress_pct || 0, 10),
+                            status: item.status || 'Pending',
+                            src_event_title: item.prev_event_title,
+                            src_event_date: item.prev_date,
+                            is_carried: true
+                        });
+                        autoCarriedCount++;
+                    }
+                });
+            }
+
+            // Banner info carry-over
+            var prevBox = document.getElementById('prevUnfinishedBox');
+            var prevInfo = document.getElementById('prevUnfinishedInfo');
+            if (autoCarriedCount > 0) {
+                prevInfo.innerHTML = '✨ <strong>' + autoCarriedCount + ' butir komitmen</strong> dari rapat <em>' + escapeHtml(data.event.category) + ' (' + escapeHtml(data.event.unit_name || 'Semua Unit') + ')</em> sebelumnya <strong>otomatis dimuat</strong> ke tabel di bawah untuk ditindaklanjuti progresnya.';
+                prevBox.style.display = 'block';
+            } else if (combinedActions.some(function(a) { return a.is_carried; })) {
+                prevInfo.innerHTML = '<i class="fa-solid fa-circle-check" style="color: #16a34a;"></i> Komitmen lanjutan dari rapat sejenis sebelumnya aktif terpantau di tabel di bawah.';
                 prevBox.style.display = 'block';
             } else {
                 prevBox.style.display = 'none';
             }
 
-            // Existing actions table
-            var exWrapper = document.getElementById('existingActionsWrapper');
-            if (data.actions && data.actions.length > 0) {
-                var html = '<table style="width: 100%; font-size: 0.8125rem; border-collapse: collapse;">' +
-                           '<tr style="background:#e2e8f0; font-weight:700;"><th style="padding:4px 8px;">Topik Komitmen</th><th style="padding:4px 8px;">PIC</th><th style="padding:4px 8px;">Tenggat</th><th style="padding:4px 8px; text-align:center;">Status</th></tr>';
-                data.actions.forEach(function(a) {
-                    var isDone = a.status === 'Completed';
-                    var btnOrBadge = '';
-                    if (readOnly) {
-                        btnOrBadge = '<span class="badge" style="font-size:10px; padding:3px 8px; background:' + (isDone ? '#dcfce7' : '#fee2e2') + '; color:' + (isDone ? '#15803d' : '#b91c1c') + ';">' +
-                                     (isDone ? '<i class="fa-solid fa-check"></i> Selesai' : '<i class="fa-solid fa-hourglass-half"></i> Pending') + '</span>';
-                    } else {
-                        btnOrBadge = '<button type="button" class="btn" style="padding:2px 8px; font-size:10px; background:' + (isDone ? '#dcfce7' : '#fee2e2') + '; color:' + (isDone ? '#15803d' : '#b91c1c') + ';" onclick="toggleAction(' + a.id + ', \'' + (isDone ? 'Pending' : 'Completed') + '\')">' +
-                                     (isDone ? '<i class="fa-solid fa-check"></i> Selesai' : '<i class="fa-solid fa-hourglass-half"></i> Pending') + '</button>';
-                    }
-                    html += '<tr style="border-bottom:1px solid #e2e8f0;">' +
-                            '<td style="padding:6px 8px;">' + a.action_topic + '</td>' +
-                            '<td style="padding:6px 8px;">' + (a.pic_name || '-') + '</td>' +
-                            '<td style="padding:6px 8px;">' + (a.due_date || '-') + '</td>' +
-                            '<td style="padding:6px 8px; text-align:center;">' + btnOrBadge + '</td></tr>';
-                });
-                html += '</table>';
-                exWrapper.innerHTML = html;
-            } else {
-                exWrapper.innerHTML = '<div style="font-size:0.75rem; color:#94a3b8; font-style:italic;">Belum ada komitmen aksi tercatat. Klik Tambah Butir di atas.</div>';
-            }
+            // Render baris ke tabel
+            combinedActions.forEach(function(item) {
+                addActionItemRow(item, readOnly);
+            });
+
+            renumberActionRows();
+            recalculateModalAvgScore();
 
             var m = document.getElementById('momModal');
             m.style.display = 'flex';
@@ -1414,22 +1668,197 @@ function openMomModal(eventId) {
 
 function closeMomModal() {
     var m = document.getElementById('momModal');
-    m.style.display = 'none';
-    m.classList.remove('active');
+    if (m) {
+        m.style.display = 'none';
+        m.classList.remove('active');
+    }
 }
 
-function addActionItemRow() {
-    var c = document.getElementById('newActionsContainer');
-    var div = document.createElement('div');
-    div.style.display = 'grid';
-    div.style.gridTemplateColumns = '2fr 1fr 1fr auto';
-    div.style.gap = '6px';
-    div.style.alignItems = 'center';
-    div.innerHTML = '<input type="text" name="action_topics[]" class="form-control" style="font-size:0.8125rem;" placeholder="Poin komitmen / aksi..." required>' +
-                    '<input type="text" name="action_pics[]" class="form-control" style="font-size:0.8125rem;" placeholder="Nama PIC">' +
-                    '<input type="date" name="action_due_dates[]" class="form-control" style="font-size:0.8125rem;">' +
-                    '<button type="button" class="btn btn-outline" style="padding:4px 8px; color:#dc2626;" onclick="this.parentElement.remove()"><i class="fa-solid fa-times"></i></button>';
-    c.appendChild(div);
+// Tambah Baris Butir Komitmen ke Tabel
+function addActionItemRow(item, readOnly) {
+    if (readOnly === undefined) readOnly = isKepsek;
+    item = item || {
+        id: '',
+        source_action_id: '',
+        action_topic: '',
+        pic_name: '',
+        due_date: '',
+        progress_pct: 0,
+        status: 'Pending',
+        is_carried: false
+    };
+
+    var tbody = document.getElementById('momActionsTbody');
+    var tr = document.createElement('tr');
+    tr.style.borderBottom = '1px solid #e2e8f0';
+
+    var progress = parseInt(item.progress_pct || 0, 10);
+    if (progress < 0) progress = 0;
+    if (progress > 100) progress = 100;
+
+    var sourceBadge = '';
+    if (item.is_carried) {
+        var srcText = (item.src_event_title ? item.src_event_title : 'Rapat Lalu') + (item.src_event_date ? ' (' + item.src_event_date + ')' : '');
+        sourceBadge = '<div style="margin-top: 4px;"><span class="badge" style="background:#fef3c7; color:#92400e; font-size:10px; font-weight:600; padding: 2px 6px;"><i class="fa-solid fa-clock-rotate-left"></i> Lanjutan dari ' + escapeHtml(srcText) + '</span></div>';
+    } else {
+        sourceBadge = '<div style="margin-top: 4px;"><span class="badge" style="background:#e0e7ff; color:#3730a3; font-size:10px; font-weight:600; padding: 2px 6px;"><i class="fa-solid fa-asterisk"></i> Baru</span></div>';
+    }
+
+    var html = '<td class="action-row-num" style="padding: 8px 6px; text-align: center; font-weight: 700; color: #64748b; vertical-align: middle;">-</td>' +
+               '<td style="padding: 8px 8px; vertical-align: top;">' +
+               '  <input type="hidden" name="action_ids[]" value="' + (item.id || '') + '">' +
+               '  <input type="hidden" name="action_source_ids[]" value="' + (item.source_action_id || '') + '">' +
+               '  <input type="text" name="action_topics[]" class="form-control" style="font-size: 0.8125rem; padding: 5px 8px; font-weight: 500;" value="' + escapeHtml(item.action_topic) + '" placeholder="Topik komitmen / butir kesepakatan..." required ' + (readOnly ? 'readonly' : '') + '>' +
+               sourceBadge +
+               '</td>' +
+               '<td style="padding: 8px 8px; vertical-align: top;">' +
+               '  <input type="text" name="action_pics[]" class="form-control" style="font-size: 0.8125rem; padding: 5px 8px;" value="' + escapeHtml(item.pic_name || '') + '" placeholder="Nama PIC" ' + (readOnly ? 'readonly' : '') + '>' +
+               '</td>' +
+               '<td style="padding: 8px 8px; vertical-align: top;">' +
+               '  <input type="date" name="action_due_dates[]" class="form-control" style="font-size: 0.8125rem; padding: 5px 6px;" value="' + (item.due_date || '') + '" ' + (readOnly ? 'readonly' : '') + '>' +
+               '</td>' +
+               '<td style="padding: 8px 8px; vertical-align: top;">' +
+               '  <div style="display: flex; flex-direction: column; gap: 4px;">' +
+               '    <div style="display: flex; align-items: center; gap: 8px;">' +
+               '      <input type="range" min="0" max="100" step="5" class="action-progress-range" value="' + progress + '" style="flex: 1; accent-color: #2563eb; cursor: pointer;" oninput="syncActionProgress(this, \'range\')" ' + (readOnly ? 'disabled' : '') + '>' +
+               '      <div style="display: flex; align-items: center; width: 62px;">' +
+               '        <input type="number" min="0" max="100" step="1" name="action_progress[]" class="form-control action-progress-num" value="' + progress + '" style="font-size: 0.8125rem; padding: 2px 4px; text-align: right; font-weight: 700;" oninput="syncActionProgress(this, \'num\')" ' + (readOnly ? 'readonly' : '') + '>' +
+               '        <span style="font-size: 11px; margin-left: 2px; font-weight: bold; color: #475569;">%</span>' +
+               '      </div>' +
+               '    </div>' +
+               '    <div style="height: 5px; background: #e2e8f0; border-radius: 9999px; overflow: hidden;">' +
+               '      <div class="action-progress-bar" style="width: ' + progress + '%; height: 100%; background: ' + getProgressColor(progress) + '; transition: width 0.2s, background-color 0.2s;"></div>' +
+               '    </div>';
+
+    if (!readOnly) {
+        html += '    <div style="display: flex; gap: 2px; justify-content: space-between; margin-top: 2px;">' +
+                '      <button type="button" class="btn" style="padding: 1px 5px; font-size: 10px; background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; border-radius: 4px;" onclick="setActionProgressPreset(this, 0)">0%</button>' +
+                '      <button type="button" class="btn" style="padding: 1px 5px; font-size: 10px; background: #fff7ed; color: #c2410c; border: 1px solid #fed7aa; border-radius: 4px;" onclick="setActionProgressPreset(this, 25)">25%</button>' +
+                '      <button type="button" class="btn" style="padding: 1px 5px; font-size: 10px; background: #fefce8; color: #a16207; border: 1px solid #fef08a; border-radius: 4px;" onclick="setActionProgressPreset(this, 50)">50%</button>' +
+                '      <button type="button" class="btn" style="padding: 1px 5px; font-size: 10px; background: #f0f9ff; color: #0369a1; border: 1px solid #bae6fd; border-radius: 4px;" onclick="setActionProgressPreset(this, 75)">75%</button>' +
+                '      <button type="button" class="btn" style="padding: 1px 5px; font-size: 10px; background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; border-radius: 4px; font-weight: bold;" onclick="setActionProgressPreset(this, 100)">100%</button>' +
+                '    </div>';
+    }
+
+    html += '  </div>' +
+            '</td>' +
+            '<td style="padding: 8px 8px; text-align: center; vertical-align: middle;">' +
+            '  <span class="action-status-badge badge" style="font-size: 10px; padding: 4px 6px; ' + getStatusBadgeStyle(progress) + '">' +
+            getStatusBadgeText(progress) +
+            '  </span>' +
+            '</td>' +
+            '<td style="padding: 8px 6px; text-align: center; vertical-align: middle;">';
+
+    if (!readOnly) {
+        html += '<button type="button" class="btn btn-outline" style="padding: 4px 8px; font-size: 11px; color: #dc2626; border-color: #fca5a5;" onclick="removeActionRow(this)" title="Hapus Butir Komitmen"><i class="fa-solid fa-trash"></i></button>';
+    } else {
+        html += '<span style="color:#94a3b8;">-</span>';
+    }
+
+    html += '</td>';
+
+    tr.innerHTML = html;
+    tbody.appendChild(tr);
+
+    renumberActionRows();
+    recalculateModalAvgScore();
+}
+
+function removeActionRow(btn) {
+    var tr = btn.closest('tr');
+    if (tr) {
+        tr.remove();
+        renumberActionRows();
+        recalculateModalAvgScore();
+    }
+}
+
+function renumberActionRows() {
+    var rows = document.querySelectorAll('#momActionsTbody tr');
+    rows.forEach(function(r, idx) {
+        var numCell = r.querySelector('.action-row-num');
+        if (numCell) numCell.innerText = (idx + 1);
+    });
+}
+
+function syncActionProgress(el, source) {
+    var tr = el.closest('tr');
+    if (!tr) return;
+
+    var rangeInput = tr.querySelector('.action-progress-range');
+    var numInput = tr.querySelector('.action-progress-num');
+    var bar = tr.querySelector('.action-progress-bar');
+    var badge = tr.querySelector('.action-status-badge');
+
+    var val = (source === 'range') ? parseInt(rangeInput.value, 10) : parseInt(numInput.value, 10);
+    if (isNaN(val)) val = 0;
+    if (val < 0) val = 0;
+    if (val > 100) val = 100;
+
+    rangeInput.value = val;
+    numInput.value = val;
+    if (bar) {
+        bar.style.width = val + '%';
+        bar.style.background = getProgressColor(val);
+    }
+    if (badge) {
+        badge.style.cssText = 'font-size: 10px; padding: 4px 6px; ' + getStatusBadgeStyle(val);
+        badge.innerHTML = getStatusBadgeText(val);
+    }
+    recalculateModalAvgScore();
+}
+
+function setActionProgressPreset(btn, presetVal) {
+    var tr = btn.closest('tr');
+    if (!tr) return;
+    var rangeInput = tr.querySelector('.action-progress-range');
+    if (rangeInput) {
+        rangeInput.value = presetVal;
+        syncActionProgress(rangeInput, 'range');
+    }
+}
+
+function recalculateModalAvgScore() {
+    var numInputs = document.querySelectorAll('#momActionsTbody .action-progress-num');
+    var badge = document.getElementById('momAvgScoreBadge');
+    var emptyDiv = document.getElementById('momActionsEmpty');
+    var table = document.getElementById('momActionsTable');
+
+    if (numInputs.length === 0) {
+        if (badge) {
+            badge.innerText = '0%';
+            badge.style.background = '#e2e8f0';
+            badge.style.color = '#64748b';
+        }
+        if (emptyDiv) emptyDiv.style.display = 'block';
+        if (table) table.style.display = 'none';
+        return;
+    }
+
+    if (emptyDiv) emptyDiv.style.display = 'none';
+    if (table) table.style.display = 'table';
+
+    var total = 0;
+    numInputs.forEach(function(inp) {
+        total += parseInt(inp.value, 10) || 0;
+    });
+    var avg = Math.round(total / numInputs.length);
+    if (badge) {
+        badge.innerText = avg + '%';
+        if (avg >= 100) {
+            badge.style.background = '#dcfce7';
+            badge.style.color = '#15803d';
+        } else if (avg >= 70) {
+            badge.style.background = '#e0f2fe';
+            badge.style.color = '#0369a1';
+        } else if (avg >= 40) {
+            badge.style.background = '#fef3c7';
+            badge.style.color = '#b45309';
+        } else {
+            badge.style.background = '#fee2e2';
+            badge.style.color = '#b91c1c';
+        }
+    }
 }
 
 function toggleAction(actionId, status) {

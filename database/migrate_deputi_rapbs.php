@@ -87,14 +87,27 @@ $pdo->exec("CREATE TABLE IF NOT EXISTS deputi_meeting_moms (
 $pdo->exec("CREATE TABLE IF NOT EXISTS deputi_meeting_actions (
     id INT AUTO_INCREMENT PRIMARY KEY,
     mom_id INT NOT NULL,
+    source_action_id INT NULL DEFAULT NULL,
     action_topic VARCHAR(255) NOT NULL,
     pic_name VARCHAR(150) NULL,
     due_date DATE NULL,
+    progress_pct TINYINT UNSIGNED NOT NULL DEFAULT 0,
     status ENUM('Pending', 'In Progress', 'Completed') NOT NULL DEFAULT 'Pending',
     notes TEXT NULL,
     carried_to_event_id INT NULL,
-    INDEX idx_mom (mom_id)
+    INDEX idx_mom (mom_id),
+    INDEX idx_source (source_action_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+$chkColAct = $pdo->query("SHOW COLUMNS FROM deputi_meeting_actions LIKE 'progress_pct'")->fetch();
+if (!$chkColAct) {
+    $pdo->exec("ALTER TABLE deputi_meeting_actions ADD COLUMN progress_pct TINYINT UNSIGNED NOT NULL DEFAULT 0 AFTER due_date");
+    $pdo->exec("UPDATE deputi_meeting_actions SET progress_pct = 100 WHERE status = 'Completed'");
+}
+$chkColSrc = $pdo->query("SHOW COLUMNS FROM deputi_meeting_actions LIKE 'source_action_id'")->fetch();
+if (!$chkColSrc) {
+    $pdo->exec("ALTER TABLE deputi_meeting_actions ADD COLUMN source_action_id INT NULL DEFAULT NULL AFTER mom_id");
+}
 
 // 7. rapbs_headers
 $pdo->exec("CREATE TABLE IF NOT EXISTS rapbs_headers (
