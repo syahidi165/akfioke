@@ -56,24 +56,17 @@ class MasterController extends Controller {
         $uploadedLogoPath = null;
         if (!empty($_FILES['logo']['tmp_name']) && $_FILES['logo']['error'] === UPLOAD_ERR_OK) {
             $file = $_FILES['logo'];
-            $maxSize = 2 * 1024 * 1024; // 2MB
-            if ($file['size'] > $maxSize) {
-                $this->setFlash('danger', 'Ukuran logo unit melebihi batas maksimal 2MB.');
+            $valImg = SecurityHelper::validatePublicImageUpload($file, 2 * 1024 * 1024, false);
+            if (!$valImg['valid']) {
+                $this->setFlash('danger', $valImg['message']);
                 $this->redirect(Auth::baseUrl() . '/master/units');
                 return;
             }
-
-            $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
-            $allowedExts = ['png', 'jpg', 'jpeg', 'webp', 'svg'];
-            if (!in_array($ext, $allowedExts, true)) {
-                $this->setFlash('danger', 'Format logo tidak diizinkan. Gunakan format PNG, JPG, JPEG, WEBP, atau SVG.');
-                $this->redirect(Auth::baseUrl() . '/master/units');
-                return;
-            }
+            $ext = $valImg['ext'];
 
             $targetDir = dirname(__DIR__, 2) . '/public/uploads/logos';
             if (!is_dir($targetDir)) {
-                mkdir($targetDir, 0777, true);
+                mkdir($targetDir, 0755, true);
             }
 
             $unitPrefix = $id > 0 ? $id : 'new_' . time();
@@ -157,24 +150,17 @@ class MasterController extends Controller {
         }
 
         $file = $_FILES['logo'];
-        $maxSize = 2 * 1024 * 1024; // 2MB
-        if ($file['size'] > $maxSize) {
-            $this->setFlash('danger', 'Ukuran logo melebihi batas maksimal 2MB.');
+        $valImg = SecurityHelper::validatePublicImageUpload($file, 2 * 1024 * 1024, false);
+        if (!$valImg['valid']) {
+            $this->setFlash('danger', $valImg['message']);
             $this->redirect(Auth::baseUrl() . '/master/units');
             return;
         }
-
-        $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
-        $allowedExts = ['png', 'jpg', 'jpeg', 'webp', 'svg'];
-        if (!in_array($ext, $allowedExts, true)) {
-            $this->setFlash('danger', 'Format logo tidak diizinkan. Gunakan PNG, JPG, JPEG, WEBP, atau SVG.');
-            $this->redirect(Auth::baseUrl() . '/master/units');
-            return;
-        }
+        $ext = $valImg['ext'];
 
         $targetDir = dirname(__DIR__, 2) . '/public/uploads/logos';
         if (!is_dir($targetDir)) {
-            mkdir($targetDir, 0777, true);
+            mkdir($targetDir, 0755, true);
         }
 
         $filename = 'logo_unit_' . $unitId . '_' . time() . '.' . $ext;
@@ -511,6 +497,10 @@ class MasterController extends Controller {
         if ($webdavPass !== '') {
             \Core\Setting::set('storage_cold_webdav_pass', $webdavPass);
         }
+        if (isset($_POST['storage_cold_webdav_verify_ssl'])) {
+            $verifySsl = !empty($_POST['storage_cold_webdav_verify_ssl']) ? 'true' : 'false';
+            \Core\Setting::set('storage_cold_webdav_verify_ssl', $verifySsl);
+        }
 
         \Core\Storage\StorageManager::reload();
 
@@ -725,11 +715,12 @@ class MasterController extends Controller {
                     }
 
                     $pwd = !empty($password) ? $password : 'password123';
+                    $forceChange = ($pwd === 'password123') ? 1 : 0;
                     $passHash = password_hash($pwd, PASSWORD_DEFAULT);
                     Database::execute(
                         "INSERT INTO users (username, password_hash, full_name, email, phone, unit_id, is_active, force_change_password) 
-                         VALUES (?, ?, ?, ?, ?, ?, ?, 0)",
-                        [$username, $passHash, $nama, $email ?: null, $contactPhone ?: null, $unitId, $userIsActive]
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                        [$username, $passHash, $nama, $email ?: null, $contactPhone ?: null, $unitId, $userIsActive, $forceChange]
                     );
                     $newUserId = (int)Database::lastInsertId();
                     Database::execute("UPDATE employees SET user_id = ? WHERE id = ?", [$newUserId, $id]);
@@ -781,11 +772,12 @@ class MasterController extends Controller {
                                     return;
                                 }
                                 $pwd = !empty($password) ? $password : 'password123';
+                                $forceChange = ($pwd === 'password123') ? 1 : 0;
                                 $passHash = password_hash($pwd, PASSWORD_DEFAULT);
                                 Database::execute(
                                     "INSERT INTO users (username, password_hash, full_name, email, phone, unit_id, is_active, force_change_password) 
-                                     VALUES (?, ?, ?, ?, ?, ?, ?, 0)",
-                                    [$username, $passHash, $nama, $email ?: null, $contactPhone ?: null, $unitId, $userIsActive]
+                                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                                    [$username, $passHash, $nama, $email ?: null, $contactPhone ?: null, $unitId, $userIsActive, $forceChange]
                                 );
                                 $newUserId = (int)Database::lastInsertId();
                             } else {
@@ -823,11 +815,12 @@ class MasterController extends Controller {
                     }
 
                     $pwd = !empty($password) ? $password : 'password123';
+                    $forceChange = ($pwd === 'password123') ? 1 : 0;
                     $passHash = password_hash($pwd, PASSWORD_DEFAULT);
                     Database::execute(
                         "INSERT INTO users (username, password_hash, full_name, email, phone, unit_id, is_active, force_change_password) 
-                         VALUES (?, ?, ?, ?, ?, ?, ?, 0)",
-                        [$username, $passHash, $nama, $email ?: null, $contactPhone ?: null, $unitId, $userIsActive]
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                        [$username, $passHash, $nama, $email ?: null, $contactPhone ?: null, $unitId, $userIsActive, $forceChange]
                     );
                     $newUserId = (int)Database::lastInsertId();
 
@@ -1500,15 +1493,17 @@ class MasterController extends Controller {
 
                 if ($isRestore && $existingEmpUserId > 0) {
                     $finalUserId = $existingEmpUserId;
+                    $forceChange = ($password === 'password123') ? 1 : 0;
                     Database::execute(
-                        "UPDATE users SET username = ?, password_hash = ?, full_name = ?, email = ?, phone = ?, unit_id = ?, is_active = 1, updated_at = NOW() WHERE id = ?",
-                        [$username, $passHash, $nama, $email ?: null, $phone ?: null, $targetUnitId, $finalUserId]
+                        "UPDATE users SET username = ?, password_hash = ?, full_name = ?, email = ?, phone = ?, unit_id = ?, is_active = 1, force_change_password = ?, updated_at = NOW() WHERE id = ?",
+                        [$username, $passHash, $nama, $email ?: null, $phone ?: null, $targetUnitId, $forceChange, $finalUserId]
                     );
                 } else {
+                    $forceChange = ($password === 'password123') ? 1 : 0;
                     Database::execute(
                         "INSERT INTO users (username, password_hash, full_name, email, phone, unit_id, is_active, force_change_password)
-                         VALUES (?, ?, ?, ?, ?, ?, 1, 0)",
-                        [$username, $passHash, $nama, $email ?: null, $phone ?: null, $targetUnitId]
+                         VALUES (?, ?, ?, ?, ?, ?, 1, ?)",
+                        [$username, $passHash, $nama, $email ?: null, $phone ?: null, $targetUnitId, $forceChange]
                     );
                     $finalUserId = (int)Database::lastInsertId();
                 }
@@ -3706,10 +3701,11 @@ class MasterController extends Controller {
                 }
 
                 $passwordHash = password_hash($password, PASSWORD_DEFAULT);
+                $forceChange = ($password === 'password123') ? 1 : 0;
                 Database::execute(
                     "INSERT INTO users (username, password_hash, full_name, email, phone, unit_id, is_active, force_change_password) 
-                     VALUES (?, ?, ?, ?, ?, ?, 1, 0)",
-                    [$username, $passwordHash, $fullName, $email ?: null, $phone ?: null, $targetUnitId]
+                     VALUES (?, ?, ?, ?, ?, ?, 1, ?)",
+                    [$username, $passwordHash, $fullName, $email ?: null, $phone ?: null, $targetUnitId, $forceChange]
                 );
                 $newUserId = (int)Database::lastInsertId();
 
@@ -3749,12 +3745,13 @@ class MasterController extends Controller {
         }
 
         $passwordHash = password_hash($password, PASSWORD_DEFAULT);
+        $forceChange = ($password === 'password123') ? 1 : 0;
 
         // 1. Insert user
         Database::execute(
             "INSERT INTO users (username, password_hash, full_name, email, phone, unit_id, is_active, force_change_password) 
-             VALUES (?, ?, ?, ?, ?, ?, 1, 0)",
-            [$username, $passwordHash, $fullName, $email ?: null, $phone ?: null, $targetUnitId]
+             VALUES (?, ?, ?, ?, ?, ?, 1, ?)",
+            [$username, $passwordHash, $fullName, $email ?: null, $phone ?: null, $targetUnitId, $forceChange]
         );
         $newUserId = (int)Database::lastInsertId();
 
@@ -4171,44 +4168,17 @@ class MasterController extends Controller {
         // Upload logo baru
         if (!empty($_FILES['app_logo']['tmp_name']) && $_FILES['app_logo']['error'] === UPLOAD_ERR_OK) {
             $file = $_FILES['app_logo'];
-
-            if ($file['size'] > 2 * 1024 * 1024) {
-                $this->setFlash('error', 'Ukuran berkas logo terlalu besar (maksimal 2MB).');
+            $valLogo = SecurityHelper::validatePublicImageUpload($file, 2 * 1024 * 1024, true);
+            if (!$valLogo['valid']) {
+                $this->setFlash('error', $valLogo['message']);
                 $this->redirect(Auth::baseUrl() . '/settings/app');
                 return;
             }
-
-            $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
-            $allowedExts = ['png', 'jpg', 'jpeg', 'webp', 'svg', 'ico'];
-
-            if (!in_array($ext, $allowedExts, true)) {
-                $this->setFlash('error', 'Format berkas logo tidak valid. Hanya diperbolehkan JPG, PNG, WEBP, SVG, atau ICO.');
-                $this->redirect(Auth::baseUrl() . '/settings/app');
-                return;
-            }
-
-            // Validasi MIME type jika finfo tersedia
-            if (class_exists('\finfo')) {
-                $finfo = new \finfo(FILEINFO_MIME_TYPE);
-                $mime = $finfo->file($file['tmp_name']) ?: '';
-                $validMimes = [
-                    'image/jpeg', 'image/pjpeg', 'image/jpg',
-                    'image/png', 'image/x-png',
-                    'image/webp',
-                    'image/svg+xml', 'image/svg', 'text/xml', 'text/plain', 'application/xml',
-                    'image/x-icon', 'image/vnd.microsoft.icon', 'image/x-ico', 'image/ico',
-                    'application/octet-stream'
-                ];
-                if (!empty($mime) && !in_array($mime, $validMimes, true) && !str_starts_with($mime, 'image/')) {
-                    $this->setFlash('error', 'Format isi berkas tidak valid sebagai gambar logo (' . htmlspecialchars($mime) . ').');
-                    $this->redirect(Auth::baseUrl() . '/settings/app');
-                    return;
-                }
-            }
+            $ext = $valLogo['ext'];
 
             $targetDir = dirname(__DIR__, 2) . '/public/uploads/logos';
             if (!is_dir($targetDir)) {
-                mkdir($targetDir, 0777, true);
+                mkdir($targetDir, 0755, true);
             }
 
             $filename = 'app_logo_' . time() . '.' . $ext;
@@ -4246,13 +4216,13 @@ class MasterController extends Controller {
 
         if (!empty($_FILES['app_favicon']['tmp_name']) && $_FILES['app_favicon']['error'] === UPLOAD_ERR_OK) {
             $favFile = $_FILES['app_favicon'];
-            $favExt = strtolower(pathinfo($favFile['name'], PATHINFO_EXTENSION));
-            $allowedFavExts = ['ico', 'png', 'svg', 'webp', 'jpg', 'jpeg'];
+            $valFav = SecurityHelper::validatePublicImageUpload($favFile, 1 * 1024 * 1024, true);
 
-            if (in_array($favExt, $allowedFavExts, true) && $favFile['size'] <= 1 * 1024 * 1024) {
+            if ($valFav['valid']) {
+                $favExt = $valFav['ext'];
                 $targetDir = dirname(__DIR__, 2) . '/public/uploads/logos';
                 if (!is_dir($targetDir)) {
-                    mkdir($targetDir, 0777, true);
+                    mkdir($targetDir, 0755, true);
                 }
 
                 $favFilename = 'favicon_' . time() . '.' . $favExt;
@@ -4270,6 +4240,10 @@ class MasterController extends Controller {
                     Setting::set('app_favicon', $relFavPath);
                     AuditLog::log('UPLOAD_APP_FAVICON', 'app_settings', 0, ['old' => $currentFavicon], ['new' => $relFavPath]);
                 }
+            } else {
+                $this->setFlash('error', $valFav['message']);
+                $this->redirect(Auth::baseUrl() . '/settings/app');
+                return;
             }
         }
 

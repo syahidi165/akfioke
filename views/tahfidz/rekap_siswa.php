@@ -88,10 +88,11 @@ $persenTuntas = $totalSantri > 0 ? round(($tuntasCount / $totalSantri) * 100, 1)
                         <th style="width: 40px; text-align: center;">No</th>
                         <th style="width: 110px;">NIS</th>
                         <th>Nama Santri</th>
-                        <th>Kelas</th>
-                        <th>Halaqah</th>
+                        <th>Kelas &amp; Halaqah</th>
                         <th style="text-align: center;">Setoran</th>
                         <th style="text-align: center;">Akumulasi Baris</th>
+                        <th>Materi &amp; Rata2 Tahsin</th>
+                        <th style="text-align: center;">Rata2 Tahfidz</th>
                         <th style="text-align: center;">Status Capaian</th>
                         <th style="width: 120px; text-align: center;">Rapor</th>
                     </tr>
@@ -99,7 +100,7 @@ $persenTuntas = $totalSantri > 0 ? round(($tuntasCount / $totalSantri) * 100, 1)
                 <tbody>
                     <?php if (empty($rekap)): ?>
                         <tr>
-                            <td colspan="9" style="text-align: center; padding: 36px; color: var(--text-muted, #64748b);">
+                            <td colspan="10" style="text-align: center; padding: 36px; color: var(--text-muted, #64748b);">
                                 <i class="fa-solid fa-folder-open" style="font-size: 2rem; margin-bottom: 8px; display: block; opacity: 0.5;"></i>
                                 Belum ada data capaian tahfidz santri yang tercatat.
                             </td>
@@ -114,9 +115,7 @@ $persenTuntas = $totalSantri > 0 ? round(($tuntasCount / $totalSantri) * 100, 1)
                                 </td>
                                 <td>
                                     <span class="badge badge-secondary"><?= SecurityHelper::escape($r['class_name'] ?? 'Non-Kelas') ?></span>
-                                </td>
-                                <td>
-                                    <?= SecurityHelper::escape($r['halaqah_name'] ?? 'Belum ada') ?>
+                                    <div style="font-size: 0.78rem; color: var(--text-muted, #64748b); margin-top: 2px;"><?= SecurityHelper::escape($r['halaqah_name'] ?? 'Belum ada') ?></div>
                                 </td>
                                 <td style="text-align: center;">
                                     <?= (int)$r['setoran_count'] ?> kali
@@ -124,6 +123,19 @@ $persenTuntas = $totalSantri > 0 ? round(($tuntasCount / $totalSantri) * 100, 1)
                                 <td style="text-align: center;">
                                     <strong style="color: #0f766e;"><?= (int)$r['total_lines'] ?></strong> baris
                                     <div style="font-size: 0.75rem; color: var(--text-muted, #64748b);">(&plusmn; <?= round((int)$r['total_lines'] / 15, 1) ?> hal)</div>
+                                </td>
+                                <td>
+                                    <div style="font-size: 0.8rem; font-weight: 600; color: #0f766e;">
+                                        <?= SecurityHelper::escape($r['latest_tahsin_level'] ?? '-') ?>
+                                    </div>
+                                    <span class="badge" style="background: rgba(13, 148, 136, 0.12); color: #0d9488; font-weight: 700; margin-top: 2px;">
+                                        Rata2: <?= !empty($r['avg_tahsin_score']) ? number_format((float)$r['avg_tahsin_score'], 1) : '-' ?>
+                                    </span>
+                                </td>
+                                <td style="text-align: center;">
+                                    <span class="badge" style="background: rgba(79, 70, 229, 0.12); color: #4f46e5; font-weight: 700; font-size: 0.85rem;">
+                                        <?= !empty($r['avg_tahfidz_score']) ? number_format((float)$r['avg_tahfidz_score'], 1) : '-' ?>
+                                    </span>
                                 </td>
                                 <td style="text-align: center;">
                                     <?php if ($r['is_tuntas']): ?>

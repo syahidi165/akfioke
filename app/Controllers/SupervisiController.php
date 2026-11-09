@@ -381,6 +381,32 @@ class SupervisiController extends Controller {
             die('Data supervisi tidak ditemukan.');
         }
 
+        // Anti-IDOR Ownership Check untuk Cetak Instrumen Supervisi
+        $activeRole = Auth::activeRoleName();
+        $myEmpId = (int)Auth::employeeId();
+        $myUnitId = (int)Auth::unitId();
+        $canViewSupervisi = false;
+
+        if (in_array($activeRole, ['operator_yayasan', 'direktur_pendidikan', 'hrd', 'pembina_yayasan', 'ketua_yayasan'], true)) {
+            $canViewSupervisi = true;
+        } elseif ((int)$session['teacher_id'] === $myEmpId || (int)$session['supervisor_id'] === $myEmpId) {
+            $canViewSupervisi = true;
+        } elseif ($activeRole === 'deputi_pendidikan') {
+            $deputiUnits = \App\Controllers\DeputiController::getDeputiUnitIds((int)Auth::id());
+            $canViewSupervisi = in_array((int)$session['unit_id'], $deputiUnits, true);
+        } elseif (in_array($activeRole, ['kepala_sekolah', 'waka_kurikulum', 'operator_sekolah'], true) && (int)$session['unit_id'] === $myUnitId) {
+            $canViewSupervisi = true;
+        }
+
+        if (!$canViewSupervisi) {
+            AuditLog::log('IDOR_SUPERVISI_PRINT_BLOCKED', 'supervisi_sessions', $sessionId, null, [
+                'user_id' => Auth::id(),
+                'role'    => $activeRole
+            ]);
+            http_response_code(403);
+            die('Akses Ditolak (403): Anda tidak memiliki wewenang untuk melihat atau mencetak instrumen supervisi ini.');
+        }
+
         $scoresRaw = Database::fetchAll("SELECT * FROM supervisi_rubric_scores WHERE supervisi_id = ?", [$sessionId]);
         $scores = [];
         foreach ($scoresRaw as $sc) {

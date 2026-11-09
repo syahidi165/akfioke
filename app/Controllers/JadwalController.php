@@ -468,6 +468,7 @@ class JadwalController extends Controller {
         if ($id > 0) {
             $cell = Database::fetch("SELECT * FROM class_schedules WHERE id = ?", [$id]);
             if ($cell) {
+                $this->assertUnitOwnership('class_schedules', $id, 'unit_id');
                 Database::execute("DELETE FROM class_schedules WHERE id = ?", [$id]);
                 AuditLog::log('DELETE_SCHEDULE', 'class_schedules', $id, $cell, null);
                 $this->setFlash('success', 'Jadwal pada sel tersebut berhasil dikosongkan.');
@@ -506,6 +507,7 @@ class JadwalController extends Controller {
             $this->redirect($redirectUrl);
             return;
         }
+        $this->assertUnitOwnership('class_schedules', $id, 'unit_id');
 
         $subTeacher = Database::fetch("SELECT nama FROM employees WHERE id = ?", [$substituteTeacherId]);
         $teacherName = $subTeacher['nama'] ?? 'Guru Pengganti';
@@ -563,6 +565,7 @@ class JadwalController extends Controller {
         $redirectUrl = Auth::baseUrl() . '/' . ($returnRoute === 'tahfidz' ? 'jadwal/tahfidz' : 'jadwal/kelas') . '?view_mode=' . urlencode($viewMode) . '&day=' . urlencode($day);
 
         if ($id > 0) {
+            $this->assertUnitOwnership('class_schedules', $id, 'unit_id');
             if ($halaqahNumber > 0) {
                 Database::execute(
                     "UPDATE class_schedule_halaqahs 

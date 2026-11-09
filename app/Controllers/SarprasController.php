@@ -228,6 +228,12 @@ class SarprasController extends Controller {
                 $this->redirect(Auth::baseUrl() . '/sarpras/assets');
                 return;
             }
+            if (!$access['isYayasan'] && (int)$existing['unit_id'] !== (int)$access['unitId']) {
+                AuditLog::log('IDOR_ASSET_UPDATE_BLOCKED', 'assets', $id);
+                $this->setFlash('danger', 'Akses ditolak: Anda tidak berwenang mengubah aset milik unit sekolah lain.');
+                $this->redirect(Auth::baseUrl() . '/sarpras/assets');
+                return;
+            }
             $finalPhoto = $photoPath ?: $existing['photo'];
             Database::execute(
                 "UPDATE assets SET asset_code = ?, name = ?, category_id = ?, purchase_date = ?, unit_id = ?, 
@@ -267,6 +273,12 @@ class SarprasController extends Controller {
         if ($id > 0) {
             $asset = Database::fetch("SELECT * FROM assets WHERE id = ?", [$id]);
             if ($asset) {
+                if (!$access['isYayasan'] && (int)$asset['unit_id'] !== (int)$access['unitId']) {
+                    AuditLog::log('IDOR_ASSET_DELETE_BLOCKED', 'assets', $id);
+                    $this->setFlash('danger', 'Akses ditolak: Anda tidak berwenang menghapus aset milik unit sekolah lain.');
+                    $this->redirect(Auth::baseUrl() . '/sarpras/assets');
+                    return;
+                }
                 Database::execute("DELETE FROM assets WHERE id = ?", [$id]);
                 AuditLog::log('DELETE_ASSET', 'assets', $id, null, ['code' => $asset['asset_code'], 'name' => $asset['name']]);
                 $this->setFlash('success', "Aset {$asset['name']} ({$asset['asset_code']}) berhasil dihapus dari sistem.");
@@ -870,6 +882,13 @@ class SarprasController extends Controller {
             return;
         }
 
+        if (!$access['isYayasan'] && (int)$po['unit_id'] !== (int)$access['unitId']) {
+            AuditLog::log('IDOR_PO_DETAIL_BLOCKED', 'purchase_orders', $id);
+            $this->setFlash('danger', 'Akses ditolak: Anda hanya dapat melihat detail PO dari unit sekolah Anda sendiri.');
+            $this->redirect(Auth::baseUrl() . '/sarpras/po');
+            return;
+        }
+
         $items = Database::fetchAll("SELECT poi.*, c.name as category_name 
                                      FROM purchase_order_items poi 
                                      LEFT JOIN asset_categories c ON poi.category_id = c.id 
@@ -893,6 +912,13 @@ class SarprasController extends Controller {
         $po = Database::fetch("SELECT * FROM purchase_orders WHERE id = ?", [$poId]);
         if (!$po) {
             $this->setFlash('danger', 'PO tidak ditemukan.');
+            $this->redirect(Auth::baseUrl() . '/sarpras/po');
+            return;
+        }
+
+        if (!Auth::hasRole('operator_yayasan') && (int)$po['unit_id'] !== (int)Auth::unitId()) {
+            AuditLog::log('IDOR_PO_APPROVE_BLOCKED', 'purchase_orders', $poId);
+            $this->setFlash('danger', 'Akses ditolak: Anda hanya berwenang menyetujui PO milik unit sekolah Anda sendiri.');
             $this->redirect(Auth::baseUrl() . '/sarpras/po');
             return;
         }

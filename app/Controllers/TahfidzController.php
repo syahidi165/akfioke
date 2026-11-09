@@ -11,9 +11,34 @@ use Core\SecurityHelper;
 
 class TahfidzController extends Controller {
 
+    /**
+     * Pastikan kolom nilai Tahfidz & Tahsin tersedia di tabel tahfidz_setoran_siswa & tahfidz_exams
+     */
+    public static function ensureTahsinColumns(): void {
+        try {
+            $chk1 = Database::fetch("SHOW COLUMNS FROM tahfidz_setoran_siswa LIKE 'tahfidz_score'");
+            if (!$chk1) {
+                Database::execute("ALTER TABLE tahfidz_setoran_siswa ADD COLUMN tahfidz_score DECIMAL(5,2) NULL DEFAULT NULL AFTER is_completed");
+            }
+            $chk2 = Database::fetch("SHOW COLUMNS FROM tahfidz_setoran_siswa LIKE 'tahsin_level'");
+            if (!$chk2) {
+                Database::execute("ALTER TABLE tahfidz_setoran_siswa ADD COLUMN tahsin_level VARCHAR(100) NULL DEFAULT NULL AFTER tahfidz_score");
+            }
+            $chk3 = Database::fetch("SHOW COLUMNS FROM tahfidz_setoran_siswa LIKE 'tahsin_score'");
+            if (!$chk3) {
+                Database::execute("ALTER TABLE tahfidz_setoran_siswa ADD COLUMN tahsin_score DECIMAL(5,2) NULL DEFAULT NULL AFTER tahsin_level");
+            }
+            $chk4 = Database::fetch("SHOW COLUMNS FROM tahfidz_exams LIKE 'tahsin_score'");
+            if (!$chk4) {
+                Database::execute("ALTER TABLE tahfidz_exams ADD COLUMN tahsin_score DECIMAL(5,2) NULL DEFAULT NULL AFTER score");
+            }
+        } catch (\Throwable $e) {}
+    }
+
     // --- 1. SETORAN BULANAN SISWA (GURU TAHFIDZ) ---
     public function setoranSiswa(): void {
         $this->requireRole(['guru_tahfidz', 'koor_tahfidz']);
+        self::ensureTahsinColumns();
         $unitId = Auth::unitId();
         $taId = Auth::academicYearId();
         $userId = Auth::id();
@@ -53,7 +78,7 @@ class TahfidzController extends Controller {
         $surahs = Database::fetchAll("SELECT * FROM mushaf_surahs ORDER BY surah_number ASC");
 
         $this->view('tahfidz/setoran_siswa', [
-            'pageTitle'      => 'Input Setoran Hafalan Santri (Kalkulator Madinah)',
+            'pageTitle'      => 'Input Setoran Hafalan & Tahsin Santri (Kalkulator Madinah)',
             'currentHalaqah' => $currentHalaqah,
             'halaqahList'    => $halaqahList,
             'students'       => $students,
@@ -64,6 +89,7 @@ class TahfidzController extends Controller {
 
     public function saveSetoranSiswa(): void {
         $this->requireRole(['guru_tahfidz', 'koor_tahfidz']);
+        self::ensureTahsinColumns();
         $halaqahId = (int)($_POST['halaqah_id'] ?? 0);
         $studentId = (int)($_POST['student_id'] ?? 0);
         $monthNum = (int)($_POST['month_num'] ?? date('n'));
@@ -75,6 +101,10 @@ class TahfidzController extends Controller {
         $tutorNotes = trim($_POST['tutor_notes'] ?? '');
         $isExamPrep = !empty($_POST['is_exam_prep']) ? 1 : 0;
         $examJuz = !empty($_POST['exam_juz']) ? (int)$_POST['exam_juz'] : null;
+
+        $tahsinLevel = trim($_POST['tahsin_level'] ?? 'Al-Qur\'an Tartil');
+        $rawTahfidzScore = $_POST['tahfidz_score'] ?? '';
+        $rawTahsinScore = $_POST['tahsin_score'] ?? '';
 
         $taId = Auth::academicYearId();
         $userId = Auth::id();
@@ -98,10 +128,20 @@ class TahfidzController extends Controller {
         $linesCount = $pagesCount * 15;
         $isCompleted = $linesCount >= 150 ? 1 : 0; // Tuntas minimal 150 baris (setengah juz)
 
+        // Hitung / validasi nilai Tahfidz & Tahsin (0 - 100)
+        $defaultTahfidzScore = $isCompleted ? 88.0 : min(84.0, max(72.0, round(($linesCount / 150) * 85, 1)));
+        $tahfidzScore = ($rawTahfidzScore !== '' && $rawTahfidzScore !== null)
+            ? max(0.0, min(100.0, (float)$rawTahfidzScore))
+            : $defaultTahfidzScore;
+        $tahsinScore = ($rawTahsinScore !== '' && $rawTahsinScore !== null)
+            ? max(0.0, min(100.0, (float)$rawTahsinScore))
+            : $tahfidzScore;
+
         Database::execute(
-            "INSERT INTO tahfidz_setoran_siswa (halaqah_id, student_id, academic_year_id, month_num, student_type, surah_start, ayah_start, page_start, surah_end, ayah_end, page_end, lines_count, is_completed, is_exam_prep, exam_juz, tutor_notes, created_by_user_id) 
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            [$halaqahId, $studentId, $taId, $monthNum, $studentType, $surahStart, $ayahStart, $pageStart, $surahEnd, $ayahEnd, $pageEnd, $linesCount, $isCompleted, $isExamPrep, $examJuz, $tutorNotes, $userId]
+            "INSERT INTO tahfidz_setoran_siswa 
+                (halaqah_id, student_id, academic_year_id, month_num, student_type, surah_start, ayah_start, page_start, surah_end, ayah_end, page_end, lines_count, is_completed, tahfidz_score, tahsin_level, tahsin_score, is_exam_prep, exam_juz, tutor_notes, created_by_user_id) 
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            [$halaqahId, $studentId, $taId, $monthNum, $studentType, $surahStart, $ayahStart, $pageStart, $surahEnd, $ayahEnd, $pageEnd, $linesCount, $isCompleted, $tahfidzScore, $tahsinLevel, $tahsinScore, $isExamPrep, $examJuz, $tutorNotes, $userId]
         );
 
         $setoranId = Database::lastInsertId();
@@ -116,13 +156,20 @@ class TahfidzController extends Controller {
             );
         }
 
-        AuditLog::log('SAVE_SETORAN_SISWA', 'tahfidz_setoran_siswa', $setoranId, null, ['lines' => $linesCount, 'is_completed' => $isCompleted]);
-        $this->setFlash('success', "Setoran hafalan santri berhasil disimpan ({$linesCount} baris).");
+        AuditLog::log('SAVE_SETORAN_SISWA', 'tahfidz_setoran_siswa', $setoranId, null, [
+            'lines' => $linesCount,
+            'is_completed' => $isCompleted,
+            'tahfidz_score' => $tahfidzScore,
+            'tahsin_score' => $tahsinScore,
+            'tahsin_level' => $tahsinLevel
+        ]);
+        $this->setFlash('success', "Setoran hafalan & nilai tahsin santri berhasil disimpan ({$linesCount} baris | Tahfidz: {$tahfidzScore} | Tahsin: {$tahsinScore}).");
         $this->redirect(Auth::baseUrl() . '/tahfidz/setoran-siswa');
     }
 
     public function updateSetoranSiswa(): void {
         $this->requireRole(['guru_tahfidz', 'koor_tahfidz']);
+        self::ensureTahsinColumns();
         $id = (int)($_POST['id'] ?? 0);
         $studentId = (int)($_POST['student_id'] ?? 0);
         $monthNum = (int)($_POST['month_num'] ?? date('n'));
@@ -132,6 +179,9 @@ class TahfidzController extends Controller {
         $surahEnd = (int)($_POST['surah_end'] ?? 114);
         $ayahEnd = (int)($_POST['ayah_end'] ?? 6);
         $tutorNotes = trim($_POST['tutor_notes'] ?? '');
+        $tahsinLevel = trim($_POST['tahsin_level'] ?? 'Al-Qur\'an Tartil');
+        $rawTahfidzScore = $_POST['tahfidz_score'] ?? '';
+        $rawTahsinScore = $_POST['tahsin_score'] ?? '';
 
         $old = Database::fetch("SELECT * FROM tahfidz_setoran_siswa WHERE id = ?", [$id]);
         if (!$old) {
@@ -139,6 +189,7 @@ class TahfidzController extends Controller {
             $this->redirect(Auth::baseUrl() . '/tahfidz/setoran-siswa');
             return;
         }
+        $this->assertStudentAccess((int)$old['student_id']);
 
         // Validasi dan batasi ayat maksimal sesuai surah
         $s1 = Database::fetch("SELECT start_page, end_page, verses_count FROM mushaf_surahs WHERE surah_number = ?", [$surahStart]);
@@ -159,18 +210,33 @@ class TahfidzController extends Controller {
         $linesCount = $pagesCount * 15;
         $isCompleted = $linesCount >= 150 ? 1 : 0;
 
+        $defaultTahfidzScore = $isCompleted ? 88.0 : min(84.0, max(72.0, round(($linesCount / 150) * 85, 1)));
+        $tahfidzScore = ($rawTahfidzScore !== '' && $rawTahfidzScore !== null)
+            ? max(0.0, min(100.0, (float)$rawTahfidzScore))
+            : ($old['tahfidz_score'] !== null ? (float)$old['tahfidz_score'] : $defaultTahfidzScore);
+        $tahsinScore = ($rawTahsinScore !== '' && $rawTahsinScore !== null)
+            ? max(0.0, min(100.0, (float)$rawTahsinScore))
+            : ($old['tahsin_score'] !== null ? (float)$old['tahsin_score'] : $tahfidzScore);
+
         Database::execute(
             "UPDATE tahfidz_setoran_siswa SET 
                 student_id = ?, month_num = ?, student_type = ?, 
                 surah_start = ?, ayah_start = ?, page_start = ?, 
                 surah_end = ?, ayah_end = ?, page_end = ?, 
-                lines_count = ?, is_completed = ?, tutor_notes = ? 
+                lines_count = ?, is_completed = ?, 
+                tahfidz_score = ?, tahsin_level = ?, tahsin_score = ?, 
+                tutor_notes = ? 
              WHERE id = ?",
-            [$studentId, $monthNum, $studentType, $surahStart, $ayahStart, $pageStart, $surahEnd, $ayahEnd, $pageEnd, $linesCount, $isCompleted, $tutorNotes, $id]
+            [$studentId, $monthNum, $studentType, $surahStart, $ayahStart, $pageStart, $surahEnd, $ayahEnd, $pageEnd, $linesCount, $isCompleted, $tahfidzScore, $tahsinLevel, $tahsinScore, $tutorNotes, $id]
         );
 
-        AuditLog::log('UPDATE_SETORAN_SISWA', 'tahfidz_setoran_siswa', $id, $old, ['lines' => $linesCount]);
-        $this->setFlash('success', "Catatan riwayat setoran santri berhasil diperbarui ({$linesCount} baris).");
+        AuditLog::log('UPDATE_SETORAN_SISWA', 'tahfidz_setoran_siswa', $id, $old, [
+            'lines' => $linesCount,
+            'tahfidz_score' => $tahfidzScore,
+            'tahsin_score' => $tahsinScore,
+            'tahsin_level' => $tahsinLevel
+        ]);
+        $this->setFlash('success', "Catatan riwayat setoran & nilai tahsin santri berhasil diperbarui ({$linesCount} baris | Tahfidz: {$tahfidzScore} | Tahsin: {$tahsinScore}).");
         $this->redirect(Auth::baseUrl() . '/tahfidz/setoran-siswa');
     }
 
@@ -184,6 +250,7 @@ class TahfidzController extends Controller {
             $this->redirect(Auth::baseUrl() . '/tahfidz/setoran-siswa');
             return;
         }
+        $this->assertStudentAccess((int)$old['student_id']);
 
         Database::execute("DELETE FROM tahfidz_setoran_siswa WHERE id = ?", [$id]);
         AuditLog::log('DELETE_SETORAN_SISWA', 'tahfidz_setoran_siswa', $id, $old, null);
@@ -343,6 +410,7 @@ class TahfidzController extends Controller {
     // --- 3. ANTREAN UJIAN TAHFIDZ & PENILAIAN TUTOR SISWA ---
     public function antreanUjian(): void {
         $this->requireRole('tutor_siswa');
+        self::ensureTahsinColumns();
         $unitId = Auth::unitId();
         $taId = Auth::academicYearId();
 
@@ -358,15 +426,20 @@ class TahfidzController extends Controller {
         );
 
         $this->view('tahfidz/ujian_antrean', [
-            'pageTitle' => 'Antrean Pengujian Tahfidz Santri (Tutor Siswa)',
+            'pageTitle' => 'Antrean Pengujian Tahfidz & Tahsin Santri (Tutor Siswa)',
             'exams'     => $exams
         ]);
     }
 
     public function gradeUjian(): void {
         $this->requireRole('tutor_siswa');
+        self::ensureTahsinColumns();
         $id = (int)($_POST['id'] ?? 0);
-        $score = (float)($_POST['score'] ?? 0);
+        $score = max(0.0, min(100.0, (float)($_POST['score'] ?? 0)));
+        $rawTahsinScore = $_POST['tahsin_score'] ?? '';
+        $tahsinScore = ($rawTahsinScore !== '' && $rawTahsinScore !== null)
+            ? max(0.0, min(100.0, (float)$rawTahsinScore))
+            : $score;
         $status = $_POST['status'] ?? 'Lulus'; // Lulus / Tidak Lulus
         $notes = trim($_POST['notes'] ?? '');
         $examDate = !empty($_POST['exam_date']) ? $_POST['exam_date'] : date('Y-m-d');
@@ -379,17 +452,23 @@ class TahfidzController extends Controller {
         }
 
         Database::execute(
-            "UPDATE tahfidz_exams SET examiner_id = ?, exam_date = ?, score = ?, status = ?, notes = ?, certificate_number = ? WHERE id = ?",
-            [$examinerId, $examDate, $score, $status, $notes, $certNo, $id]
+            "UPDATE tahfidz_exams SET examiner_id = ?, exam_date = ?, score = ?, tahsin_score = ?, status = ?, notes = ?, certificate_number = ? WHERE id = ?",
+            [$examinerId, $examDate, $score, $tahsinScore, $status, $notes, $certNo, $id]
         );
 
-        AuditLog::log('GRADE_TAHFIDZ_EXAM', 'tahfidz_exams', $id, null, ['score' => $score, 'status' => $status, 'cert' => $certNo]);
-        $this->setFlash('success', "Penilaian ujian berhasil disimpan ({$status}).");
+        AuditLog::log('GRADE_TAHFIDZ_EXAM', 'tahfidz_exams', $id, null, [
+            'score' => $score,
+            'tahsin_score' => $tahsinScore,
+            'status' => $status,
+            'cert' => $certNo
+        ]);
+        $this->setFlash('success', "Penilaian ujian berhasil disimpan ({$status} | Tahfidz: {$score} | Tahsin: {$tahsinScore}).");
         $this->redirect(Auth::baseUrl() . '/tahfidz/ujian-antrean');
     }
 
     public function printSertifikat(string $id): void {
         $this->requireRole(['tutor_siswa', 'koor_tahfidz', 'orang_tua', 'walas']);
+        self::ensureTahsinColumns();
         $exam = Database::fetch(
             "SELECT te.*, s.nama as student_name, s.nis, s.gender, u.name as unit_name, u.kop_title, u.kop_subtitle, u.address, u.phone, u.email, ex.full_name as examiner_name 
              FROM tahfidz_exams te 
@@ -403,9 +482,11 @@ class TahfidzController extends Controller {
         if (!$exam || $exam['status'] !== 'Lulus') {
             die('Sertifikat hanya diterbitkan untuk santri yang telah dinyatakan Lulus Ujian.');
         }
+        $this->assertStudentAccess((int)$exam['student_id']);
 
         $kop = ExportHelper::renderKop($exam);
         $binBinti = $exam['gender'] === 'L' ? 'Bin' : 'Binti';
+        $tahsinScoreVal = $exam['tahsin_score'] !== null ? $exam['tahsin_score'] : $exam['score'];
 
         $html = "
         <html>
@@ -437,7 +518,7 @@ class TahfidzController extends Controller {
                 <div class='cert-body'>
                     Telah mengikuti Ujian Tasmi' & Hifdzil Qur'an dan dinyatakan <strong>LULUS (MUMTAZ)</strong> pada hafalan:
                     <br><strong style='font-size: 20px; color: #1e3a8a;'>JUZ {$exam['juz_number']}</strong>
-                    <br>dengan perolehan nilai: <strong>{$exam['score']} / 100</strong>.
+                    <br>dengan perolehan nilai Tahfidz: <strong>{$exam['score']} / 100</strong> &amp; Nilai Tahsin/Tajwid: <strong>{$tahsinScoreVal} / 100</strong>.
                 </div>
                 
                 <table class='signatures'>
@@ -919,6 +1000,7 @@ class TahfidzController extends Controller {
 
     public function rekapSiswa(): void {
         $this->requireRole(['koor_tahfidz', 'kepala_sekolah', 'deputi_pendidikan']);
+        self::ensureTahsinColumns();
         $unitId = Auth::unitId();
         $taId = Auth::academicYearId();
 
@@ -926,7 +1008,10 @@ class TahfidzController extends Controller {
             "SELECT s.id, s.nama, s.nis, c.name as class_name, h.name as halaqah_name, 
                     SUM(ss.lines_count) as total_lines, 
                     COUNT(ss.id) as setoran_count, 
-                    MAX(ss.is_completed) as is_tuntas 
+                    MAX(ss.is_completed) as is_tuntas,
+                    ROUND(AVG(ss.tahfidz_score), 1) as avg_tahfidz_score,
+                    ROUND(AVG(ss.tahsin_score), 1) as avg_tahsin_score,
+                    SUBSTRING_INDEX(GROUP_CONCAT(ss.tahsin_level ORDER BY ss.id DESC SEPARATOR '||'), '||', 1) as latest_tahsin_level
              FROM students s 
              LEFT JOIN class_students cs ON s.id = cs.student_id AND cs.status = 'Aktif' 
              LEFT JOIN classes c ON cs.class_id = c.id 
@@ -939,13 +1024,14 @@ class TahfidzController extends Controller {
         );
 
         $this->view('tahfidz/rekap_siswa', [
-            'pageTitle' => 'Monitoring Capaian & Rekapitulasi Tahfidz Santri',
+            'pageTitle' => 'Monitoring Capaian & Rekapitulasi Tahfidz & Tahsin Santri',
             'rekap'     => $rekap
         ]);
     }
 
     public function printRaporTahfidz(string $id): void {
         $this->requireRole(['guru_tahfidz', 'koordinator_tahfidz', 'tutor_siswa', 'walas', 'kepala_sekolah', 'orang_tua']);
+        self::ensureTahsinColumns();
         $studentId = (int)$id;
         $taId = Auth::academicYearId();
 
@@ -968,6 +1054,7 @@ class TahfidzController extends Controller {
         if (!$student) {
             die('Data santri tidak ditemukan.');
         }
+        $this->assertStudentAccess($studentId);
 
         $setorans = Database::fetchAll(
             "SELECT ss.*, ms1.name_id as surah_start_name, ms2.name_id as surah_end_name 
@@ -992,6 +1079,11 @@ class TahfidzController extends Controller {
         $totalLines = array_sum(array_column($setorans, 'lines_count'));
         $totalHalaman = round($totalLines / 15, 1);
 
+        $tahfidzScores = array_values(array_filter(array_column($setorans, 'tahfidz_score'), fn($v) => $v !== null && $v !== ''));
+        $tahsinScores = array_values(array_filter(array_column($setorans, 'tahsin_score'), fn($v) => $v !== null && $v !== ''));
+        $avgTahfidz = count($tahfidzScores) > 0 ? round(array_sum($tahfidzScores) / count($tahfidzScores), 1) : '-';
+        $avgTahsin = count($tahsinScores) > 0 ? round(array_sum($tahsinScores) / count($tahsinScores), 1) : '-';
+
         $html = "
         <html>
         <head>
@@ -1009,7 +1101,7 @@ class TahfidzController extends Controller {
         </head>
         <body>
             {$kop}
-            <div class='title-doc'>LAPORAN CAPAIAN MUTABA'AH TAHFIDZ AL-QUR'AN SANTRI<br><span style='font-size: 10px; font-weight: normal;'>Tahun Pelajaran: {$student['academic_year_name']}</span></div>
+            <div class='title-doc'>LAPORAN CAPAIAN MUTABA'AH TAHFIDZ &amp; TAHSIN AL-QUR'AN SANTRI<br><span style='font-size: 10px; font-weight: normal;'>Tahun Pelajaran: {$student['academic_year_name']}</span></div>
 
             <table class='meta-table'>
                 <tr>
@@ -1026,32 +1118,39 @@ class TahfidzController extends Controller {
                 </tr>
             </table>
 
-            <div style='font-weight: bold; margin-bottom: 6px;'>I. Rekapitulasi Riwayat Setoran Hafalan:</div>
+            <div style='font-weight: bold; margin-bottom: 6px;'>I. Rekapitulasi Riwayat Setoran Hafalan &amp; Penilaian Tahsin:</div>
             <table class='table-data'>
                 <thead>
                     <tr>
-                        <th width='5%'>No</th>
+                        <th width='4%'>No</th>
                         <th>Bulan</th>
                         <th>Jangkauan Hafalan</th>
-                        <th>Halaman Mushaf</th>
                         <th>Jumlah Baris</th>
+                        <th>Materi Tahsin</th>
+                        <th>Nilai Tahfidz</th>
+                        <th>Nilai Tahsin</th>
                         <th>Status</th>
                     </tr>
                 </thead>
                 <tbody>";
 
         if (empty($setorans)) {
-            $html .= "<tr><td colspan='6' align='center' style='padding: 12px; color: #64748b;'>Belum ada data setoran tahfidz yang dicatat.</td></tr>";
+            $html .= "<tr><td colspan='8' align='center' style='padding: 12px; color: #64748b;'>Belum ada data setoran tahfidz &amp; tahsin yang dicatat.</td></tr>";
         } else {
             foreach ($setorans as $idx => $st) {
                 $monthName = SecurityHelper::getNamaBulan((int)$st['month_num']);
                 $isPass = $st['is_completed'] ? '<span style="color: green; font-weight: bold;">Tuntas Target</span>' : 'Berproses';
+                $tLvl = htmlspecialchars($st['tahsin_level'] ?? 'Al-Qur\'an Tartil');
+                $tFidScore = $st['tahfidz_score'] !== null ? number_format((float)$st['tahfidz_score'], 1) : '-';
+                $tSinScore = $st['tahsin_score'] !== null ? number_format((float)$st['tahsin_score'], 1) : '-';
                 $html .= "<tr>
                     <td align='center'>" . ($idx + 1) . "</td>
                     <td align='center'>{$monthName}</td>
-                    <td>{$st['surah_start_name']}:{$st['ayah_start']} s/d {$st['surah_end_name']}:{$st['ayah_end']}</td>
-                    <td align='center'>Hal. {$st['page_start']} - {$st['page_end']}</td>
+                    <td>{$st['surah_start_name']}:{$st['ayah_start']} s/d {$st['surah_end_name']}:{$st['ayah_end']} (Hal. {$st['page_start']}-{$st['page_end']})</td>
                     <td align='center'><strong>{$st['lines_count']}</strong></td>
+                    <td align='center'>{$tLvl}</td>
+                    <td align='center'><strong>{$tFidScore}</strong></td>
+                    <td align='center'><strong>{$tSinScore}</strong></td>
                     <td align='center'>{$isPass}</td>
                 </tr>";
             }
@@ -1059,14 +1158,17 @@ class TahfidzController extends Controller {
 
         $html .= "
                     <tr style='background: #f8fafc; font-weight: bold;'>
-                        <td colspan='4' align='right'>TOTAL AKUMULASI CAPAIAN :</td>
-                        <td align='center' style='color: #0f766e;'>{$totalLines} Baris</td>
-                        <td align='center'>&plusmn; {$totalHalaman} Halaman</td>
+                        <td colspan='3' align='right'>TOTAL &amp; RATA-RATA CAPAIAN :</td>
+                        <td align='center' style='color: #0f766e;'>{$totalLines} Baris (&plusmn;{$totalHalaman} Hal)</td>
+                        <td align='right'>Rata-rata Nilai:</td>
+                        <td align='center' style='color: #1e3a8a;'>{$avgTahfidz}</td>
+                        <td align='center' style='color: #0d9488;'>{$avgTahsin}</td>
+                        <td align='center'>-</td>
                     </tr>
                 </tbody>
             </table>
 
-            <div style='font-weight: bold; margin-bottom: 6px;'>II. Hasil Ujian Tahfidz Bersertifikasi:</div>
+            <div style='font-weight: bold; margin-bottom: 6px;'>II. Hasil Ujian Tahfidz &amp; Tahsin Bersertifikasi:</div>
             <table class='table-data'>
                 <thead>
                     <tr>
@@ -1074,18 +1176,20 @@ class TahfidzController extends Controller {
                         <th>Juz Diujikan</th>
                         <th>Tanggal Ujian</th>
                         <th>Penguji (Tutor Siswa)</th>
-                        <th>Nilai Skor</th>
+                        <th>Nilai Tahfidz</th>
+                        <th>Nilai Tahsin/Tajwid</th>
                         <th>Status Kelulusan</th>
                     </tr>
                 </thead>
                 <tbody>";
 
         if (empty($exams)) {
-            $html .= "<tr><td colspan='6' align='center' style='padding: 12px; color: #64748b;'>Belum ada riwayat ujian tahfidz.</td></tr>";
+            $html .= "<tr><td colspan='7' align='center' style='padding: 12px; color: #64748b;'>Belum ada riwayat ujian tahfidz.</td></tr>";
         } else {
             foreach ($exams as $idx => $ex) {
                 $tgl = $ex['exam_date'] ? SecurityHelper::formatTanggalIndo($ex['exam_date']) : '-';
                 $score = $ex['score'] !== null ? $ex['score'] : '-';
+                $tahsinScoreEx = $ex['tahsin_score'] !== null ? $ex['tahsin_score'] : $score;
                 $statusColor = match($ex['status']) {
                     'Lulus' => 'color: green; font-weight: bold;',
                     'Tidak Lulus' => 'color: red; font-weight: bold;',
@@ -1097,6 +1201,7 @@ class TahfidzController extends Controller {
                     <td align='center'>{$tgl}</td>
                     <td>" . ($ex['examiner_name'] ?: '-') . "</td>
                     <td align='center'><strong>{$score}</strong></td>
+                    <td align='center'><strong>{$tahsinScoreEx}</strong></td>
                     <td align='center' style='{$statusColor}'>{$ex['status']}</td>
                 </tr>";
             }

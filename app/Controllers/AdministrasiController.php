@@ -170,11 +170,13 @@ class AdministrasiController extends Controller {
         $now = date('Y-m-d');
         $isOnTime = 1;
 
-        // Cek deadline unit
+        // Cek deadline unit (mendukung slot/tahap berkala seperti KS-11 Baseline Tahfidz)
+        \App\Controllers\DeputiController::ensureDeadlinesKsColumns();
         $deadlineRow = Database::fetch(
             "SELECT deadline_datetime, deadline_date FROM unit_administrasi_deadlines 
-             WHERE unit_id = ? AND academic_year_id = ? AND jenis_admin_id = ?",
-            [$unitId, $taId, $jenisId]
+             WHERE unit_id = ? AND academic_year_id = ? AND jenis_admin_id = ? AND (month_num = ? OR month_num = 1)
+             ORDER BY CASE WHEN month_num = ? THEN 0 ELSE 1 END LIMIT 1",
+            [$unitId, $taId, $jenisId, $monthNum, $monthNum]
         );
         $deadlineTs = null;
         $savedDeadlineDate = null;

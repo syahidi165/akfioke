@@ -61,6 +61,7 @@ return [
             'path'       => (string)$getColdSetting('webdav_path', '/akfi_cold_storage'),
             'username'   => (string)$getColdSetting('webdav_user', 'admin_nas'),
             'password'   => (string)$getColdSetting('webdav_pass', ''),
+            'verify_ssl' => (bool)$getColdSetting('webdav_verify_ssl', false),
             'timeout'    => 30,
         ],
 

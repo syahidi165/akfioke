@@ -4,6 +4,18 @@ declare(strict_types=1);
 
 require_once dirname(__DIR__) . '/vendor/autoload.php';
 
+// Konfigurasi pelaporan error & log aman berdasarkan environment (Production vs Local Debug)
+$appConfig = require dirname(__DIR__) . '/config/app.php';
+$logDir = dirname(__DIR__) . '/storage/logs';
+if (!is_dir($logDir)) {
+    @mkdir($logDir, 0755, true);
+}
+error_reporting(E_ALL);
+ini_set('log_errors', '1');
+ini_set('error_log', $logDir . '/php_error.log');
+ini_set('display_errors', !empty($appConfig['display_errors']) ? '1' : '0');
+ini_set('display_startup_errors', !empty($appConfig['display_errors']) ? '1' : '0');
+
 use Core\SecurityHelper;
 SecurityHelper::sendSecurityHeaders();
 
@@ -44,6 +56,7 @@ Router::get('/', [AuthController::class, 'showLogin']);
 Router::get('/login', [AuthController::class, 'showLogin']);
 Router::post('/login', [AuthController::class, 'login']);
 Router::get('/logout', [AuthController::class, 'logout']);
+Router::post('/logout', [AuthController::class, 'logout']);
 Router::get('/change-password', [AuthController::class, 'showChangePassword']);
 Router::post('/change-password', [AuthController::class, 'changePassword']);
 Router::post('/switch-role', [AuthController::class, 'switchRole']);
@@ -60,10 +73,13 @@ Router::get('/buku-panduan', [DashboardController::class, 'downloadPanduan']);
 // Notifikasi Sistem
 Router::get('/notifications', [NotificationController::class, 'index']);
 Router::get('/notifications/mark-all-read', [NotificationController::class, 'markAllRead']);
+Router::post('/notifications/mark-all-read', [NotificationController::class, 'markAllRead']);
 Router::get('/notifications/delete-all', [NotificationController::class, 'deleteAll']);
 Router::post('/notifications/delete-all', [NotificationController::class, 'deleteAll']);
 Router::get('/notifications/:id/read', [NotificationController::class, 'read']);
+Router::post('/notifications/:id/read', [NotificationController::class, 'read']);
 Router::get('/notifications/:id/mark-read', [NotificationController::class, 'markRead']);
+Router::post('/notifications/:id/mark-read', [NotificationController::class, 'markRead']);
 Router::get('/notifications/:id/delete', [NotificationController::class, 'delete']);
 Router::post('/notifications/:id/delete', [NotificationController::class, 'delete']);
 
@@ -409,6 +425,8 @@ Router::get('/deputi/calendar/pdf', [DeputiController::class, 'exportPdf']);
 Router::post('/deputi/calendar/save-event', [DeputiController::class, 'saveEvent']);
 Router::post('/deputi/calendar/delete-event', [DeputiController::class, 'deleteEvent']);
 Router::post('/deputi/calendar/save-mom', [DeputiController::class, 'saveMom']);
+Router::get('/deputi/calendar/download-mom/:id', [DeputiController::class, 'downloadMomFile']);
+Router::post('/deputi/calendar/delete-mom-file', [DeputiController::class, 'deleteMomFile']);
 Router::post('/deputi/calendar/toggle-action', [DeputiController::class, 'toggleActionStatus']);
 Router::post('/deputi/calendar/send-invitation', [DeputiController::class, 'sendInvitation']);
 Router::get('/deputi/calendar/get-event-details', [DeputiController::class, 'getEventDetails']);

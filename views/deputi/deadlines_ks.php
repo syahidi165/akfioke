@@ -1,7 +1,10 @@
 <?php
 // views/deputi/deadlines_ks.php
 use Core\SecurityHelper;
+use Core\CSRF;
+use Core\Auth;
 
+$baseUrl = Auth::baseUrl();
 $now = time();
 ?>
 
@@ -102,6 +105,7 @@ $now = time();
 
 <!-- FORM UTAMA PENGATURAN DUE DATE -->
 <form method="POST" action="<?= $baseUrl ?>/deputi/deadlines-ks/save" id="formDeadlines">
+    <?= CSRF::field() ?>
     <input type="hidden" name="unit_id" value="<?= $selectedUnitId ?>">
 
     <div class="card">
@@ -123,20 +127,15 @@ $now = time();
                         <th style="width: 85px; text-align: center;">Kode</th>
                         <th>Bentuk Administrasi KS</th>
                         <th style="width: 170px;">Periode / Catatan</th>
-                        <th style="width: 250px;">Batas Waktu (Tanggal &amp; Jam)</th>
+                        <th style="width: 270px;">Batas Waktu (Tanggal &amp; Jam)</th>
                         <th style="width: 200px;">Status Kepatuhan KS</th>
                         <th style="width: 110px; text-align: center;">Berkas KS</th>
                     </tr>
                 </thead>
                 <tbody>
                     <?php foreach ($masterItems as $idx => $m): 
-                        $dtVal = '';
-                        if (!empty($m['deadline_datetime'])) {
-                            $dtVal = date('Y-m-d\TH:i', strtotime($m['deadline_datetime']));
-                        } elseif (!empty($m['deadline_date'])) {
-                            $dtVal = $m['deadline_date'] . 'T23:59';
-                        }
-                        $up = $m['upload'];
+                        $slots = $m['slots'] ?? [1 => ['slot_num' => 1, 'slot_label' => 'Batas Waktu', 'due_info' => $m['due_info'] ?? '', 'deadline_datetime' => '', 'upload' => null, 'status_badge' => 'NO_DEADLINE']];
+                        $isMultiSlot = count($slots) > 1;
                     ?>
                         <tr style="transition: background-color 0.2s;">
                             <td style="text-align: center; color: var(--text-muted); font-weight: 600;"><?= $idx + 1 ?></td>
@@ -146,80 +145,123 @@ $now = time();
                             <td>
                                 <strong style="color: var(--text-main); font-size: 13.5px;"><?= SecurityHelper::escape($m['title'] ?? $m['name'] ?? 'Dokumen Administrasi KS') ?></strong>
                                 <div style="font-size: 11.5px; color: var(--text-muted); margin-top: 3px;">
-                                    Frekuensi: <span style="font-weight: 600;"><?= SecurityHelper::escape($m['frequency'] ?? '1x setahun') ?></span> &bull;
+                                    Frekuensi: <span class="badge" style="background: <?= $m['frequency'] === '3x setahun' ? '#f5f3ff; color: #6d28d9; border: 1px solid #ddd6fe;' : ($m['frequency'] === '2x setahun' ? '#eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe;' : '#f1f5f9; color: #475569;') ?> font-weight: 700; font-size: 11px; padding: 2px 6px;"><?= SecurityHelper::escape($m['frequency'] ?? '1x setahun') ?></span> &bull;
                                     Target Default: <span><?= SecurityHelper::escape($m['due_info'] ?? '-') ?></span>
                                 </div>
                             </td>
                             <td>
-                                <input type="text" 
-                                       name="deadlines[<?= $m['id'] ?>][due_info]" 
-                                       style="width: 100%; padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border-color); font-size: 12.5px;" 
-                                       value="<?= SecurityHelper::escape($m['effective_due_info'] ?? $m['due_info']) ?>" 
-                                       placeholder="Contoh: Awal Semester">
-                            </td>
-                            <td>
-                                <input type="datetime-local" 
-                                       name="deadlines[<?= $m['id'] ?>][deadline_datetime]" 
-                                       class="deadline-input" 
-                                       style="width: 100%; padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border-color); font-size: 12.5px; color: var(--text-main);" 
-                                       value="<?= $dtVal ?>">
-                                <?php if (!empty($dtVal)): ?>
-                                    <div style="font-size: 11px; color: var(--text-muted); margin-top: 3px;">
-                                        <i class="fa-regular fa-clock" style="color: #f59e0b; margin-right: 4px;"></i>
-                                        <?= date('d M Y, H:i', strtotime($dtVal)) ?> WIB
-                                    </div>
-                                <?php endif; ?>
-                            </td>
-                            <td>
-                                <?php if ($m['status_badge'] === 'ON_TIME'): ?>
-                                    <span class="badge badge-success" style="font-size: 11px; padding: 4px 10px;">
-                                        <i class="fa-solid fa-circle-check"></i> Tepat Waktu
-                                    </span>
-                                    <div style="font-size: 11px; color: #166534; margin-top: 3px;">
-                                        Unggah: <?= date('d/m/Y H:i', strtotime($up['created_at'])) ?>
-                                    </div>
-                                <?php elseif ($m['status_badge'] === 'LATE_SUBMITTED'): ?>
-                                    <span class="badge badge-warning" style="font-size: 11px; padding: 4px 10px;">
-                                        <i class="fa-solid fa-triangle-exclamation"></i> Terlambat
-                                    </span>
-                                    <div style="font-size: 11px; color: #92400e; margin-top: 3px;">
-                                        Unggah: <?= date('d/m/Y H:i', strtotime($up['created_at'])) ?>
-                                    </div>
-                                <?php elseif ($m['status_badge'] === 'OVERDUE_MISSING'): ?>
-                                    <span class="badge badge-danger" style="font-size: 11px; padding: 4px 10px; font-weight: 700;">
-                                        <i class="fa-solid fa-circle-xmark"></i> Lewat Batas Waktu!
-                                    </span>
-                                    <div style="font-size: 11px; color: #dc2626; font-weight: 600; margin-top: 3px;">
-                                        Belum Dikumpulkan (Penalti)
-                                    </div>
-                                <?php elseif ($m['status_badge'] === 'PENDING_APPROVAL'): ?>
-                                    <span class="badge badge-info" style="font-size: 11px; padding: 4px 10px;">
-                                        <i class="fa-solid fa-clock"></i> Menunggu Approval
-                                    </span>
-                                    <div style="font-size: 11px; color: var(--text-muted); margin-top: 3px;">
-                                        Unggah: <?= date('d/m/Y H:i', strtotime($up['created_at'])) ?>
-                                    </div>
-                                <?php elseif ($m['status_badge'] === 'AWAITING_SUBMISSION'): ?>
-                                    <?php 
-                                        $diffDays = ceil(($m['deadline_ts'] - $now) / 86400);
-                                    ?>
-                                    <span class="badge badge-secondary" style="font-size: 11px; padding: 4px 10px;">
-                                        Belum Dikumpul (Sisa <?= max(0, $diffDays) ?> hari)
-                                    </span>
+                                <?php if (!$isMultiSlot): ?>
+                                    <?php $singleSlot = reset($slots); ?>
+                                    <input type="text" 
+                                           name="deadlines[<?= $m['id'] ?>][1][due_info]" 
+                                           style="width: 100%; padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border-color); font-size: 12.5px;" 
+                                           value="<?= SecurityHelper::escape($singleSlot['due_info'] ?? $m['due_info']) ?>" 
+                                           placeholder="Contoh: Awal Semester">
                                 <?php else: ?>
-                                    <span class="badge badge-secondary" style="font-size: 11px; padding: 4px 10px; opacity: 0.7;">
-                                        Belum Ada Batas
-                                    </span>
+                                    <div style="font-size: 12px; font-weight: 600; color: #475569;">
+                                        <?= SecurityHelper::escape($m['due_info']) ?>
+                                    </div>
+                                    <div style="font-size: 11px; color: var(--text-muted); margin-top: 3px;">
+                                        (<?= count($slots) ?> Batas Waktu Terpisah)
+                                    </div>
                                 <?php endif; ?>
+                            </td>
+                            <td>
+                                <div style="display: flex; flex-direction: column; gap: 8px;">
+                                    <?php foreach ($slots as $sNum => $s): ?>
+                                        <div style="<?= $isMultiSlot ? 'background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 6px 8px;' : '' ?>">
+                                            <?php if ($isMultiSlot): ?>
+                                                <div style="font-size: 11px; font-weight: 700; color: #6d28d9; margin-bottom: 3px; display: flex; align-items: center; gap: 4px;">
+                                                    <i class="fa-solid fa-chart-line"></i> <?= SecurityHelper::escape($s['slot_label']) ?>
+                                                </div>
+                                                <input type="hidden" name="deadlines[<?= $m['id'] ?>][<?= $sNum ?>][due_info]" value="<?= SecurityHelper::escape($s['due_info'] ?? $s['slot_label']) ?>">
+                                            <?php endif; ?>
+                                            <input type="datetime-local" 
+                                                   name="deadlines[<?= $m['id'] ?>][<?= $sNum ?>][deadline_datetime]" 
+                                                   class="deadline-input" 
+                                                   style="width: 100%; padding: 5px 8px; border-radius: 6px; border: 1px solid var(--border-color); font-size: 12px; color: var(--text-main);" 
+                                                   value="<?= $s['deadline_datetime'] ?>">
+                                            <?php if (!empty($s['deadline_datetime'])): ?>
+                                                <div style="font-size: 10.5px; color: var(--text-muted); margin-top: 2px;">
+                                                    <i class="fa-regular fa-clock" style="color: #f59e0b; margin-right: 3px;"></i>
+                                                    <?= date('d M Y, H:i', strtotime($s['deadline_datetime'])) ?> WIB
+                                                </div>
+                                            <?php endif; ?>
+                                        </div>
+                                    <?php endforeach; ?>
+                                </div>
+                            </td>
+                            <td>
+                                <div style="display: flex; flex-direction: column; gap: 8px;">
+                                    <?php foreach ($slots as $sNum => $s): 
+                                        $up = $s['upload'];
+                                    ?>
+                                        <div style="<?= $isMultiSlot ? 'padding: 4px 0; min-height: 48px; display: flex; flex-direction: column; justify-content: center;' : '' ?>">
+                                            <?php if ($isMultiSlot): ?>
+                                                <div style="font-size: 10px; font-weight: 700; color: #64748b; margin-bottom: 2px; text-transform: uppercase;">
+                                                    Slot <?= $sNum ?>:
+                                                </div>
+                                            <?php endif; ?>
+                                            <?php if ($s['status_badge'] === 'ON_TIME'): ?>
+                                                <span class="badge badge-success" style="font-size: 11px; padding: 3px 8px;">
+                                                    <i class="fa-solid fa-circle-check"></i> Tepat Waktu
+                                                </span>
+                                                <div style="font-size: 10.5px; color: #166534; margin-top: 2px;">
+                                                    Unggah: <?= date('d/m/Y H:i', strtotime($up['created_at'])) ?>
+                                                </div>
+                                            <?php elseif ($s['status_badge'] === 'LATE_SUBMITTED'): ?>
+                                                <span class="badge badge-warning" style="font-size: 11px; padding: 3px 8px;">
+                                                    <i class="fa-solid fa-triangle-exclamation"></i> Terlambat
+                                                </span>
+                                                <div style="font-size: 10.5px; color: #92400e; margin-top: 2px;">
+                                                    Unggah: <?= date('d/m/Y H:i', strtotime($up['created_at'])) ?>
+                                                </div>
+                                            <?php elseif ($s['status_badge'] === 'OVERDUE_MISSING'): ?>
+                                                <span class="badge badge-danger" style="font-size: 11px; padding: 3px 8px; font-weight: 700;">
+                                                    <i class="fa-solid fa-circle-xmark"></i> Lewat Batas!
+                                                </span>
+                                                <div style="font-size: 10.5px; color: #dc2626; font-weight: 600; margin-top: 2px;">
+                                                    Belum Dikumpulkan
+                                                </div>
+                                            <?php elseif ($s['status_badge'] === 'PENDING_APPROVAL'): ?>
+                                                <span class="badge badge-info" style="font-size: 11px; padding: 3px 8px;">
+                                                    <i class="fa-solid fa-clock"></i> Menunggu Approval
+                                                </span>
+                                                <div style="font-size: 10.5px; color: var(--text-muted); margin-top: 2px;">
+                                                    Unggah: <?= date('d/m/Y H:i', strtotime($up['created_at'])) ?>
+                                                </div>
+                                            <?php elseif ($s['status_badge'] === 'AWAITING_SUBMISSION'): ?>
+                                                <?php 
+                                                    $diffDays = ceil(($s['deadline_ts'] - $now) / 86400);
+                                                ?>
+                                                <span class="badge badge-secondary" style="font-size: 11px; padding: 3px 8px;">
+                                                    Sisa <?= max(0, $diffDays) ?> hari
+                                                </span>
+                                            <?php else: ?>
+                                                <span class="badge badge-secondary" style="font-size: 11px; padding: 3px 8px; opacity: 0.7;">
+                                                    Belum Ada Batas
+                                                </span>
+                                            <?php endif; ?>
+                                        </div>
+                                    <?php endforeach; ?>
+                                </div>
                             </td>
                             <td style="text-align: center;">
-                                <?php if ($up && !empty($up['file_path'])): ?>
-                                    <a href="<?= $baseUrl . '/' . ltrim($up['file_path'], '/') ?>" target="_blank" class="btn btn-outline btn-sm" style="padding: 4px 8px; font-size: 11px;" title="Lihat Dokumen KS">
-                                        <i class="fa-solid fa-eye"></i> Lihat
-                                    </a>
-                                <?php else: ?>
-                                    <span style="color: var(--text-muted); font-size: 12px;">-</span>
-                                <?php endif; ?>
+                                <div style="display: flex; flex-direction: column; gap: 8px;">
+                                    <?php foreach ($slots as $sNum => $s): 
+                                        $up = $s['upload'];
+                                    ?>
+                                        <div style="<?= $isMultiSlot ? 'min-height: 48px; display: flex; align-items: center; justify-content: center;' : '' ?>">
+                                            <?php if ($up && !empty($up['file_path'])): ?>
+                                                <a href="<?= $baseUrl . '/' . ltrim($up['file_path'], '/') ?>" target="_blank" class="btn btn-outline btn-sm" style="padding: 3px 8px; font-size: 11px;" title="Lihat Dokumen KS (<?= SecurityHelper::escape($s['slot_label']) ?>)">
+                                                    <i class="fa-solid fa-eye"></i> Lihat
+                                                </a>
+                                            <?php else: ?>
+                                                <span style="color: var(--text-muted); font-size: 12px;">-</span>
+                                            <?php endif; ?>
+                                        </div>
+                                    <?php endforeach; ?>
+                                </div>
                             </td>
                         </tr>
                     <?php endforeach; ?>

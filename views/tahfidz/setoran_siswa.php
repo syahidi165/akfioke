@@ -19,8 +19,8 @@ $curMonth = (int)date('n');
 
 <div class="page-header">
     <div>
-        <h1 class="page-title">Setoran Hafalan Santri</h1>
-        <div class="page-subtitle">Kalkulator Mushaf Madinah 15 Baris & Mutaba'ah Capaian Tahfidz Santri.</div>
+        <h1 class="page-title">Setoran Hafalan &amp; Tahsin Santri</h1>
+        <div class="page-subtitle">Kalkulator Mushaf Madinah 15 Baris, Evaluasi Tahsin/Tilawah, &amp; Mutaba'ah Capaian Tahfidz Santri (Terintegrasi KPI Unit &amp; Deputi).</div>
     </div>
     <div style="display: flex; gap: 8px; flex-wrap: wrap;">
         <a href="<?= $baseUrl ?>/tahfidz/ajukan-ujian" class="btn btn-outline">
@@ -182,6 +182,42 @@ $curMonth = (int)date('n');
                     </div>
                 </div>
 
+                <!-- Grid Baris 2.5: Evaluasi Nilai Tahfidz & Modul Tahsin -->
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 18px; background: rgba(13, 148, 136, 0.04); padding: 16px; border-radius: 8px; border: 1px dashed rgba(13, 148, 136, 0.35);">
+                    <div class="form-group" style="margin: 0;">
+                        <label class="form-label" style="font-weight: 600; font-size: 0.85rem; color: #0f766e;">
+                            <i class="fa-solid fa-spell-check" style="margin-right: 4px;"></i> Materi / Jilid Tahsin <span style="color: #ef4444;">*</span>
+                        </label>
+                        <select name="tahsin_level" id="tahsinLevel" class="form-control" required>
+                            <option value="Al-Qur'an Tartil">Al-Qur'an Tartil (Mushaf)</option>
+                            <option value="Tajwid & Gharib">Tajwid &amp; Gharib Al-Qur'an</option>
+                            <option value="Tahsin Jilid 6">Tahsin / Tilawati / Ummi Jilid 6</option>
+                            <option value="Tahsin Jilid 5">Tahsin / Tilawati / Ummi Jilid 5</option>
+                            <option value="Tahsin Jilid 4">Tahsin / Tilawati / Ummi Jilid 4</option>
+                            <option value="Tahsin Jilid 3">Tahsin / Tilawati / Ummi Jilid 3</option>
+                            <option value="Tahsin Jilid 2">Tahsin / Tilawati / Ummi Jilid 2</option>
+                            <option value="Tahsin Jilid 1">Tahsin / Tilawati / Ummi Jilid 1</option>
+                            <option value="Pra-Tahsin / Makharijul Huruf">Pra-Tahsin / Makharijul Huruf</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group" style="margin: 0;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                            <label class="form-label" style="font-weight: 600; font-size: 0.85rem; margin: 0; color: #0f766e;">Nilai Tahsin (0-100) <span style="color: #ef4444;">*</span></label>
+                            <span style="font-size: 0.72rem; color: #64748b;">Makhraj, Mad, Tajwid</span>
+                        </div>
+                        <input type="number" step="0.1" min="0" max="100" name="tahsin_score" id="tahsinScore" class="form-control" value="85" required>
+                    </div>
+
+                    <div class="form-group" style="margin: 0;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                            <label class="form-label" style="font-weight: 600; font-size: 0.85rem; margin: 0; color: #4f46e5;">Nilai Tahfidz (0-100) <span style="color: #ef4444;">*</span></label>
+                            <span style="font-size: 0.72rem; color: #64748b;">Kelancaran Hafalan</span>
+                        </div>
+                        <input type="number" step="0.1" min="0" max="100" name="tahfidz_score" id="tahfidzScore" class="form-control" value="85" required>
+                    </div>
+                </div>
+
                 <!-- Grid Baris 3: Ujian Tahfidz Checkbox & Catatan Mutaba'ah -->
                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; align-items: start; margin-bottom: 20px;">
                     <div>
@@ -232,8 +268,9 @@ $curMonth = (int)date('n');
                         <th>Nama Santri</th>
                         <th>Bulan &amp; Kategori</th>
                         <th>Jangkauan Hafalan</th>
-                        <th>Halaman</th>
-                        <th style="text-align: center;">Jumlah Baris</th>
+                        <th style="text-align: center;">Baris &amp; Hal</th>
+                        <th>Materi &amp; Nilai Tahsin</th>
+                        <th style="text-align: center;">Nilai Tahfidz</th>
                         <th style="text-align: center;">Status</th>
                         <th>Catatan Mutaba'ah</th>
                         <th style="width: 100px; text-align: center;">Aksi</th>
@@ -242,7 +279,7 @@ $curMonth = (int)date('n');
                 <tbody>
                     <?php if (empty($setoranLogs)): ?>
                         <tr>
-                            <td colspan="9" style="text-align: center; padding: 36px; color: var(--text-muted, #64748b);">
+                            <td colspan="10" style="text-align: center; padding: 36px; color: var(--text-muted, #64748b);">
                                 <i class="fa-solid fa-book-open" style="font-size: 2rem; margin-bottom: 8px; display: block; opacity: 0.5;"></i>
                                 Belum ada catatan setoran santri di halaqah ini.
                             </td>
@@ -273,9 +310,22 @@ $curMonth = (int)date('n');
                                         s/d <?= SecurityHelper::escape($log['surah_end_name']) ?>:<?= $log['ayah_end'] ?>
                                     </span>
                                 </td>
-                                <td>Hal. <?= $log['page_start'] ?> - <?= $log['page_end'] ?></td>
                                 <td style="text-align: center;">
-                                    <strong style="color: #0f766e;"><?= $log['lines_count'] ?></strong> baris
+                                    <div><strong style="color: #0f766e;"><?= $log['lines_count'] ?></strong> baris</div>
+                                    <div style="font-size: 0.75rem; color: var(--text-muted, #64748b);">Hal. <?= $log['page_start'] ?>-<?= $log['page_end'] ?></div>
+                                </td>
+                                <td>
+                                    <div style="font-size: 0.8rem; font-weight: 600; color: #0f766e;">
+                                        <?= SecurityHelper::escape($log['tahsin_level'] ?? "Al-Qur'an Tartil") ?>
+                                    </div>
+                                    <span class="badge" style="background: rgba(13, 148, 136, 0.12); color: #0d9488; font-weight: 700; margin-top: 2px;">
+                                        Nilai: <?= isset($log['tahsin_score']) && $log['tahsin_score'] !== null ? number_format((float)$log['tahsin_score'], 1) : '-' ?>
+                                    </span>
+                                </td>
+                                <td style="text-align: center;">
+                                    <span class="badge" style="background: rgba(79, 70, 229, 0.12); color: #4f46e5; font-weight: 700; font-size: 0.85rem;">
+                                        <?= isset($log['tahfidz_score']) && $log['tahfidz_score'] !== null ? number_format((float)$log['tahfidz_score'], 1) : '-' ?>
+                                    </span>
                                 </td>
                                 <td style="text-align: center;">
                                     <?php if ($log['is_completed']): ?>
@@ -409,6 +459,32 @@ $curMonth = (int)date('n');
                     </div>
                 </div>
 
+                <!-- Row 2.5: Evaluasi Tahsin & Nilai Tahfidz -->
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-bottom: 16px;">
+                    <div class="form-group" style="margin: 0;">
+                        <label class="form-label" style="font-weight: 600; font-size: 0.8125rem; color: #0f766e;">Materi / Jilid Tahsin</label>
+                        <select name="tahsin_level" id="edit_tahsin_level" class="form-control" required>
+                            <option value="Al-Qur'an Tartil">Al-Qur'an Tartil (Mushaf)</option>
+                            <option value="Tajwid & Gharib">Tajwid &amp; Gharib Al-Qur'an</option>
+                            <option value="Tahsin Jilid 6">Tahsin / Tilawati / Ummi Jilid 6</option>
+                            <option value="Tahsin Jilid 5">Tahsin / Tilawati / Ummi Jilid 5</option>
+                            <option value="Tahsin Jilid 4">Tahsin / Tilawati / Ummi Jilid 4</option>
+                            <option value="Tahsin Jilid 3">Tahsin / Tilawati / Ummi Jilid 3</option>
+                            <option value="Tahsin Jilid 2">Tahsin / Tilawati / Ummi Jilid 2</option>
+                            <option value="Tahsin Jilid 1">Tahsin / Tilawati / Ummi Jilid 1</option>
+                            <option value="Pra-Tahsin / Makharijul Huruf">Pra-Tahsin / Makharijul Huruf</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="margin: 0;">
+                        <label class="form-label" style="font-weight: 600; font-size: 0.8125rem; color: #0f766e;">Nilai Tahsin (0-100)</label>
+                        <input type="number" step="0.1" min="0" max="100" name="tahsin_score" id="edit_tahsin_score" class="form-control" value="85" required>
+                    </div>
+                    <div class="form-group" style="margin: 0;">
+                        <label class="form-label" style="font-weight: 600; font-size: 0.8125rem; color: #4f46e5;">Nilai Tahfidz (0-100)</label>
+                        <input type="number" step="0.1" min="0" max="100" name="tahfidz_score" id="edit_tahfidz_score" class="form-control" value="85" required>
+                    </div>
+                </div>
+
                 <div class="form-group" style="margin: 0;">
                     <label class="form-label" style="font-weight: 600; font-size: 0.85rem;">Catatan Mutaba'ah Guru</label>
                     <input type="text" name="tutor_notes" id="edit_tutor_notes" class="form-control" placeholder="Contoh: Kelancaran baik, perbaiki makhraj huruf...">
@@ -506,6 +582,13 @@ function openEditSetoranModal(log) {
     document.getElementById('edit_month_num').value = log.month_num;
     document.getElementById('edit_student_type').value = log.student_type || 'MHML';
     document.getElementById('edit_tutor_notes').value = log.tutor_notes || '';
+
+    const tLevel = document.getElementById('edit_tahsin_level');
+    const tScore = document.getElementById('edit_tahsin_score');
+    const tfScore = document.getElementById('edit_tahfidz_score');
+    if (tLevel) tLevel.value = log.tahsin_level || "Al-Qur'an Tartil";
+    if (tScore) tScore.value = log.tahsin_score !== null && log.tahsin_score !== undefined ? log.tahsin_score : 85;
+    if (tfScore) tfScore.value = log.tahfidz_score !== null && log.tahfidz_score !== undefined ? log.tahfidz_score : 85;
 
     const sStart = document.getElementById('edit_surah_start');
     const sEnd = document.getElementById('edit_surah_end');

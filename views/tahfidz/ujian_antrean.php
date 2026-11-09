@@ -106,7 +106,8 @@ foreach ($exams as $ex) {
                         <th style="width: 110px; text-align: center;">Juz Ujian</th>
                         <th>Diusulkan Oleh</th>
                         <th style="width: 130px; text-align: center;">Status</th>
-                        <th style="width: 80px; text-align: center;">Nilai</th>
+                        <th style="width: 90px; text-align: center;">Nilai Tahfidz</th>
+                        <th style="width: 90px; text-align: center;">Nilai Tahsin</th>
                         <th style="width: 150px; text-align: center;">No. Syahadah</th>
                         <th style="width: 140px; text-align: center;">Aksi</th>
                     </tr>
@@ -114,7 +115,7 @@ foreach ($exams as $ex) {
                 <tbody>
                     <?php if (empty($exams)): ?>
                         <tr>
-                            <td colspan="9" style="text-align: center; padding: 36px; color: var(--text-muted, #64748b);">
+                            <td colspan="10" style="text-align: center; padding: 36px; color: var(--text-muted, #64748b);">
                                 <i class="fa-solid fa-clipboard-user" style="font-size: 2rem; margin-bottom: 8px; display: block; opacity: 0.5;"></i>
                                 Belum ada antrean santri yang diajukan untuk ujian tahfidz.
                             </td>
@@ -161,8 +162,11 @@ foreach ($exams as $ex) {
                                         </span>
                                     <?php endif; ?>
                                 </td>
-                                <td style="text-align: center; font-weight: 700; color: var(--text-main, #0f172a);">
-                                    <?= $ex['score'] !== null ? number_format($ex['score'], 1) : '-' ?>
+                                <td style="text-align: center; font-weight: 700; color: #4f46e5;">
+                                    <?= $ex['score'] !== null ? number_format((float)$ex['score'], 1) : '-' ?>
+                                </td>
+                                <td style="text-align: center; font-weight: 700; color: #0d9488;">
+                                    <?= isset($ex['tahsin_score']) && $ex['tahsin_score'] !== null ? number_format((float)$ex['tahsin_score'], 1) : ($ex['score'] !== null ? number_format((float)$ex['score'], 1) : '-') ?>
                                 </td>
                                 <td style="text-align: center; font-family: monospace; font-size: 0.8rem; color: #475569;">
                                     <?= SecurityHelper::escape($ex['certificate_number'] ?: '-') ?>
@@ -225,17 +229,22 @@ foreach ($exams as $ex) {
 
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px;">
                     <div class="form-group">
-                        <label class="form-label" style="font-weight: 600; font-size: 0.8125rem;">Nilai Angka (0-100) <span style="color: #ef4444;">*</span></label>
-                        <input type="number" step="0.1" min="0" max="100" name="score" id="modalScore" class="form-control" placeholder="Contoh: 88.5" style="text-align: center; font-size: 1.1rem; font-weight: 700; color: #0d9488;" required>
+                        <label class="form-label" style="font-weight: 600; font-size: 0.8125rem; color: #4f46e5;">Nilai Tahfidz / Kelancaran (0-100) <span style="color: #ef4444;">*</span></label>
+                        <input type="number" step="0.1" min="0" max="100" name="score" id="modalScore" class="form-control" placeholder="Contoh: 88.5" style="text-align: center; font-size: 1.05rem; font-weight: 700; color: #4f46e5;" required>
                     </div>
                     <div class="form-group">
-                        <label class="form-label" style="font-weight: 600; font-size: 0.8125rem;">Keputusan Hasil <span style="color: #ef4444;">*</span></label>
-                        <select name="status" id="modalStatus" class="form-control" required>
-                            <option value="Lulus">Lulus (Terbitkan Syahadah)</option>
-                            <option value="Tidak Lulus">Tidak Lulus (Remedial)</option>
-                            <option value="Menunggu">Menunggu</option>
-                        </select>
+                        <label class="form-label" style="font-weight: 600; font-size: 0.8125rem; color: #0d9488;">Nilai Tahsin / Tajwid (0-100) <span style="color: #ef4444;">*</span></label>
+                        <input type="number" step="0.1" min="0" max="100" name="tahsin_score" id="modalTahsinScore" class="form-control" placeholder="Contoh: 86.0" style="text-align: center; font-size: 1.05rem; font-weight: 700; color: #0d9488;" required>
                     </div>
+                </div>
+
+                <div class="form-group" style="margin-bottom: 14px;">
+                    <label class="form-label" style="font-weight: 600; font-size: 0.8125rem;">Keputusan Hasil <span style="color: #ef4444;">*</span></label>
+                    <select name="status" id="modalStatus" class="form-control" required>
+                        <option value="Lulus">Lulus (Terbitkan Syahadah)</option>
+                        <option value="Tidak Lulus">Tidak Lulus (Remedial)</option>
+                        <option value="Menunggu">Menunggu</option>
+                    </select>
                 </div>
 
                 <div class="form-group">
@@ -271,6 +280,7 @@ function openGradeModal(ex) {
     document.getElementById('modalJuz').value = 'Juz ' + ex.juz_number;
     document.getElementById('modalExamDate').value = ex.exam_date ? ex.exam_date : '<?= date('Y-m-d') ?>';
     document.getElementById('modalScore').value = ex.score !== null ? ex.score : '';
+    document.getElementById('modalTahsinScore').value = ex.tahsin_score !== null && ex.tahsin_score !== undefined ? ex.tahsin_score : (ex.score !== null ? ex.score : '');
     document.getElementById('modalStatus').value = ex.status;
     document.getElementById('modalNotes').value = ex.notes || '';
 

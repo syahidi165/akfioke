@@ -972,6 +972,35 @@ class AkfiController extends Controller {
             die('Data Penilaian AKFI tidak ditemukan.');
         }
 
+        // Anti-IDOR Ownership Check untuk Cetak Rapor AKFI
+        $activeRole = Auth::activeRoleName();
+        $myEmpId = (int)Auth::employeeId();
+        $myUserId = (int)Auth::id();
+        $myUnitId = (int)Auth::unitId();
+        $canViewAkfi = false;
+
+        if (in_array($activeRole, ['operator_yayasan', 'direktur_pendidikan', 'hrd', 'pembina_yayasan', 'ketua_yayasan'], true)) {
+            $canViewAkfi = true;
+        } elseif ((int)$assessment['employee_id'] === $myEmpId
+            || (int)($assessment['superior_signed_by'] ?? 0) === $myUserId
+            || (int)($assessment['next_superior_signed_by'] ?? 0) === $myUserId) {
+            $canViewAkfi = true;
+        } elseif ($activeRole === 'deputi_pendidikan') {
+            $deputiUnits = \App\Controllers\DeputiController::getDeputiUnitIds($myUserId);
+            $canViewAkfi = empty($assessment['unit_id']) || in_array((int)$assessment['unit_id'], $deputiUnits, true);
+        } elseif ($activeRole === 'kepala_sekolah' && (int)$assessment['unit_id'] === $myUnitId) {
+            $canViewAkfi = true;
+        }
+
+        if (!$canViewAkfi) {
+            AuditLog::log('IDOR_AKFI_PRINT_BLOCKED', 'akfi_assessments', $assessmentId, null, [
+                'user_id' => $myUserId,
+                'role'    => $activeRole
+            ]);
+            http_response_code(403);
+            die('Akses Ditolak (403): Anda tidak memiliki wewenang untuk melihat atau mencetak rapor AKFI pegawai ini.');
+        }
+
         $items = Database::fetchAll(
             "SELECT * FROM akfi_template_items WHERE template_id = ? ORDER BY section ASC, order_num ASC",
             [$assessment['template_id']]
@@ -1556,7 +1585,14 @@ class AkfiController extends Controller {
                             : 0.0;
                     }
 
-                    // Kelulusan Target / Ujian Tahfidz Siswa di Halaqah
+                    // Kelulusan Target / Ujian Tahfidz Siswa di Halaqah (termasuk evaluasi nilai Tahfidz >= KKM)
+                    \App\Controllers\TahfidzController::ensureTahsinColumns();
+                    $kkmTahfidzRow = Database::fetch(
+                        "SELECT kkm_score FROM deputi_kpi_standards WHERE unit_id = ? AND academic_year_id = ? AND kpi_category IN ('TAHFIZH', 'TAHFIDZ') LIMIT 1",
+                        [$unitId, $taId]
+                    );
+                    $kkmTahfidzVal = !empty($kkmTahfidzRow['kkm_score']) ? (float)$kkmTahfidzRow['kkm_score'] : 75.0;
+
                     $passedStudentsRow = Database::fetch(
                         "SELECT COUNT(DISTINCT m.student_id) as cnt 
                          FROM tahfidz_halaqah_members m 
@@ -1568,10 +1604,14 @@ class AkfiController extends Controller {
                                )
                                OR EXISTS (
                                    SELECT 1 FROM tahfidz_setoran_siswa tss 
-                                   WHERE tss.student_id = m.student_id AND tss.academic_year_id = ? AND (tss.is_completed = 1 OR tss.lines_count >= 300)
+                                   WHERE tss.student_id = m.student_id AND tss.academic_year_id = ? AND (tss.is_completed = 1 OR tss.lines_count >= 150)
                                )
+                               OR (
+                                   SELECT AVG(tss2.tahfidz_score) FROM tahfidz_setoran_siswa tss2
+                                   WHERE tss2.student_id = m.student_id AND tss2.academic_year_id = ? AND tss2.tahfidz_score IS NOT NULL
+                               ) >= ?
                            )",
-                        array_merge($hIds, [$taId, $taId])
+                        array_merge($hIds, [$taId, $taId, $taId, $kkmTahfidzVal])
                     );
                     $walasPassedTahfidz = (int)($passedStudentsRow['cnt'] ?? 0);
                     $tahfidzPassPct = ($walasTotalStudents > 0) ? min(100.0, round(($walasPassedTahfidz / $walasTotalStudents) * 100, 1)) : 0.0;
@@ -1785,8 +1825,9 @@ class AkfiController extends Controller {
         $ksAdminArchived = round(min(100.0, ($ksAdminCount / $ksTotalSlots) * 100), 1);
 
         // Evaluasi keterikatan batas waktu (due date) yang ditetapkan Deputi Pendidikan
+        \App\Controllers\DeputiController::ensureDeadlinesKsColumns();
         $passedDeadlines = Database::fetch("
-            SELECT COUNT(DISTINCT uad.jenis_admin_id) as total_due_passed
+            SELECT COUNT(DISTINCT CONCAT(uad.jenis_admin_id, '-', uad.month_num)) as total_due_passed
             FROM unit_administrasi_deadlines uad
             JOIN master_jenis_administrasi mja ON uad.jenis_admin_id = mja.id
             WHERE uad.unit_id = ? AND uad.academic_year_id = ? AND mja.target_role = 'KEPALA_SEKOLAH'
@@ -1850,16 +1891,73 @@ class AkfiController extends Controller {
         );
         $unitLombaResmiCount = (int)($lombaResmi['cnt'] ?? 0);
 
-        // Capaian Tahfidz Siswa Satuan (Riil dari tahfidz_exams status 'Lulus')
+        // Capaian Tahfidz & Tahsin Siswa Satuan (Riil dari Modul Halaqah Tahfidz & Tahsin: tahfidz_setoran_siswa & tahfidz_exams)
+        \App\Controllers\TahfidzController::ensureTahsinColumns();
         $totStudentsInUnit = (int)(Database::fetch("SELECT COUNT(id) as c FROM students WHERE unit_id = ? AND status = 'Aktif'", [$unitId])['c'] ?? 0);
-        $passedTahfidzStudents = (int)(Database::fetch(
-            "SELECT COUNT(DISTINCT student_id) as c FROM tahfidz_exams WHERE unit_id = ? AND academic_year_id = ? AND status = 'Lulus'",
+
+        $kkmTfRow = Database::fetch(
+            "SELECT kkm_score FROM deputi_kpi_standards WHERE unit_id = ? AND academic_year_id = ? AND kpi_category IN ('TAHFIZH', 'TAHFIDZ') LIMIT 1",
             [$unitId, $taId]
+        );
+        $kkmTsRow = Database::fetch(
+            "SELECT kkm_score FROM deputi_kpi_standards WHERE unit_id = ? AND academic_year_id = ? AND kpi_category = 'TAHSIN' LIMIT 1",
+            [$unitId, $taId]
+        );
+        $unitKkmTahfidz = !empty($kkmTfRow['kkm_score']) ? (float)$kkmTfRow['kkm_score'] : 75.0;
+        $unitKkmTahsin  = !empty($kkmTsRow['kkm_score']) ? (float)$kkmTsRow['kkm_score'] : 75.0;
+
+        $passedTahfidzStudents = (int)(Database::fetch(
+            "SELECT COUNT(DISTINCT s.id) as c
+             FROM students s
+             WHERE s.unit_id = ? AND s.status = 'Aktif'
+               AND (
+                   EXISTS (
+                       SELECT 1 FROM tahfidz_exams te
+                       WHERE te.student_id = s.id AND te.academic_year_id = ? AND (te.status = 'Lulus' OR te.score >= ?)
+                   )
+                   OR EXISTS (
+                       SELECT 1 FROM tahfidz_setoran_siswa tss
+                       WHERE tss.student_id = s.id AND tss.academic_year_id = ? AND tss.is_completed = 1
+                   )
+                   OR (
+                       SELECT AVG(tss2.tahfidz_score) FROM tahfidz_setoran_siswa tss2
+                       WHERE tss2.student_id = s.id AND tss2.academic_year_id = ? AND tss2.tahfidz_score IS NOT NULL
+                   ) >= ?
+               )",
+            [$unitId, $taId, $unitKkmTahfidz, $taId, $taId, $unitKkmTahfidz]
         )['c'] ?? 0);
         $unitTahfidzPct = $totStudentsInUnit > 0 ? round(($passedTahfidzStudents / $totStudentsInUnit) * 100, 1) : 0.0;
 
-        // Capaian Tahsin Siswa Satuan (Mengambil data yang sama dengan Tahfidz sesuai arahan pengguna)
-        $unitTahsinPct = $unitTahfidzPct;
+        // Capaian Tahsin Siswa Satuan (Murni dari tahsin_score di tahfidz_setoran_siswa & tahfidz_exams)
+        $hasTahsinData = (int)(Database::fetch(
+            "SELECT COUNT(tss.id) as c
+             FROM tahfidz_setoran_siswa tss
+             JOIN students s ON tss.student_id = s.id
+             WHERE s.unit_id = ? AND tss.academic_year_id = ? AND tss.tahsin_score IS NOT NULL",
+            [$unitId, $taId]
+        )['c'] ?? 0);
+
+        if ($hasTahsinData > 0) {
+            $passedTahsinStudents = (int)(Database::fetch(
+                "SELECT COUNT(DISTINCT s.id) as c
+                 FROM students s
+                 WHERE s.unit_id = ? AND s.status = 'Aktif'
+                   AND (
+                       (
+                           SELECT AVG(tss.tahsin_score) FROM tahfidz_setoran_siswa tss
+                           WHERE tss.student_id = s.id AND tss.academic_year_id = ? AND tss.tahsin_score IS NOT NULL
+                       ) >= ?
+                       OR EXISTS (
+                           SELECT 1 FROM tahfidz_exams te
+                           WHERE te.student_id = s.id AND te.academic_year_id = ? AND COALESCE(te.tahsin_score, te.score) >= ?
+                       )
+                   )",
+                [$unitId, $taId, $unitKkmTahsin, $taId, $unitKkmTahsin]
+            )['c'] ?? 0);
+            $unitTahsinPct = $totStudentsInUnit > 0 ? round(($passedTahsinStudents / $totStudentsInUnit) * 100, 1) : 0.0;
+        } else {
+            $unitTahsinPct = $unitTahfidzPct;
+        }
 
         // Rata-rata Nilai Diniyah Satuan (Riil dari student_grades type 'Diniyah')
         $diniyahGrades = Database::fetch(
@@ -1891,7 +1989,7 @@ class AkfiController extends Controller {
         $surveyParent = Database::fetch(
             "SELECT AVG(sr.score_pct) as avg_s FROM survey_responses sr
              JOIN survey_templates st ON sr.template_id = st.id
-             WHERE sr.unit_id = ? AND st.target_respondent = 'orang_tua' AND sr.academic_year_id = ?",
+             WHERE sr.unit_id = ? AND LOWER(st.target_respondent) IN ('orang_tua', 'orang tua') AND sr.academic_year_id = ?",
             [$unitId, $taId]
         );
         $unitParentSurveyAvg = (!empty($surveyParent['avg_s'])) ? round((float)$surveyParent['avg_s'], 1) : 0.0;
@@ -1899,7 +1997,7 @@ class AkfiController extends Controller {
         $surveyStudent = Database::fetch(
             "SELECT AVG(sr.score_pct) as avg_s FROM survey_responses sr
              JOIN survey_templates st ON sr.template_id = st.id
-             WHERE sr.unit_id = ? AND st.target_respondent = 'siswa' AND sr.academic_year_id = ?",
+             WHERE sr.unit_id = ? AND LOWER(st.target_respondent) IN ('siswa', 'santri') AND sr.academic_year_id = ?",
             [$unitId, $taId]
         );
         $unitStudentSurveyAvg = (!empty($surveyStudent['avg_s'])) ? round((float)$surveyStudent['avg_s'], 1) : 0.0;
@@ -1907,7 +2005,7 @@ class AkfiController extends Controller {
         $surveyStaff = Database::fetch(
             "SELECT AVG(sr.score_pct) as avg_s FROM survey_responses sr
              JOIN survey_templates st ON sr.template_id = st.id
-             WHERE sr.unit_id = ? AND st.target_respondent IN ('guru', 'karyawan') AND sr.academic_year_id = ?",
+             WHERE sr.unit_id = ? AND LOWER(st.target_respondent) IN ('guru', 'karyawan') AND sr.academic_year_id = ?",
             [$unitId, $taId]
         );
         $unitStaffSurveyAvg = (!empty($surveyStaff['avg_s'])) ? round((float)$surveyStaff['avg_s'], 1) : 0.0;

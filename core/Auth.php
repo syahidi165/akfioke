@@ -258,9 +258,11 @@ class Auth {
             exit;
         }
 
-        if (!empty($_SESSION['force_change_password'])) {
-            $currentPath = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
-            if (strpos($currentPath, '/change-password') === false && strpos($currentPath, '/logout') === false) {
+        if (!empty($_SESSION['force_change_password']) && !self::isImpersonating()) {
+            $currentPath = (string)parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH);
+            if (strpos($currentPath, '/change-password') === false
+                && strpos($currentPath, '/logout') === false
+                && strpos($currentPath, '/revert-impersonate') === false) {
                 header('Location: ' . self::baseUrl() . '/change-password');
                 exit;
             }
@@ -362,14 +364,17 @@ class Auth {
         $role = self::activeRoleName();
         $unitId = self::unitId();
 
-        // Operator Yayasan dan Direktur Pendidikan boleh melihat semua
-        if (in_array($role, ['operator_yayasan', 'direktur_pendidikan'], true)) {
+        // Operator Yayasan, Direktur, HRD, dan Pembina boleh melihat lintas unit
+        if (in_array($role, ['operator_yayasan', 'direktur_pendidikan', 'hrd', 'direktur_pengadaan', 'direktur_sarpras', 'ketua_yayasan', 'pembina_yayasan'], true)) {
             return true;
         }
 
         switch ($entityType) {
             case 'unit':
-                return (int)$entityId === $unitId || in_array($role, ['deputi_pendidikan'], true);
+                if ($role === 'deputi_pendidikan' && class_exists('\App\Controllers\DeputiController')) {
+                    return in_array((int)$entityId, \App\Controllers\DeputiController::getDeputiUnitIds((int)$userId), true);
+                }
+                return (int)$entityId === $unitId;
 
             case 'student':
                 if ($role === 'orang_tua') {

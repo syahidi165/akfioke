@@ -9,15 +9,45 @@ use RecursiveDirectoryIterator;
 
 class BackupService {
     /**
+     * Buat berkas opsi sementara (.cnf) agar kredensial MySQL tidak terekspos di process list CLI
+     * sekaligus terhindar dari injeksi karakter shell.
+     */
+    private static function createTempMyCnf(string $host, $port, string $user, string $pass): ?string {
+        $backupDir = dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'storage' . DIRECTORY_SEPARATOR . 'backups';
+        if (!is_dir($backupDir)) {
+            @mkdir($backupDir, 0755, true);
+        }
+        $tmpCnf = $backupDir . DIRECTORY_SEPARATOR . '.my_cnf_' . bin2hex(random_bytes(8)) . '.cnf';
+        $escapedPass = str_replace(['\\', '"', "\n", "\r"], ['\\\\', '\\"', '', ''], $pass);
+        $escapedUser = str_replace(["\n", "\r", '"'], '', $user);
+        $escapedHost = str_replace(["\n", "\r", '"'], '', $host);
+        $cleanPort   = (int)$port ?: 3306;
+
+        $content  = "[client]\n";
+        $content .= "host=\"{$escapedHost}\"\n";
+        $content .= "port={$cleanPort}\n";
+        $content .= "user=\"{$escapedUser}\"\n";
+        if ($pass !== '') {
+            $content .= "password=\"{$escapedPass}\"\n";
+        }
+
+        if (@file_put_contents($tmpCnf, $content) === false) {
+            return null;
+        }
+        @chmod($tmpCnf, 0600);
+        return $tmpCnf;
+    }
+
+    /**
      * Ekspor database ke file SQL (mysqldump atau PDO fallback)
      */
     public static function dumpDatabase(string $outputSqlPath): bool {
         $dbConfig = require dirname(__DIR__, 2) . '/config/database.php';
-        $host = $dbConfig['host'] ?? 'localhost';
-        $port = $dbConfig['port'] ?? 3306;
-        $user = $dbConfig['username'] ?? 'root';
-        $pass = $dbConfig['password'] ?? '';
-        $dbname = $dbConfig['database'] ?? 'akfioke_db';
+        $host = (string)($dbConfig['host'] ?? 'localhost');
+        $port = (int)($dbConfig['port'] ?? 3306);
+        $user = (string)($dbConfig['username'] ?? 'root');
+        $pass = (string)($dbConfig['password'] ?? '');
+        $dbname = (string)($dbConfig['database'] ?? 'akfioke_db');
 
         // Deteksi executable mysqldump
         $mysqldumpCandidates = [
@@ -36,9 +66,34 @@ class BackupService {
         }
 
         if ($mysqldumpBin) {
-            $passArg = !empty($pass) ? "-p\"{$pass}\"" : '';
-            $cmd = "\"{$mysqldumpBin}\" -h {$host} -P {$port} -u {$user} {$passArg} {$dbname} > \"{$outputSqlPath}\"";
-            @shell_exec($cmd);
+            $tmpCnf = self::createTempMyCnf($host, $port, $user, $pass);
+            try {
+                if ($tmpCnf) {
+                    // --defaults-extra-file wajib menjadi argumen pertama pada binary MySQL/MariaDB
+                    $cmd = sprintf(
+                        '"%s" --defaults-extra-file=%s --result-file=%s %s',
+                        $mysqldumpBin,
+                        escapeshellarg($tmpCnf),
+                        escapeshellarg($outputSqlPath),
+                        escapeshellarg($dbname)
+                    );
+                } else {
+                    $cmd = sprintf(
+                        '"%s" -h %s -P %d -u %s --result-file=%s %s',
+                        $mysqldumpBin,
+                        escapeshellarg($host),
+                        $port,
+                        escapeshellarg($user),
+                        escapeshellarg($outputSqlPath),
+                        escapeshellarg($dbname)
+                    );
+                }
+                @shell_exec($cmd);
+            } finally {
+                if ($tmpCnf && file_exists($tmpCnf)) {
+                    @unlink($tmpCnf);
+                }
+            }
 
             if (file_exists($outputSqlPath) && filesize($outputSqlPath) > 500) {
                 // Bersihkan DEFINER agar portabel saat dipulihkan di server lain
@@ -236,11 +291,11 @@ class BackupService {
     }
 
     /**
-     * Enkripsi berkas cadangan (Database Dump / Arsip ZIP) menggunakan AES-256-CBC + HMAC-SHA256
+     * Enkripsi berkas cadangan (Database Dump / Arsip ZIP) menggunakan AES-256-CBC + HMAC-SHA256 (HKDF Derived Keys)
      */
     public static function encryptFile(string $sourcePath, string $destPath, ?string $key = null): bool {
         if (!file_exists($sourcePath)) return false;
-        $key = $key ?: \Core\SecurityHelper::getEncryptionKey();
+        $keys = \Core\SecurityHelper::deriveKeys($key);
         $cipher = 'AES-256-CBC';
         $ivlen = openssl_cipher_iv_length($cipher);
         $iv = openssl_random_pseudo_bytes($ivlen);
@@ -248,8 +303,8 @@ class BackupService {
         $data = file_get_contents($sourcePath);
         if ($data === false) return false;
 
-        $ciphertext = openssl_encrypt($data, $cipher, $key, OPENSSL_RAW_DATA, $iv);
-        $hmac = hash_hmac('sha256', $ciphertext, $key, true);
+        $ciphertext = openssl_encrypt($data, $cipher, $keys['enc_key'], OPENSSL_RAW_DATA, $iv);
+        $hmac = hash_hmac('sha256', $ciphertext, $keys['hmac_key'], true);
 
         // Format berkas terenkripsi: IV (16 bytes) + HMAC-SHA256 (32 bytes) + Ciphertext
         $payload = $iv . $hmac . $ciphertext;
@@ -257,11 +312,11 @@ class BackupService {
     }
 
     /**
-     * Dekripsi berkas cadangan terenkripsi
+     * Dekripsi berkas cadangan terenkripsi (dengan dukungan HKDF 32-byte dan fallback kunci legacy)
      */
     public static function decryptFile(string $sourcePath, string $destPath, ?string $key = null): bool {
         if (!file_exists($sourcePath)) return false;
-        $key = $key ?: \Core\SecurityHelper::getEncryptionKey();
+        $keys = \Core\SecurityHelper::deriveKeys($key);
         $cipher = 'AES-256-CBC';
         $ivlen = openssl_cipher_iv_length($cipher);
 
@@ -272,12 +327,18 @@ class BackupService {
         $hmac = substr($payload, $ivlen, 32);
         $ciphertext = substr($payload, $ivlen + 32);
 
-        $expectedHmac = hash_hmac('sha256', $ciphertext, $key, true);
-        if (!hash_equals($hmac, $expectedHmac)) {
-            return false; // Verifikasi integritas gagal (data telah dirusak/kunci salah)
+        $decrypted = false;
+        $expectedHmacNew = hash_hmac('sha256', $ciphertext, $keys['hmac_key'], true);
+        if (hash_equals($hmac, $expectedHmacNew)) {
+            $decrypted = openssl_decrypt($ciphertext, $cipher, $keys['enc_key'], OPENSSL_RAW_DATA, $iv);
+        } else {
+            // Fallback ke kunci legacy untuk berkas .enc yang dibuat sebelum migrasi HKDF
+            $expectedHmacLegacy = hash_hmac('sha256', $ciphertext, $keys['legacy_key'], true);
+            if (hash_equals($hmac, $expectedHmacLegacy)) {
+                $decrypted = openssl_decrypt($ciphertext, $cipher, $keys['legacy_key'], OPENSSL_RAW_DATA, $iv);
+            }
         }
 
-        $decrypted = openssl_decrypt($ciphertext, $cipher, $key, OPENSSL_RAW_DATA, $iv);
         if ($decrypted === false) return false;
 
         return file_put_contents($destPath, $decrypted) !== false;
@@ -293,11 +354,11 @@ class BackupService {
         }
 
         $dbConfig = require dirname(__DIR__, 2) . '/config/database.php';
-        $host = $dbConfig['host'] ?? 'localhost';
-        $port = $dbConfig['port'] ?? 3306;
-        $user = $dbConfig['username'] ?? 'root';
-        $pass = $dbConfig['password'] ?? '';
-        $dbname = $dbConfig['database'] ?? 'akfioke_db';
+        $host = (string)($dbConfig['host'] ?? 'localhost');
+        $port = (int)($dbConfig['port'] ?? 3306);
+        $user = (string)($dbConfig['username'] ?? 'root');
+        $pass = (string)($dbConfig['password'] ?? '');
+        $dbname = (string)($dbConfig['database'] ?? 'akfioke_db');
 
         // 1. Coba eksekusi melalui mysql client CLI jika tersedia
         $mysqlCandidates = [
@@ -316,9 +377,34 @@ class BackupService {
         }
 
         if ($mysqlBin) {
-            $passArg = !empty($pass) ? "-p\"{$pass}\"" : '';
-            $cmd = "\"{$mysqlBin}\" -h {$host} -P {$port} -u {$user} {$passArg} {$dbname} < \"{$sqlFilePath}\" 2>&1";
-            $output = @shell_exec($cmd);
+            $tmpCnf = self::createTempMyCnf($host, $port, $user, $pass);
+            $output = null;
+            try {
+                if ($tmpCnf) {
+                    $cmd = sprintf(
+                        '"%s" --defaults-extra-file=%s %s < %s 2>&1',
+                        $mysqlBin,
+                        escapeshellarg($tmpCnf),
+                        escapeshellarg($dbname),
+                        escapeshellarg($sqlFilePath)
+                    );
+                } else {
+                    $cmd = sprintf(
+                        '"%s" -h %s -P %d -u %s %s < %s 2>&1',
+                        $mysqlBin,
+                        escapeshellarg($host),
+                        $port,
+                        escapeshellarg($user),
+                        escapeshellarg($dbname),
+                        escapeshellarg($sqlFilePath)
+                    );
+                }
+                $output = @shell_exec($cmd);
+            } finally {
+                if ($tmpCnf && file_exists($tmpCnf)) {
+                    @unlink($tmpCnf);
+                }
+            }
 
             // Periksa apakah eksekusi CLI berhasil
             if (empty($output) || stripos($output, 'error') === false) {

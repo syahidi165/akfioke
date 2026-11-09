@@ -127,17 +127,93 @@ class SurveyController extends Controller {
     }
 
     // --- 3. SURVEI SISWA ---
+    private function ensureSiswaSurveyTemplate(): int {
+        $tpl = Database::fetch("SELECT id FROM survey_templates WHERE code = 'SURVEY_SISWA' OR target_respondent = 'Siswa' ORDER BY id ASC LIMIT 1");
+        if ($tpl) {
+            return (int)$tpl['id'];
+        }
+        $defaultQuestions = [
+            'Pengalaman Belajar Santri' => [
+                1 => 'Bagaimana perasaanmu saat belajar di kelas bersama Bapak/Ibu guru?',
+                2 => 'Apakah Bapak/Ibu guru selalu ramah dan sabar membimbing hafalan tahfidz?'
+            ]
+        ];
+        Database::execute(
+            "INSERT INTO survey_templates (code, title, target_respondent, questions_json, is_active) VALUES ('SURVEY_SISWA', 'Kuesioner Pengalaman Belajar Santri', 'Siswa', ?, 1)",
+            [json_encode($defaultQuestions)]
+        );
+        return (int)Database::lastInsertId();
+    }
+
     public function siswaForm(): void {
-        $this->requireRole('santri');
+        $this->requireRole(['santri', 'siswa']);
+        $unitId = Auth::unitId();
+        $taId = Auth::academicYearId();
+        $userId = Auth::id();
+        $tplId = $this->ensureSiswaSurveyTemplate();
+
+        $existing = Database::fetch(
+            "SELECT * FROM survey_responses WHERE template_id = ? AND unit_id = ? AND academic_year_id = ? AND respondent_user_id = ?",
+            [$tplId, $unitId, $taId, $userId]
+        );
+
         $this->view('survey/siswa', [
-            'pageTitle' => 'Kuesioner Pengalaman Belajar Santri'
+            'pageTitle' => 'Kuesioner Pengalaman Belajar Santri',
+            'existing'  => $existing
         ]);
     }
 
     public function siswaSubmit(): void {
-        $this->requireRole('santri');
-        $this->setFlash('success', 'Terima kasih telah mengisi kuesioner.');
-        $this->redirect(Auth::baseUrl() . '/dashboard');
+        $this->requireRole(['santri', 'siswa']);
+        $unitId = Auth::unitId();
+        $taId = Auth::academicYearId();
+        $userId = Auth::id();
+
+        if (!$unitId) {
+            $std = Database::fetch("SELECT unit_id FROM students WHERE student_user_id = ? LIMIT 1", [$userId]);
+            $unitId = (int)($std['unit_id'] ?? 1);
+        }
+
+        $answers = $_POST['ans'] ?? [];
+        $favoriteThing = trim($_POST['favorite_thing'] ?? ($_POST['suggestions'] ?? ''));
+
+        $totalScore = 0;
+        $count = 0;
+        if (is_array($answers)) {
+            foreach ($answers as $val) {
+                $v = max(1, min(4, (int)$val));
+                $totalScore += $v;
+                $count++;
+            }
+        }
+
+        $maxScore = max(1, $count * 4);
+        $scorePct = round(($totalScore / $maxScore) * 100, 2);
+        $tplId = $this->ensureSiswaSurveyTemplate();
+
+        $existing = Database::fetch(
+            "SELECT id FROM survey_responses WHERE template_id = ? AND unit_id = ? AND academic_year_id = ? AND respondent_user_id = ?",
+            [$tplId, $unitId, $taId, $userId]
+        );
+
+        if ($existing) {
+            Database::execute(
+                "UPDATE survey_responses SET answers_json = ?, total_score = ?, max_score = ?, score_pct = ?, suggestions = ? WHERE id = ?",
+                [json_encode($answers), $totalScore, $maxScore, $scorePct, $favoriteThing, $existing['id']]
+            );
+            $respId = (int)$existing['id'];
+        } else {
+            Database::execute(
+                "INSERT INTO survey_responses (template_id, unit_id, academic_year_id, respondent_user_id, answers_json, total_score, max_score, score_pct, suggestions) 
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                [$tplId, $unitId, $taId, $userId, json_encode($answers), $totalScore, $maxScore, $scorePct, $favoriteThing]
+            );
+            $respId = (int)Database::lastInsertId();
+        }
+
+        AuditLog::log('SUBMIT_SURVEY_SISWA', 'survey_responses', $respId, null, ['score_pct' => $scorePct]);
+        $this->setFlash('success', 'Jazakumullah Khairan! Terima kasih telah mengisi kuesioner pengalaman belajar santri.');
+        $this->redirect(Auth::baseUrl() . '/survey/siswa');
     }
 
     // --- 4. REKAP SURVEI UNTUK KEPSEK & YAYASAN ---

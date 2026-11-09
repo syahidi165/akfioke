@@ -948,6 +948,7 @@ $eventsJson = json_encode($events, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS |
 var allEvents = <?= $eventsJson ?>;
 var academicStartYear = <?= (int)($academicStartYear ?? 2026) ?>;
 var isKepsek = <?= !empty($isKepsek) ? 'true' : 'false' ?>;
+var canDeleteMomFile = <?= in_array(Auth::activeRoleName(), ['deputi_pendidikan', 'direktur_pendidikan', 'operator_yayasan'], true) ? 'true' : 'false' ?>;
 var currentYear = <?= (int)date('Y') ?>;
 var currentMonth = <?= (int)date('n') - 1 ?>; // Bulan berjalan saat ini (0-11)
 var selectedCategory = 'ALL';
@@ -1586,7 +1587,14 @@ function openMomModal(eventId) {
 
             var fileSpan = document.getElementById('momCurrentFile');
             if (data.mom && data.mom.file_path) {
-                fileSpan.innerHTML = '<i class="fa-solid fa-paperclip"></i> Dokumen terlampir: <a href="' + data.mom.file_path + '" target="_blank" style="font-weight:600; text-decoration:underline;">Buka File Lampiran</a>';
+                var deleteBtn = '';
+                if (canDeleteMomFile && !readOnly) {
+                    deleteBtn = '<button type="button" class="btn btn-outline btn-sm" onclick="deleteMomFile(' + data.mom.id + ')" style="padding: 2px 8px; font-size: 11px; color: #dc2626; border-color: #fca5a5; display: inline-flex; align-items: center; gap: 4px;" title="Hapus Berkas Lampiran Ini"><i class="fa-solid fa-trash"></i> Hapus Berkas</button>';
+                }
+                fileSpan.innerHTML = '<div style="display:flex; align-items:center; justify-content:space-between; margin-top:5px; padding:6px 10px; background:#f0f9ff; border:1px solid #bae6fd; border-radius:6px; flex-wrap:wrap; gap:8px;">' +
+                    '<span><i class="fa-solid fa-paperclip" style="color:#0284c7;"></i> Dokumen terlampir: <a href="<?= $baseUrl ?>/deputi/calendar/download-mom/' + data.mom.id + '" target="_blank" style="font-weight:600; text-decoration:underline; color:#0284c7;">Buka File Lampiran</a></span>' +
+                    deleteBtn +
+                    '</div>';
             } else {
                 fileSpan.innerHTML = '';
             }
@@ -1672,6 +1680,42 @@ function closeMomModal() {
         m.style.display = 'none';
         m.classList.remove('active');
     }
+}
+
+function deleteMomFile(momId) {
+    if (!canDeleteMomFile) {
+        alert('Akses Ditolak: Hanya Deputi Pendidikan yang berwenang menghapus berkas lampiran MoM.');
+        return;
+    }
+    if (!confirm('Apakah Anda yakin ingin menghapus berkas lampiran MoM ini? Berkas yang dihapus tidak dapat dipulihkan.')) {
+        return;
+    }
+
+    var formData = new FormData();
+    formData.append('mom_id', momId);
+    formData.append('csrf_token', '<?= CSRF::token() ?>');
+
+    fetch('<?= $baseUrl ?>/deputi/calendar/delete-mom-file', {
+        method: 'POST',
+        headers: {
+            'X-CSRF-TOKEN': '<?= CSRF::token() ?>'
+        },
+        body: formData
+    })
+    .then(function(res) { return res.json(); })
+    .then(function(res) {
+        if (res.success) {
+            document.getElementById('momCurrentFile').innerHTML = '<div style="margin-top:5px; padding:6px 10px; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:6px; color:#166534; font-size:11.5px; font-weight:600;"><i class="fa-solid fa-circle-check"></i> Berkas lampiran berhasil dihapus.</div>';
+            var fileInput = document.querySelector('input[name="mom_file"]');
+            if (fileInput) fileInput.value = '';
+        } else {
+            alert('Gagal menghapus berkas: ' + (res.message || 'Terjadi kesalahan sistem.'));
+        }
+    })
+    .catch(function(err) {
+        console.error(err);
+        alert('Terjadi kesalahan jaringan.');
+    });
 }
 
 // Tambah Baris Butir Komitmen ke Tabel

@@ -36,7 +36,7 @@ $baseUrl = Auth::baseUrl();
         Skema Standar Mutu &amp; Keterkaitan Mapel Sekolah:
     </div>
     <div style="color: #334155; line-height: 1.5;">
-        Standar KPI yang Anda tetapkan di bawah ini (Kategori, Standar KKM, &amp; % Syarat Kelulusan) akan menjadi referensi baku dan <strong>hanya akan muncul sebagai opsi</strong> saat Operator Sekolah mengatur mata pelajaran pada unit ini. Jika Anda belum menginput standar KPI pada suatu unit, maka pilihan KPI tidak akan tersedia bagi Operator Sekolah.
+        Standar KPI yang Anda tetapkan di bawah ini (Kategori, Standar KKM, &amp; % Syarat Kelulusan) akan menjadi referensi baku pada unit ini. Khusus kategori <strong>TAHFIZH</strong> dan <strong>TAHSIN</strong>, realisasi nilai siswa ditarik <strong>otomatis secara langsung dari Modul Halaqah Tahfidz &amp; Tahsin</strong> (Input Setoran &amp; Ujian oleh Guru Tahfidz / Tutor Siswa), serta terhubung langsung ke <strong>Indikator 5.2 Rapor KPI Deputi Pendidikan</strong>.
     </div>
 </div>
 
@@ -93,6 +93,11 @@ $baseUrl = Auth::baseUrl();
                                 <div style="font-weight: 700; color: #1e293b; font-size: 0.9375rem;">
                                     <?= SecurityHelper::escape($std['kpi_category']) ?>
                                 </div>
+                                <?php if (!empty($ach['source'])): ?>
+                                    <span style="display: inline-block; margin-top: 3px; font-size: 0.7rem; padding: 2px 6px; border-radius: 4px; background: <?= str_contains($ach['source'], 'Halaqah') ? 'rgba(13, 148, 136, 0.12)' : '#f1f5f9' ?>; color: <?= str_contains($ach['source'], 'Halaqah') ? '#0f766e' : '#64748b' ?>; font-weight: 600;">
+                                        <i class="fa-solid <?= str_contains($ach['source'], 'Halaqah') ? 'fa-book-quran' : 'fa-file-lines' ?>" style="margin-right: 3px;"></i><?= SecurityHelper::escape($ach['source']) ?>
+                                    </span>
+                                <?php endif; ?>
                             </td>
                             <td style="padding: 12px 16px; font-size: 0.8125rem; color: #475569;">
                                 <?= SecurityHelper::escape($std['objective_description'] ?: 'Pencapaian ketuntasan kurikulum syar\'i & nasional') ?>

@@ -647,10 +647,14 @@ class DeputiController extends Controller {
 
         // Upload berkas pendukung jika ada
         $filePath = null;
-        if (!empty($_FILES['mom_file']['name'])) {
-            $uploadResult = Uploader::upload($_FILES['mom_file'], 'mom_docs', ['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png']);
+        if (!empty($_FILES['mom_file']['name']) && (!isset($_FILES['mom_file']['error']) || $_FILES['mom_file']['error'] === UPLOAD_ERR_OK)) {
+            $uploadResult = Uploader::upload($_FILES['mom_file'], 'mom_docs');
             if ($uploadResult['success']) {
-                $filePath = $uploadResult['path'];
+                $filePath = $uploadResult['file_path'];
+            } else {
+                $this->setFlash('danger', 'Gagal mengunggah berkas MoM: ' . ($uploadResult['message'] ?? 'Format berkas tidak valid.'));
+                $this->redirect(Auth::baseUrl() . '/deputi/calendar?deputi_id=' . $deputiId);
+                return;
             }
         }
 
@@ -738,6 +742,54 @@ class DeputiController extends Controller {
 
         $this->setFlash('success', 'Notula Rapat (MoM) dan komitmen aksi berhasil disimpan.');
         $this->redirect(Auth::baseUrl() . '/deputi/calendar?deputi_id=' . $deputiId);
+    }
+
+    /**
+     * Unduh / alirkan berkas lampiran MoM secara aman
+     */
+    public function downloadMomFile(string $id): void {
+        $this->requireAuth();
+        $mom = Database::fetch("SELECT * FROM deputi_meeting_moms WHERE id = ?", [(int)$id]);
+        if (!$mom || empty($mom['file_path'])) {
+            http_response_code(404);
+            die('Lampiran berkas MoM tidak ditemukan.');
+        }
+        $ext = pathinfo($mom['file_path'], PATHINFO_EXTENSION);
+        $fileName = 'Lampiran_MoM_' . $mom['id'] . '.' . ($ext ?: 'pdf');
+        Uploader::stream($mom['file_path'], $fileName, false);
+    }
+
+    /**
+     * Hapus berkas lampiran MoM (Hanya Deputi Pendidikan / Direktur / Operator Yayasan)
+     */
+    public function deleteMomFile(): void {
+        header('Content-Type: application/json');
+        $this->requireRole(['deputi_pendidikan', 'direktur_pendidikan', 'operator_yayasan']);
+
+        $momId = (int)($_POST['mom_id'] ?? 0);
+        if ($momId <= 0) {
+            echo json_encode(['success' => false, 'message' => 'ID MoM tidak valid.']);
+            exit;
+        }
+
+        $mom = Database::fetch("SELECT * FROM deputi_meeting_moms WHERE id = ?", [$momId]);
+        if (!$mom || empty($mom['file_path'])) {
+            echo json_encode(['success' => false, 'message' => 'Berkas lampiran tidak ditemukan atau sudah dihapus.']);
+            exit;
+        }
+
+        $filePath = $mom['file_path'];
+        $fullPath = dirname(dirname(__DIR__)) . '/storage/uploads/' . ltrim($filePath, '/');
+        if (file_exists($fullPath)) {
+            @unlink($fullPath);
+        }
+
+        Database::execute("UPDATE deputi_meeting_moms SET file_path = NULL, updated_at = NOW() WHERE id = ?", [$momId]);
+
+        AuditLog::log('DELETE_MOM_FILE', 'deputi_meeting_moms', $momId, ['file_path' => $filePath], ['file_path' => null]);
+
+        echo json_encode(['success' => true, 'message' => 'Berkas lampiran MoM berhasil dihapus.']);
+        exit;
     }
 
     public function toggleActionStatus(): void {
@@ -947,40 +999,11 @@ class DeputiController extends Controller {
             [$taId, $selectedUnitId]
         );
 
-        // Hitung realisasi ketercapaian nilai KKM siswa untuk masing-masing KPI
+        // Hitung realisasi ketercapaian nilai KKM siswa untuk masing-masing KPI (Terintegrasi Modul Tahfidz/Tahsin & Nilai Mapel)
+        \App\Controllers\TahfidzController::ensureTahsinColumns();
         $achievementMap = [];
         foreach ($standards as $std) {
-            $cat = $std['kpi_category'];
-            $kkm = (float)$std['kkm_score'];
-
-            // Query siswa yang mengambil mata pelajaran dengan kategori ini di unit tersebut
-            $scoreStats = Database::fetch(
-                "SELECT COUNT(DISTINCT s.id) as total_students,
-                        COALESCE(SUM(CASE WHEN mg.avg_score >= ? THEN 1 ELSE 0 END), 0) as passed_students
-                 FROM students s
-                 JOIN class_students cs ON s.id = cs.student_id AND cs.status = 'Aktif'
-                 JOIN classes c ON cs.class_id = c.id AND c.unit_id = ? AND c.academic_year_id = ?
-                 JOIN subjects sub ON sub.unit_id = c.unit_id AND (sub.deputi_kpi_category = ? OR sub.name LIKE ?)
-                 LEFT JOIN (
-                     SELECT student_id, subject_id, AVG(score) as avg_score 
-                     FROM student_grades 
-                     WHERE academic_year_id = ?
-                     GROUP BY student_id, subject_id
-                 ) mg ON mg.student_id = s.id AND mg.subject_id = sub.id
-                 WHERE s.unit_id = ? AND s.status = 'Aktif'",
-                [$kkm, $selectedUnitId, $taId, $cat, "%{$cat}%", $taId, $selectedUnitId]
-            );
-
-            $tot = (int)($scoreStats['total_students'] ?? 0);
-            $pass = (int)($scoreStats['passed_students'] ?? 0);
-            $pct = $tot > 0 ? round(($pass / $tot) * 100, 2) : 0.0;
-
-            $achievementMap[$std['id']] = [
-                'total'     => $tot,
-                'passed'    => $pass,
-                'pct'       => $pct,
-                'is_target' => $pct >= (float)$std['target_achievement_pct']
-            ];
+            $achievementMap[$std['id']] = self::evaluateKpiStandard($std, $taId);
         }
 
         $this->view('deputi/kpi_mutu', [
@@ -992,6 +1015,143 @@ class DeputiController extends Controller {
             'deputiList'     => $deputiList,
             'deputiUserId'   => $deputiUserId
         ]);
+    }
+
+    /**
+     * Evaluasi ketercapaian 1 standar KPI Mutu Deputi pada unit tertentu.
+     * Untuk kategori TAHFIZH/TAHFIDZ dan TAHSIN, membaca langsung dari modul Halaqah Tahfidz & Tahsin
+     * (tahfidz_setoran_siswa & tahfidz_exams) dengan fallback ke student_grades.
+     */
+    public static function evaluateKpiStandard(array $std, int $taId): array {
+        \App\Controllers\TahfidzController::ensureTahsinColumns();
+        $unitId = (int)($std['unit_id'] ?? 0);
+        $cat = strtoupper(trim($std['kpi_category'] ?? ''));
+        $kkm = (float)($std['kkm_score'] ?? 75.0);
+        $targetPct = (float)($std['target_achievement_pct'] ?? 80.0);
+
+        if (in_array($cat, ['TAHFIZH', 'TAHFIDZ'], true)) {
+            $totRow = Database::fetch(
+                "SELECT COUNT(id) as cnt FROM students WHERE unit_id = ? AND status = 'Aktif'",
+                [$unitId]
+            );
+            $tot = (int)($totRow['cnt'] ?? 0);
+
+            $passRow = Database::fetch(
+                "SELECT COUNT(DISTINCT s.id) as cnt
+                 FROM students s
+                 WHERE s.unit_id = ? AND s.status = 'Aktif'
+                   AND (
+                       EXISTS (
+                           SELECT 1 FROM tahfidz_exams te
+                           WHERE te.student_id = s.id AND te.academic_year_id = ? AND (te.status = 'Lulus' OR te.score >= ?)
+                       )
+                       OR EXISTS (
+                           SELECT 1 FROM tahfidz_setoran_siswa tss
+                           WHERE tss.student_id = s.id AND tss.academic_year_id = ? AND tss.is_completed = 1
+                       )
+                       OR (
+                           SELECT AVG(tss2.tahfidz_score) FROM tahfidz_setoran_siswa tss2
+                           WHERE tss2.student_id = s.id AND tss2.academic_year_id = ? AND tss2.tahfidz_score IS NOT NULL
+                       ) >= ?
+                       OR EXISTS (
+                           SELECT 1 FROM (
+                               SELECT sg.student_id, AVG(sg.score) as avg_sc
+                               FROM student_grades sg
+                               JOIN subjects sub ON sg.subject_id = sub.id
+                               WHERE sg.academic_year_id = ? AND sub.unit_id = ?
+                                 AND (sub.deputi_kpi_category IN ('TAHFIZH', 'TAHFIDZ') OR sub.name LIKE '%Tahfidz%' OR sub.name LIKE '%Tahfizh%')
+                               GROUP BY sg.student_id
+                           ) gtf WHERE gtf.student_id = s.id AND gtf.avg_sc >= ?
+                       )
+                   )",
+                [$unitId, $taId, $kkm, $taId, $taId, $kkm, $taId, $unitId, $kkm]
+            );
+            $pass = (int)($passRow['cnt'] ?? 0);
+            $pct = $tot > 0 ? round(($pass / $tot) * 100, 2) : 0.0;
+
+            return [
+                'total'     => $tot,
+                'passed'    => $pass,
+                'pct'       => $pct,
+                'is_target' => $pct >= $targetPct,
+                'source'    => 'Modul Halaqah Tahfidz & Ujian'
+            ];
+        }
+
+        if ($cat === 'TAHSIN') {
+            $totRow = Database::fetch(
+                "SELECT COUNT(id) as cnt FROM students WHERE unit_id = ? AND status = 'Aktif'",
+                [$unitId]
+            );
+            $tot = (int)($totRow['cnt'] ?? 0);
+
+            $passRow = Database::fetch(
+                "SELECT COUNT(DISTINCT s.id) as cnt
+                 FROM students s
+                 WHERE s.unit_id = ? AND s.status = 'Aktif'
+                   AND (
+                       (
+                           SELECT AVG(tss.tahsin_score) FROM tahfidz_setoran_siswa tss
+                           WHERE tss.student_id = s.id AND tss.academic_year_id = ? AND tss.tahsin_score IS NOT NULL
+                       ) >= ?
+                       OR EXISTS (
+                           SELECT 1 FROM tahfidz_exams te
+                           WHERE te.student_id = s.id AND te.academic_year_id = ? AND COALESCE(te.tahsin_score, te.score) >= ?
+                       )
+                       OR EXISTS (
+                           SELECT 1 FROM (
+                               SELECT sg.student_id, AVG(sg.score) as avg_sc
+                               FROM student_grades sg
+                               JOIN subjects sub ON sg.subject_id = sub.id
+                               WHERE sg.academic_year_id = ? AND sub.unit_id = ?
+                                 AND (sub.deputi_kpi_category = 'TAHSIN' OR sub.name LIKE '%Tahsin%')
+                               GROUP BY sg.student_id
+                           ) gts WHERE gts.student_id = s.id AND gts.avg_sc >= ?
+                       )
+                   )",
+                [$unitId, $taId, $kkm, $taId, $kkm, $taId, $unitId, $kkm]
+            );
+            $pass = (int)($passRow['cnt'] ?? 0);
+            $pct = $tot > 0 ? round(($pass / $tot) * 100, 2) : 0.0;
+
+            return [
+                'total'     => $tot,
+                'passed'    => $pass,
+                'pct'       => $pct,
+                'is_target' => $pct >= $targetPct,
+                'source'    => 'Modul Halaqah Tahsin & Tajwid'
+            ];
+        }
+
+        // Kategori Mapel Lainnya: Query siswa yang mengambil mata pelajaran dengan kategori ini di unit tersebut
+        $scoreStats = Database::fetch(
+            "SELECT COUNT(DISTINCT s.id) as total_students,
+                    COALESCE(SUM(CASE WHEN mg.avg_score >= ? THEN 1 ELSE 0 END), 0) as passed_students
+             FROM students s
+             JOIN class_students cs ON s.id = cs.student_id AND cs.status = 'Aktif'
+             JOIN classes c ON cs.class_id = c.id AND c.unit_id = ? AND c.academic_year_id = ?
+             JOIN subjects sub ON sub.unit_id = c.unit_id AND (sub.deputi_kpi_category = ? OR sub.name LIKE ?)
+             LEFT JOIN (
+                 SELECT student_id, subject_id, AVG(score) as avg_score 
+                 FROM student_grades 
+                 WHERE academic_year_id = ?
+                 GROUP BY student_id, subject_id
+             ) mg ON mg.student_id = s.id AND mg.subject_id = sub.id
+             WHERE s.unit_id = ? AND s.status = 'Aktif'",
+            [$kkm, $unitId, $taId, $cat, "%{$cat}%", $taId, $unitId]
+        );
+
+        $tot = (int)($scoreStats['total_students'] ?? 0);
+        $pass = (int)($scoreStats['passed_students'] ?? 0);
+        $pct = $tot > 0 ? round(($pass / $tot) * 100, 2) : 0.0;
+
+        return [
+            'total'     => $tot,
+            'passed'    => $pass,
+            'pct'       => $pct,
+            'is_target' => $pct >= $targetPct,
+            'source'    => 'Nilai Bulanan Mapel'
+        ];
     }
 
     public function saveKpiMutu(): void {
@@ -1698,18 +1858,20 @@ class DeputiController extends Controller {
         // 7. Evaluasi Kinerja Kepala Sekolah (Indikator 3.1)
         // Ambil data ketercapaian penilaian sikap & administrasi KS
         // 7. Evaluasi Kinerja Kepala Sekolah (Indikator 3.1) - Berdasarkan Ketepatan Waktu Administrasi KS
+        self::ensureDeadlinesKsColumns();
         $ksDeadlinesCheck = Database::fetch("
             SELECT 
-                COUNT(DISTINCT CONCAT(uad.unit_id, '-', uad.jenis_admin_id)) as total_deadlines_passed,
+                COUNT(DISTINCT CONCAT(uad.unit_id, '-', uad.jenis_admin_id, '-', uad.month_num)) as total_deadlines_passed,
                 COUNT(DISTINCT CASE 
                     WHEN au.id IS NOT NULL AND au.status = 'Disetujui' AND au.is_on_time = 1 
-                    THEN CONCAT(uad.unit_id, '-', uad.jenis_admin_id) 
+                    THEN CONCAT(uad.unit_id, '-', uad.jenis_admin_id, '-', uad.month_num) 
                     ELSE NULL 
                 END) as ontime_approved
             FROM unit_administrasi_deadlines uad
             JOIN master_jenis_administrasi mja ON uad.jenis_admin_id = mja.id
             LEFT JOIN administrasi_uploads au ON au.jenis_admin_id = uad.jenis_admin_id 
                  AND au.unit_id = uad.unit_id AND au.academic_year_id = uad.academic_year_id
+                 AND (au.month_num = uad.month_num OR uad.month_num = 1)
             WHERE uad.unit_id IN ({$inUnits}) AND uad.academic_year_id = ? AND mja.target_role = 'KEPALA_SEKOLAH'
               AND (
                   (uad.deadline_datetime IS NOT NULL AND uad.deadline_datetime < NOW())
@@ -1810,10 +1972,44 @@ class DeputiController extends Controller {
         $uScale = $uPct >= 90 ? 5 : ($uPct >= 80 ? 4 : 3);
         $metrics['5.1'] = ['scale' => $uScale, 'ach_pct' => ($uScale / 5) * 100, 'info' => "{$onU} dari {$totU} laporan diunggah tepat waktu (<= tgl 28)"];
 
-        // 15. KKM Siswa terhadap Standar KPI Deputi (Indikator 5.2)
+        // 15. KKM Siswa terhadap Standar KPI Deputi (Indikator 5.2 - Terintegrasi Modul Tahfidz, Tahsin, & Mapel)
         $kpiStandards = Database::fetchAll("SELECT * FROM deputi_kpi_standards WHERE unit_id IN ({$inUnits}) AND academic_year_id = ?", [$taId]);
-        $kpiScale = count($kpiStandards) > 0 ? 5 : 4;
-        $metrics['5.2'] = ['scale' => $kpiScale, 'ach_pct' => ($kpiScale / 5) * 100, 'info' => count($kpiStandards) . " standar KPI mutu mapel aktif diterapkan"];
+        if (count($kpiStandards) > 0) {
+            $metStandards = 0;
+            $ratioSum = 0.0;
+            $activeEvalCount = 0;
+            $tahfidzTahsinSummary = [];
+
+            foreach ($kpiStandards as $std) {
+                $eval = self::evaluateKpiStandard($std, $taId);
+                $targetPct = max(1.0, (float)($std['target_achievement_pct'] ?? 80.0));
+                if ($eval['is_target']) {
+                    $metStandards++;
+                }
+                if ($eval['total'] > 0) {
+                    $activeEvalCount++;
+                    $ratioSum += min(100.0, ($eval['pct'] / $targetPct) * 100.0);
+                }
+                $catUpper = strtoupper(trim($std['kpi_category'] ?? ''));
+                if (in_array($catUpper, ['TAHFIZH', 'TAHFIDZ', 'TAHSIN'], true)) {
+                    $tahfidzTahsinSummary[] = "{$catUpper}: {$eval['pct']}%";
+                }
+            }
+
+            if ($activeEvalCount > 0) {
+                $avgKpiRatio = round($ratioSum / $activeEvalCount, 1);
+                $kpiScale = $avgKpiRatio >= 90 ? 5 : ($avgKpiRatio >= 75 ? 4 : ($avgKpiRatio >= 60 ? 3 : ($avgKpiRatio >= 40 ? 2 : 1)));
+                $extraInfo = !empty($tahfidzTahsinSummary) ? ' (' . implode(', ', array_slice($tahfidzTahsinSummary, 0, 4)) . ')' : '';
+                $kpiInfo = "{$metStandards}/" . count($kpiStandards) . " standar KPI tercapai, rata-rata realisasi {$avgKpiRatio}% terhadap target{$extraInfo}";
+            } else {
+                $kpiScale = 4;
+                $kpiInfo = count($kpiStandards) . " standar KPI mutu aktif (menunggu populasi nilai siswa)";
+            }
+        } else {
+            $kpiScale = 3;
+            $kpiInfo = "Belum ada standar KPI mutu mapel yang ditetapkan";
+        }
+        $metrics['5.2'] = ['scale' => $kpiScale, 'ach_pct' => ($kpiScale / 5) * 100, 'info' => $kpiInfo];
 
         // 16. Supervisi 8 Standar Pendidikan (Indikator 6.1)
         $supervisi = Database::fetch(
@@ -1985,10 +2181,37 @@ class DeputiController extends Controller {
     }
 
     /**
+     * Pastikan tabel unit_administrasi_deadlines memiliki kolom month_num
+     * untuk mendukung instrumen bertahap (e.g. KS-11 Baseline Tahfidz 3x setahun).
+     */
+    public static function ensureDeadlinesKsColumns(): void {
+        try {
+            $cols = array_column(Database::fetchAll("SHOW COLUMNS FROM unit_administrasi_deadlines"), 'Field');
+            if (!in_array('month_num', $cols, true)) {
+                Database::execute("ALTER TABLE unit_administrasi_deadlines ADD COLUMN month_num INT NOT NULL DEFAULT 1 AFTER jenis_admin_id");
+            }
+            $indexes = Database::fetchAll("SHOW INDEXES FROM unit_administrasi_deadlines");
+            $indexNames = array_unique(array_column($indexes, 'Key_name'));
+            if (!in_array('idx_unit_id', $indexNames, true)) {
+                Database::execute("ALTER TABLE unit_administrasi_deadlines ADD KEY idx_unit_id (unit_id)");
+            }
+            if (in_array('uq_unit_ta_jenis', $indexNames, true)) {
+                Database::execute("ALTER TABLE unit_administrasi_deadlines DROP INDEX uq_unit_ta_jenis");
+            }
+            if (!in_array('uq_unit_ta_jenis_month', $indexNames, true)) {
+                Database::execute("ALTER TABLE unit_administrasi_deadlines ADD UNIQUE KEY uq_unit_ta_jenis_month (unit_id, academic_year_id, jenis_admin_id, month_num)");
+            }
+        } catch (\Throwable $e) {
+            // Abaikan jika sudah tereksekusi
+        }
+    }
+
+    /**
      * Menu Pengaturan Batas Waktu (Due Date) Pengumpulan Administrasi KS
      */
     public function deadlinesKs(): void {
         $this->requireRole(['deputi_pendidikan', 'direktur_pendidikan', 'operator_yayasan']);
+        self::ensureDeadlinesKsColumns();
         $role = Auth::activeRoleName();
         $taId = Auth::academicYearId();
         $userId = Auth::id();
@@ -2019,20 +2242,22 @@ class DeputiController extends Controller {
 
         // Ambil 18 dokumen administrasi Kepala Sekolah
         $masterItems = Database::fetchAll("
-            SELECT m.*, 
-                   uad.due_info as unit_due_info, 
-                   uad.deadline_date, 
-                   uad.deadline_datetime,
-                   uad.updated_at as deadline_updated_at,
-                   COALESCE(uad.due_info, m.due_info) as effective_due_info
-            FROM master_jenis_administrasi m
-            LEFT JOIN unit_administrasi_deadlines uad 
-                 ON uad.jenis_admin_id = m.id 
-                 AND uad.unit_id = ? 
-                 AND uad.academic_year_id = ?
-            WHERE m.target_role = 'KEPALA_SEKOLAH'
-            ORDER BY m.order_num ASC
+            SELECT * FROM master_jenis_administrasi 
+            WHERE target_role = 'KEPALA_SEKOLAH'
+            ORDER BY order_num ASC
+        ");
+
+        // Ambil data deadlines yang tersimpan di unit & tahun ajaran ini
+        $savedDeadlines = Database::fetchAll("
+            SELECT * FROM unit_administrasi_deadlines 
+            WHERE unit_id = ? AND academic_year_id = ?
         ", [$selectedUnitId, $taId]);
+        $deadlinesMap = [];
+        foreach ($savedDeadlines as $dl) {
+            $jId = (int)$dl['jenis_admin_id'];
+            $mNum = (int)($dl['month_num'] ?? 1);
+            $deadlinesMap[$jId][$mNum] = $dl;
+        }
 
         // Ambil data pengunggahan KS terkini untuk unit & tahun ajaran ini
         $ksUploads = Database::fetchAll("
@@ -2046,9 +2271,10 @@ class DeputiController extends Controller {
 
         $uploadsMap = [];
         foreach ($ksUploads as $up) {
-            $jId = $up['jenis_admin_id'];
-            if (!isset($uploadsMap[$jId])) {
-                $uploadsMap[$jId] = $up;
+            $jId = (int)$up['jenis_admin_id'];
+            $mNum = (int)($up['month_num'] ?? 1);
+            if (!isset($uploadsMap[$jId][$mNum])) {
+                $uploadsMap[$jId][$mNum] = $up;
             }
         }
 
@@ -2060,37 +2286,70 @@ class DeputiController extends Controller {
         $nowTs = time();
 
         foreach ($masterItems as &$item) {
-            $jId = $item['id'];
-            $up = $uploadsMap[$jId] ?? null;
-            $item['upload'] = $up;
+            $jId = (int)$item['id'];
+            $freq = $item['frequency'] ?? '1x setahun';
 
-            $dTs = null;
-            if (!empty($item['deadline_datetime'])) {
-                $dTs = strtotime($item['deadline_datetime']);
-                $totalDeadlinesSet++;
-            } elseif (!empty($item['deadline_date'])) {
-                $dTs = strtotime($item['deadline_date'] . ' 23:59:59');
-                $totalDeadlinesSet++;
-            }
-            $item['deadline_ts'] = $dTs;
-
-            if ($up && $up['status'] === 'Disetujui') {
-                if ($up['is_on_time'] == 1) {
-                    $item['status_badge'] = 'ON_TIME';
-                    $totalSubmittedOnTime++;
-                } else {
-                    $item['status_badge'] = 'LATE_SUBMITTED';
-                    $totalLateOrOverdue++;
-                }
-            } elseif ($up && in_array($up['status'], ['Diajukan', 'Perlu Revisi'])) {
-                $item['status_badge'] = 'PENDING_APPROVAL';
-            } elseif ($dTs !== null && $nowTs > $dTs) {
-                $item['status_badge'] = 'OVERDUE_MISSING';
-                $totalLateOrOverdue++;
-            } elseif ($dTs !== null) {
-                $item['status_badge'] = 'AWAITING_SUBMISSION';
+            if ($freq === '3x setahun') {
+                $slotsDef = [
+                    1 => 'Tahap 1 (Awal Tahun)',
+                    2 => 'Tahap 2 (Tengah Tahun)',
+                    3 => 'Tahap 3 (Akhir Tahun)'
+                ];
+            } elseif ($freq === '2x setahun') {
+                $slotsDef = [
+                    1 => 'Semester 1 (Ganjil)',
+                    2 => 'Semester 2 (Genap)'
+                ];
             } else {
-                $item['status_badge'] = 'NO_DEADLINE';
+                $slotsDef = [
+                    1 => 'Batas Waktu'
+                ];
+            }
+
+            $item['slots'] = [];
+            foreach ($slotsDef as $slotNum => $slotLabel) {
+                $dl = $deadlinesMap[$jId][$slotNum] ?? ($slotNum === 1 ? ($deadlinesMap[$jId][0] ?? null) : null);
+                $up = $uploadsMap[$jId][$slotNum] ?? ($slotNum === 1 ? ($uploadsMap[$jId][0] ?? null) : null);
+
+                $dTs = null;
+                $dtVal = '';
+                if (!empty($dl['deadline_datetime'])) {
+                    $dTs = strtotime($dl['deadline_datetime']);
+                    $dtVal = date('Y-m-d\TH:i', $dTs);
+                    $totalDeadlinesSet++;
+                } elseif (!empty($dl['deadline_date'])) {
+                    $dTs = strtotime($dl['deadline_date'] . ' 23:59:59');
+                    $dtVal = $dl['deadline_date'] . 'T23:59';
+                    $totalDeadlinesSet++;
+                }
+
+                $statusBadge = 'NO_DEADLINE';
+                if ($up && $up['status'] === 'Disetujui') {
+                    if ($up['is_on_time'] == 1) {
+                        $statusBadge = 'ON_TIME';
+                        $totalSubmittedOnTime++;
+                    } else {
+                        $statusBadge = 'LATE_SUBMITTED';
+                        $totalLateOrOverdue++;
+                    }
+                } elseif ($up && in_array($up['status'], ['Diajukan', 'Perlu Revisi', 'Menunggu Review'])) {
+                    $statusBadge = 'PENDING_APPROVAL';
+                } elseif ($dTs !== null && $nowTs > $dTs) {
+                    $statusBadge = 'OVERDUE_MISSING';
+                    $totalLateOrOverdue++;
+                } elseif ($dTs !== null) {
+                    $statusBadge = 'AWAITING_SUBMISSION';
+                }
+
+                $item['slots'][$slotNum] = [
+                    'slot_num'          => $slotNum,
+                    'slot_label'        => $slotLabel,
+                    'due_info'          => $dl['due_info'] ?? $item['due_info'],
+                    'deadline_datetime' => $dtVal,
+                    'deadline_ts'       => $dTs,
+                    'upload'            => $up,
+                    'status_badge'      => $statusBadge
+                ];
             }
         }
         unset($item);
@@ -2114,6 +2373,7 @@ class DeputiController extends Controller {
      */
     public function saveKsDeadlines(): void {
         $this->requireRole(['deputi_pendidikan', 'direktur_pendidikan', 'operator_yayasan']);
+        self::ensureDeadlinesKsColumns();
         $role = Auth::activeRoleName();
         $taId = Auth::academicYearId();
         $userId = Auth::id();
@@ -2131,35 +2391,45 @@ class DeputiController extends Controller {
         $deadlines = $_POST['deadlines'] ?? [];
         $savedCount = 0;
 
-        foreach ($deadlines as $jenisId => $d) {
+        foreach ($deadlines as $jenisId => $slotData) {
             $jenisId = (int)$jenisId;
-            $dtLocal = trim($d['deadline_datetime'] ?? '');
-            $dueInfo = trim($d['due_info'] ?? '');
+            if ($jenisId <= 0 || !is_array($slotData)) continue;
 
-            if ($jenisId <= 0) continue;
+            // Dukung format slot bertahap [$monthNum => [...]] maupun flat [...]
+            if (isset($slotData['deadline_datetime']) || isset($slotData['due_info'])) {
+                $slots = [1 => $slotData];
+            } else {
+                $slots = $slotData;
+            }
 
-            $deadlineDatetime = !empty($dtLocal) ? date('Y-m-d H:i:s', strtotime($dtLocal)) : null;
-            $deadlineDate = $deadlineDatetime ? substr($deadlineDatetime, 0, 10) : (!empty($d['deadline_date']) ? $d['deadline_date'] : null);
+            foreach ($slots as $monthNum => $d) {
+                $monthNum = max(1, (int)$monthNum);
+                $dtLocal = trim($d['deadline_datetime'] ?? '');
+                $dueInfo = trim($d['due_info'] ?? '');
 
-            Database::execute("
-                INSERT INTO unit_administrasi_deadlines 
-                    (unit_id, academic_year_id, jenis_admin_id, due_info, deadline_date, deadline_datetime, updated_by_user_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-                ON DUPLICATE KEY UPDATE 
-                    due_info = VALUES(due_info),
-                    deadline_date = VALUES(deadline_date),
-                    deadline_datetime = VALUES(deadline_datetime),
-                    updated_by_user_id = VALUES(updated_by_user_id)
-            ", [$unitId, $taId, $jenisId, $dueInfo, $deadlineDate, $deadlineDatetime, $userId]);
+                $deadlineDatetime = !empty($dtLocal) ? date('Y-m-d H:i:s', strtotime($dtLocal)) : null;
+                $deadlineDate = $deadlineDatetime ? substr($deadlineDatetime, 0, 10) : (!empty($d['deadline_date']) ? $d['deadline_date'] : null);
 
-            $savedCount++;
+                Database::execute("
+                    INSERT INTO unit_administrasi_deadlines 
+                        (unit_id, academic_year_id, jenis_admin_id, month_num, due_info, deadline_date, deadline_datetime, updated_by_user_id)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    ON DUPLICATE KEY UPDATE 
+                        due_info = VALUES(due_info),
+                        deadline_date = VALUES(deadline_date),
+                        deadline_datetime = VALUES(deadline_datetime),
+                        updated_by_user_id = VALUES(updated_by_user_id)
+                ", [$unitId, $taId, $jenisId, $monthNum, $dueInfo, $deadlineDate, $deadlineDatetime, $userId]);
+
+                $savedCount++;
+            }
         }
 
         AuditLog::log('SAVE_KS_DEADLINES', 'unit_administrasi_deadlines', $unitId, null, [
             'total_items' => $savedCount
         ]);
 
-        $this->setFlash('success', "Batas waktu pengumpulan {$savedCount} dokumen administrasi KS berhasil disimpan.");
+        $this->setFlash('success', "Batas waktu pengumpulan {$savedCount} instrumen dokumen administrasi KS berhasil disimpan.");
         $this->redirect(Auth::baseUrl() . '/deputi/deadlines-ks?unit_id=' . $unitId);
     }
 

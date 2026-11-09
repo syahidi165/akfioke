@@ -197,20 +197,13 @@ class ProfileController extends Controller {
         }
 
         $file = $_FILES['signature'];
-        $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
-        $allowedExts = ['png', 'jpg', 'jpeg', 'webp'];
-
-        if (!in_array($ext, $allowedExts, true)) {
-            $this->setFlash('danger', 'Hanya berkas gambar format PNG, JPG, JPEG, atau WEBP yang diperbolehkan.');
+        $valImg = \Core\SecurityHelper::validatePublicImageUpload($file, 3 * 1024 * 1024, false);
+        if (!$valImg['valid']) {
+            $this->setFlash('danger', $valImg['message']);
             $this->redirect(Auth::baseUrl() . '/profile');
             return;
         }
-
-        if ($file['size'] > 3 * 1024 * 1024) {
-            $this->setFlash('danger', 'Ukuran berkas tanda tangan maksimal 3 MB.');
-            $this->redirect(Auth::baseUrl() . '/profile');
-            return;
-        }
+        $ext = $valImg['ext'];
 
         $uploadDir = __DIR__ . '/../../public/uploads/signatures';
         if (!is_dir($uploadDir)) {

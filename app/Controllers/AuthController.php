@@ -159,6 +159,10 @@ class AuthController extends Controller {
      */
     public function revertImpersonate(): void {
         Auth::requireAuth();
+        if (!\Core\SecurityHelper::isSameOriginRequest()) {
+            $this->redirect(Auth::baseUrl() . '/dashboard');
+            return;
+        }
         $res = Auth::revertImpersonate();
         if ($res['success']) {
             $this->setFlash('success', $res['message']);
@@ -169,6 +173,10 @@ class AuthController extends Controller {
     }
 
     public function logout(): void {
+        if (!\Core\SecurityHelper::isSameOriginRequest()) {
+            $this->redirect(Auth::baseUrl() . '/dashboard');
+            return;
+        }
         Auth::logout();
         $this->redirect(Auth::baseUrl() . '/login');
     }

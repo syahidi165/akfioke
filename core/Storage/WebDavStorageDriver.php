@@ -9,6 +9,7 @@ class WebDavStorageDriver implements StorageDriverInterface {
     protected string $password;
     protected int $timeout;
     protected string $name;
+    protected bool $verifySsl = false;
 
     public function __construct(array $config, string $name = 'NAS WebDAV Storage') {
         $this->baseUrl = rtrim($config['base_url'] ?? 'http://127.0.0.1:5005', '/');
@@ -17,6 +18,7 @@ class WebDavStorageDriver implements StorageDriverInterface {
         $this->username = $config['username'] ?? '';
         $this->password = $config['password'] ?? '';
         $this->timeout = (int)($config['timeout'] ?? 30);
+        $this->verifySsl = (bool)($config['verify_ssl'] ?? false);
         $this->name = $name;
     }
 
@@ -38,8 +40,8 @@ class WebDavStorageDriver implements StorageDriverInterface {
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_TIMEOUT, $this->timeout);
         curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, $this->verifySsl);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, $this->verifySsl ? 2 : 0);
         curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AKFIOKE-WebDAV/1.0');
 
         if (!empty($this->username)) {
@@ -154,8 +156,8 @@ class WebDavStorageDriver implements StorageDriverInterface {
         curl_setopt($ch, CURLOPT_URL, $url);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, false);
         curl_setopt($ch, CURLOPT_TIMEOUT, 300);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, $this->verifySsl);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, $this->verifySsl ? 2 : 0);
         if (!empty($this->username)) {
             curl_setopt($ch, CURLOPT_USERPWD, "{$this->username}:{$this->password}");
         }

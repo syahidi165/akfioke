@@ -38,6 +38,10 @@ class NotificationController extends Controller {
      */
     public function read(string $id): void {
         $this->requireAuth();
+        if (!\Core\SecurityHelper::isSameOriginRequest()) {
+            $this->redirect(Auth::baseUrl() . '/notifications');
+            return;
+        }
         $userId = Auth::id();
         $notifId = (int)$id;
 
@@ -71,6 +75,10 @@ class NotificationController extends Controller {
      */
     public function markRead(string $id): void {
         $this->requireAuth();
+        if (!\Core\SecurityHelper::isSameOriginRequest()) {
+            $this->redirect(Auth::baseUrl() . '/notifications');
+            return;
+        }
         $userId = Auth::id();
         $notifId = (int)$id;
 
@@ -87,6 +95,10 @@ class NotificationController extends Controller {
      */
     public function markAllRead(): void {
         $this->requireAuth();
+        if (!\Core\SecurityHelper::isSameOriginRequest()) {
+            $this->redirect(Auth::baseUrl() . '/notifications');
+            return;
+        }
         $userId = Auth::id();
 
         if ($userId) {
@@ -102,6 +114,10 @@ class NotificationController extends Controller {
      */
     public function delete(string $id): void {
         $this->requireAuth();
+        if (!\Core\SecurityHelper::isSameOriginRequest()) {
+            $this->redirect(Auth::baseUrl() . '/notifications');
+            return;
+        }
         $userId = Auth::id();
         $notifId = (int)$id;
 
@@ -118,6 +134,10 @@ class NotificationController extends Controller {
      */
     public function deleteAll(): void {
         $this->requireAuth();
+        if (!\Core\SecurityHelper::isSameOriginRequest()) {
+            $this->redirect(Auth::baseUrl() . '/notifications');
+            return;
+        }
         $userId = Auth::id();
 
         if ($userId) {

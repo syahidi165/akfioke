@@ -362,6 +362,7 @@ class TagihanController extends Controller {
         if (!$bill) {
             die('Data tagihan tidak ditemukan.');
         }
+        $this->assertUnitOwnership('bills', $billId, 'unit_id');
 
         $formattedAmount = number_format((float)$bill['amount'], 0, ',', '.');
         $bsiAcc = $bill['bank_account'] ?: '1033667414';
@@ -819,6 +820,7 @@ class TagihanController extends Controller {
         if (!$bill) {
             die('Data tagihan tidak ditemukan.');
         }
+        $this->assertUnitOwnership('bills', $billId, 'unit_id');
 
         $kop = ExportHelper::renderKop($bill);
         $letterNo = $bill['kepsek_letter_no'] ?: ('PANG/KS/' . date('Ym') . '/' . sprintf('%04d', $billId));
@@ -968,6 +970,7 @@ class TagihanController extends Controller {
         if (!$bill) {
             die('Data tagihan tidak ditemukan.');
         }
+        $this->assertUnitOwnership('bills', $billId, 'unit_id');
 
         $kop = ExportHelper::renderKop($bill);
         $parentName = $bill['parent_name'] ?: '..........................................';
@@ -1306,6 +1309,7 @@ class TagihanController extends Controller {
         if (!$bill) {
             die('Data tagihan tidak ditemukan.');
         }
+        $this->assertUnitOwnership('bills', $billId, 'unit_id');
 
         // KOP YAYASAN
         $kop = ExportHelper::renderKopYayasan();
@@ -1459,6 +1463,7 @@ class TagihanController extends Controller {
         if (!$bill) {
             die('Data tagihan tidak ditemukan.');
         }
+        $this->assertUnitOwnership('bills', $billId, 'unit_id');
 
         $kop = ExportHelper::renderKopYayasan();
         $parentName = $bill['parent_name'] ?: '..........................................';
@@ -1739,6 +1744,7 @@ class TagihanController extends Controller {
         if (!$installment) {
             die('Data cicilan tidak ditemukan.');
         }
+        $this->assertStudentAccess((int)$installment['student_id']);
 
         // Ambil histori pembayaran angsuran
         $payments = Database::fetchAll(
