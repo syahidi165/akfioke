@@ -147,6 +147,9 @@ Router::post('/users/school-accounts/create', [MasterController::class, 'createS
 Router::post('/users/school-accounts/assign-role', [MasterController::class, 'assignRole']);
 Router::post('/users/school-accounts/unassign-role', [MasterController::class, 'unassignRole']);
 Router::post('/users/school-accounts/delete', [MasterController::class, 'deleteSchoolAccount']);
+Router::get('/users/parent-accounts', [MasterController::class, 'parentAccounts']);
+Router::post('/users/parent-accounts/save', [MasterController::class, 'saveParentAccount']);
+Router::post('/users/parent-accounts/reset-password', [MasterController::class, 'resetParentPassword']);
 Router::get('/settings/smtp', [MasterController::class, 'smtpSettings']);
 Router::post('/settings/smtp/save', [MasterController::class, 'saveSmtpSettings']);
 Router::post('/settings/smtp/test', [MasterController::class, 'testSmtp']);

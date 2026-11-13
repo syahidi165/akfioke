@@ -69,7 +69,7 @@ class SurveyController extends Controller {
     // --- 2. SURVEI GURU TERHADAP KEPALA SEKOLAH ---
     public function guruKepsekForm(): void {
         $this->requireRole([
-            'guru_mapel', 'guru_mapel_kbtk', 'guru_diniyah', 'guru_tahfidz', 'walas', 
+            'guru_mapel', 'guru_mapel_kbtk', 'guru_tk', 'guru_diniyah', 'guru_tahfidz', 'walas', 
             'koor_tahfidz', 'waka_kurikulum', 'waka_kesiswaan', 
             'guru_supervisor', 'tutor_sebaya', 'tutor_siswa', 'tata_usaha'
         ]);
@@ -101,7 +101,7 @@ class SurveyController extends Controller {
 
     public function guruKepsekSubmit(): void {
         $this->requireRole([
-            'guru_mapel', 'guru_mapel_kbtk', 'guru_diniyah', 'guru_tahfidz', 'walas', 
+            'guru_mapel', 'guru_mapel_kbtk', 'guru_tk', 'guru_diniyah', 'guru_tahfidz', 'walas', 
             'koor_tahfidz', 'waka_kurikulum', 'waka_kesiswaan', 
             'guru_supervisor', 'tutor_sebaya', 'tutor_siswa', 'tata_usaha'
         ]);

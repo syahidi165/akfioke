@@ -3565,6 +3565,9 @@ class MasterController extends Controller {
             $params[] = $unitId;
         }
 
+        // Pisahkan akun orang tua dan siswa ke modul khusus
+        $query .= "AND r.name NOT IN ('orang_tua', 'siswa') ";
+
         // Jangan tampilkan akun yayasan ke Operator Sekolah
         if (!$isYayasan) {
             $query .= "AND r.name NOT IN ('operator_yayasan', 'direktur_pendidikan', 'deputi_pendidikan', 'pembina_yayasan', 'direktur_pengadaan', 'direktur_sarpras', 'hrd') ";
@@ -3576,10 +3579,10 @@ class MasterController extends Controller {
         // Ambil daftar peran (roles)
         if ($isYayasan) {
             // Operator Yayasan dapat meng-assign peran Direktur Pendidikan & Deputi
-            $roles = Database::fetchAll("SELECT * FROM roles WHERE name NOT IN ('operator_yayasan', 'pembina_yayasan') ORDER BY display_name ASC");
+            $roles = Database::fetchAll("SELECT * FROM roles WHERE name NOT IN ('operator_yayasan', 'pembina_yayasan', 'orang_tua', 'siswa') ORDER BY display_name ASC");
         } else {
             // Operator Sekolah tidak boleh meng-assign peran Direktur/Deputi/Yayasan
-            $roles = Database::fetchAll("SELECT * FROM roles WHERE name NOT IN ('operator_yayasan', 'direktur_pendidikan', 'deputi_pendidikan', 'pembina_yayasan', 'operator_sekolah', 'direktur_pengadaan', 'direktur_sarpras', 'hrd') ORDER BY display_name ASC");
+            $roles = Database::fetchAll("SELECT * FROM roles WHERE name NOT IN ('operator_yayasan', 'direktur_pendidikan', 'deputi_pendidikan', 'pembina_yayasan', 'operator_sekolah', 'direktur_pengadaan', 'direktur_sarpras', 'hrd', 'orang_tua', 'siswa') ORDER BY display_name ASC");
         }
 
         // Ambil daftar pegawai yang sudah ada untuk pembuatan akun tanpa input nama baru
@@ -4255,5 +4258,208 @@ class MasterController extends Controller {
 
         $this->setFlash('success', 'Identitas, logo, dan favicon website berhasil diperbarui.');
         $this->redirect(Auth::baseUrl() . '/settings/app');
+    }
+
+    // --- 7B. AKUN ORANG TUA SISWA ---
+    public function parentAccounts(): void {
+        $this->requireRole(['operator_sekolah', 'operator_yayasan', 'direktur_pendidikan', 'deputi_pendidikan']);
+
+        $isYayasan = Auth::hasRole('operator_yayasan') || Auth::hasRole('direktur_pendidikan') || Auth::hasRole('deputi_pendidikan');
+        $allUnits = Database::fetchAll("SELECT * FROM units ORDER BY id ASC");
+
+        if (!$isYayasan) {
+            $unitId = Auth::unitId();
+            $unitFilter = $unitId;
+        } else {
+            $unitFilter = isset($_GET['unit_id']) && $_GET['unit_id'] !== '' ? (int)$_GET['unit_id'] : null;
+            $unitId = $unitFilter ?: Auth::unitId();
+        }
+
+        $search = trim($_GET['q'] ?? '');
+        $statusFilter = trim($_GET['status'] ?? '');
+
+        $query = "SELECT u.id, u.username, u.full_name, u.email, u.phone, u.unit_id as user_unit_id, u.is_active, u.last_login_at,
+                         GROUP_CONCAT(DISTINCT CONCAT(s.nama, ' (', COALESCE(s.nis, '-'), ')') ORDER BY s.nama SEPARATOR '; ') as student_details,
+                         GROUP_CONCAT(DISTINCT COALESCE(un.name, 'Unit ?') ORDER BY un.name SEPARATOR ', ') as student_units,
+                         COALESCE(MAX(s.unit_id), u.unit_id) as actual_unit_id,
+                         COUNT(DISTINCT s.id) as total_students
+                  FROM users u
+                  JOIN user_roles ur ON u.id = ur.user_id
+                  JOIN roles r ON ur.role_id = r.id AND r.name = 'orang_tua'
+                  LEFT JOIN students s ON (s.parent_user_id = u.id OR s.no_kk = u.username)
+                  LEFT JOIN units un ON s.unit_id = un.id
+                  WHERE 1=1 ";
+        $params = [];
+
+        if ($unitFilter !== null) {
+            $query .= "AND (s.unit_id = ? OR u.unit_id = ?) ";
+            $params[] = $unitFilter;
+            $params[] = $unitFilter;
+        }
+
+        if ($statusFilter === 'active') {
+            $query .= "AND u.is_active = 1 ";
+        } elseif ($statusFilter === 'inactive') {
+            $query .= "AND u.is_active = 0 ";
+        }
+
+        if ($search !== '') {
+            $query .= "AND (u.username LIKE ? OR u.full_name LIKE ? OR u.phone LIKE ? OR u.email LIKE ? OR s.nama LIKE ? OR s.nis LIKE ? OR s.no_kk LIKE ?) ";
+            $searchWildcard = "%{$search}%";
+            for ($i = 0; $i < 7; $i++) {
+                $params[] = $searchWildcard;
+            }
+        }
+
+        $query .= "GROUP BY u.id, u.username, u.full_name, u.email, u.phone, u.unit_id, u.is_active, u.last_login_at ORDER BY u.id DESC";
+        $parents = Database::fetchAll($query, $params);
+
+        $statTotal = count($parents);
+        $statActive = 0;
+        $statWithStudents = 0;
+        foreach ($parents as $p) {
+            if (!empty($p['is_active'])) $statActive++;
+            if ((int)($p['total_students'] ?? 0) > 0) $statWithStudents++;
+        }
+
+        $this->view('master/parent_accounts', [
+            'pageTitle'        => $isYayasan ? 'Kelola Akun Orang Tua (Seluruh Unit)' : 'Kelola Akun Orang Tua Siswa',
+            'parents'          => $parents,
+            'allUnits'         => $allUnits,
+            'unitFilter'       => $unitFilter,
+            'isYayasan'        => $isYayasan,
+            'currentUnit'      => $unitId,
+            'search'           => $search,
+            'statusFilter'     => $statusFilter,
+            'statTotal'        => $statTotal,
+            'statActive'       => $statActive,
+            'statWithStudents' => $statWithStudents
+        ]);
+    }
+
+    public function saveParentAccount(): void {
+        $this->requireRole(['operator_sekolah', 'operator_yayasan']);
+        \Core\CSRF::validate();
+
+        $id = (int)($_POST['id'] ?? 0);
+        $action = $_POST['action'] ?? 'save_profile';
+        $isYayasan = Auth::hasRole('operator_yayasan');
+
+        if ($id <= 0) {
+            $this->setFlash('danger', 'ID akun orang tua tidak valid.');
+            $this->redirect(Auth::baseUrl() . '/users/parent-accounts');
+            return;
+        }
+
+        $targetUser = Database::fetch("
+            SELECT u.*, s.unit_id as student_unit_id 
+            FROM users u
+            JOIN user_roles ur ON u.id = ur.user_id
+            JOIN roles r ON ur.role_id = r.id AND r.name = 'orang_tua'
+            LEFT JOIN students s ON (s.parent_user_id = u.id OR s.no_kk = u.username)
+            WHERE u.id = ?
+            LIMIT 1
+        ", [$id]);
+
+        if (!$targetUser) {
+            $this->setFlash('danger', 'Data akun orang tua tidak ditemukan.');
+            $this->redirect(Auth::baseUrl() . '/users/parent-accounts');
+            return;
+        }
+
+        // Multi-unit isolation for Operator Sekolah
+        if (!$isYayasan) {
+            $userUnitId = $targetUser['unit_id'] ?: ($targetUser['student_unit_id'] ?? 0);
+            if ($userUnitId != 0 && $userUnitId != Auth::unitId()) {
+                $this->setFlash('danger', 'Anda tidak memiliki hak mengubah akun orang tua dari unit sekolah lain.');
+                $this->redirect(Auth::baseUrl() . '/users/parent-accounts');
+                return;
+            }
+        }
+
+        if ($action === 'toggle_active') {
+            $newStatus = $targetUser['is_active'] ? 0 : 1;
+            Database::execute("UPDATE users SET is_active = ?, updated_at = NOW() WHERE id = ?", [$newStatus, $id]);
+            \Core\AuditLog::log('TOGGLE_PARENT_ACTIVE', 'users', $id, null, ['is_active' => $newStatus]);
+            $this->setFlash('success', 'Status keaktifan akun orang tua berhasil diubah.');
+            $this->redirect(Auth::baseUrl() . '/users/parent-accounts');
+            return;
+        }
+
+        $fullName = trim($_POST['full_name'] ?? '');
+        $email = trim($_POST['email'] ?? '');
+        $phone = trim($_POST['phone'] ?? '');
+        $isActive = isset($_POST['is_active']) ? 1 : 0;
+        $newPassword = trim($_POST['new_password'] ?? '');
+
+        $updateSql = "UPDATE users SET full_name = ?, email = ?, phone = ?, is_active = ?, updated_at = NOW()";
+        $updateParams = [$fullName, $email ?: null, $phone ?: null, $isActive];
+
+        if ($newPassword !== '') {
+            $updateSql .= ", password_hash = ?, force_change_password = 1";
+            $updateParams[] = password_hash($newPassword, PASSWORD_DEFAULT);
+        }
+
+        $updateSql .= " WHERE id = ?";
+        $updateParams[] = $id;
+
+        Database::execute($updateSql, $updateParams);
+
+        // Update juga parent_phone & parent_email di students jika terkait
+        Database::execute(
+            "UPDATE students SET parent_phone = ?, parent_email = ? WHERE parent_user_id = ? OR no_kk = ?",
+            [$phone ?: null, $email ?: null, $id, $targetUser['username']]
+        );
+
+        \Core\AuditLog::log('EDIT_PARENT_ACCOUNT', 'users', $id, $targetUser, $_POST);
+        $this->setFlash('success', "Data akun orang tua '{$targetUser['username']}' ({$fullName}) berhasil diperbarui.");
+        $this->redirect(Auth::baseUrl() . '/users/parent-accounts');
+    }
+
+    public function resetParentPassword(): void {
+        $this->requireRole(['operator_sekolah', 'operator_yayasan']);
+        \Core\CSRF::validate();
+
+        $id = (int)($_POST['id'] ?? 0);
+        $isYayasan = Auth::hasRole('operator_yayasan');
+
+        if ($id <= 0) {
+            $this->setFlash('danger', 'ID akun orang tua tidak valid.');
+            $this->redirect(Auth::baseUrl() . '/users/parent-accounts');
+            return;
+        }
+
+        $targetUser = Database::fetch("
+            SELECT u.*, s.unit_id as student_unit_id 
+            FROM users u
+            JOIN user_roles ur ON u.id = ur.user_id
+            JOIN roles r ON ur.role_id = r.id AND r.name = 'orang_tua'
+            LEFT JOIN students s ON (s.parent_user_id = u.id OR s.no_kk = u.username)
+            WHERE u.id = ?
+            LIMIT 1
+        ", [$id]);
+
+        if (!$targetUser) {
+            $this->setFlash('danger', 'Data akun orang tua tidak ditemukan.');
+            $this->redirect(Auth::baseUrl() . '/users/parent-accounts');
+            return;
+        }
+
+        if (!$isYayasan) {
+            $userUnitId = $targetUser['unit_id'] ?: ($targetUser['student_unit_id'] ?? 0);
+            if ($userUnitId != 0 && $userUnitId != Auth::unitId()) {
+                $this->setFlash('danger', 'Anda tidak memiliki hak mereset akun orang tua dari unit sekolah lain.');
+                $this->redirect(Auth::baseUrl() . '/users/parent-accounts');
+                return;
+            }
+        }
+
+        $defaultPassword = 'password123';
+        $newHash = password_hash($defaultPassword, PASSWORD_DEFAULT);
+        Database::execute("UPDATE users SET password_hash = ?, force_change_password = 1, updated_at = NOW() WHERE id = ?", [$newHash, $id]);
+
+        \Core\AuditLog::log('RESET_PARENT_PASSWORD', 'users', $id, null, ['username' => $targetUser['username']]);
+        $this->setFlash('success', "Kata sandi akun orang tua '{$targetUser['username']}' ({$targetUser['full_name']}) berhasil direset ke '{$defaultPassword}'.");
+        $this->redirect(Auth::baseUrl() . '/users/parent-accounts');
     }
 }

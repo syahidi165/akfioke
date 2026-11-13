@@ -1,0 +1,28 @@
+# Matikan eksekusi script di dalam direktori public/uploads/
+Options -Indexes -ExecCGI
+
+<IfModule mod_php.c>
+    php_flag engine off
+</IfModule>
+<IfModule mod_php7.c>
+    php_flag engine off
+</IfModule>
+<IfModule mod_php8.c>
+    php_flag engine off
+</IfModule>
+
+# Blokir akses ke file script atau berkas berpotensi XSS (PHP, Phar, SVG, HTML, JS)
+<FilesMatch "\.(?i:php|php3|php4|php5|php7|php8|phtml|phar|pl|py|cgi|sh|bat|exe|svg|svgz|html|htm|shtml|js)$">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order allow,deny
+        Deny from all
+    </IfModule>
+</FilesMatch>
+
+<IfModule mod_headers.c>
+    Header set X-Content-Type-Options "nosniff"
+</IfModule>
+

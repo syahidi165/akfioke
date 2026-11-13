@@ -84,6 +84,12 @@ if (!function_exists('isNavActive')) {
                 </a>
             </div>
             <div class="nav-item">
+                <a href="<?= $baseUrl ?>/users/parent-accounts" class="nav-link <?= isNavActive('/users/parent-accounts', $currentPath) ?>">
+                    <i class="fa-solid fa-user-group"></i>
+                    <span class="nav-text">Akun Orang Tua</span>
+                </a>
+            </div>
+            <div class="nav-item">
                 <a href="<?= $baseUrl ?>/master/turnover" class="nav-link <?= isNavActive('/master/turnover', $currentPath) ?>">
                     <i class="fa-solid fa-people-arrows"></i>
                     <span class="nav-text">Mutasi & Turnover</span>
@@ -384,6 +390,12 @@ if (!function_exists('isNavActive')) {
                 <a href="<?= $baseUrl ?>/users/school-accounts" class="nav-link <?= isNavActive('/users/school-accounts', $currentPath) ?>">
                     <i class="fa-solid fa-id-badge"></i>
                     <span class="nav-text">Akun Guru & Kepsek</span>
+                </a>
+            </div>
+            <div class="nav-item">
+                <a href="<?= $baseUrl ?>/users/parent-accounts" class="nav-link <?= isNavActive('/users/parent-accounts', $currentPath) ?>">
+                    <i class="fa-solid fa-user-group"></i>
+                    <span class="nav-text">Akun Orang Tua</span>
                 </a>
             </div>
             <div class="nav-item">

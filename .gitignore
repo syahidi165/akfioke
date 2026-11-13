@@ -8,3 +8,19 @@
 !/storage/sessions/.gitkeep
 !/storage/logs/.gitkeep
 /config/*.local.php
+
+# User uploads & dynamic files (never commit user uploads to git)
+/storage/uploads/*
+!/storage/uploads/.htaccess
+!/storage/uploads/po_items/
+!/storage/uploads/scrap_photos/
+
+# Report documents & exports
+/*.docx
+/public/*.docx
+/*.xlsx
+/public/*.xlsx
+
+# Database backup files
+/storage/backups/*.sql
+/storage/nas_cold/database_snapshots/*.sql

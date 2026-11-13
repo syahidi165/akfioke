@@ -45,15 +45,17 @@ class AdministrasiController extends Controller {
         ]);
     }
 
-    // --- UPLOAD OLEH GURU MAPEL (7 ITEM TK, 8 ITEM SD/SMP/SMA) ---
+    // --- UPLOAD OLEH GURU MAPEL & TK (7 ITEM TK, 8 ITEM SD/SMP/SMA) ---
     public function mapelUploads(): void {
-        $this->requireRole(['guru_mapel', 'guru_diniyah', 'guru_tahfidz']);
+        $this->requireRole(['guru_mapel', 'guru_diniyah', 'guru_tahfidz', 'guru_mapel_kbtk', 'guru_tk']);
         $unitId = Auth::unitId();
         $taId = Auth::academicYearId();
         $userId = Auth::id();
+        $userRole = Auth::role();
 
         $unit = Database::fetch("SELECT level FROM units WHERE id = ?", [$unitId]);
-        $targetRole = ($unit['level'] ?? '') === 'TK' ? 'GURU_TK' : 'GURU_MAPEL';
+        $unitLevel = strtoupper(trim($unit['level'] ?? ''));
+        $targetRole = (in_array($userRole, ['guru_tk', 'guru_mapel_kbtk'], true) || in_array($unitLevel, ['TK', 'KB', 'TK/KB', 'KB/TK'], true)) ? 'GURU_TK' : 'GURU_MAPEL';
 
         $masterItems = Database::fetchAll("SELECT * FROM master_jenis_administrasi WHERE target_role = ? ORDER BY order_num ASC", [$targetRole]);
         $uploads = Database::fetchAll(
@@ -583,8 +585,8 @@ class AdministrasiController extends Controller {
         $taId = Auth::academicYearId();
 
         $unit = Database::fetch("SELECT * FROM units WHERE id = ?", [$unitId]);
-        $unitLevel = $unit['level'] ?? '';
-        $isTK = ($unitLevel === 'TK');
+        $unitLevel = strtoupper(trim($unit['level'] ?? ''));
+        $isTK = in_array($unitLevel, ['TK', 'KB', 'TK/KB', 'KB/TK'], true);
         $defaultTeacherRole = $isTK ? 'GURU_TK' : 'GURU_MAPEL';
 
         // 1. Ambil master jenis administrasi (selain KEPALA_SEKOLAH)
@@ -700,7 +702,7 @@ class AdministrasiController extends Controller {
                 $category = 'walas';
             } elseif (in_array($roleName, ['guru_tahfidz', 'koor_tahfidz'], true) || stripos($posisi, 'tahfidz') !== false) {
                 $category = 'tahfidz';
-            } elseif (in_array($roleName, ['guru_mapel', 'guru_diniyah', 'guru_mapel_kbtk'], true) || stripos($posisi, 'diniyah') !== false || stripos($posisi, 'mapel') !== false) {
+            } elseif (in_array($roleName, ['guru_mapel', 'guru_diniyah', 'guru_mapel_kbtk', 'guru_tk'], true) || stripos($posisi, 'diniyah') !== false || stripos($posisi, 'mapel') !== false) {
                 $category = 'mapel';
             } else {
                 $category = 'lainnya';
@@ -1230,7 +1232,8 @@ class AdministrasiController extends Controller {
             // Waka Kurikulum TIDAK BISA set deadline untuk atasannya (Kepala Sekolah)
             $query .= " AND m.target_role != 'KEPALA_SEKOLAH' ";
             // Filter target_role sesuai level unit yang ditugaskan
-            if ($unitLevel === 'TK') {
+            $isTkUnit = in_array(strtoupper(trim($unitLevel)), ['TK', 'KB', 'TK/KB', 'KB/TK'], true);
+            if ($isTkUnit) {
                 $query .= " AND m.target_role IN ('GURU_TK', 'WALAS') ";
             } else {
                 $query .= " AND m.target_role IN ('GURU_MAPEL', 'WALAS') ";
@@ -1238,7 +1241,8 @@ class AdministrasiController extends Controller {
         } elseif ($role === 'kepala_sekolah') {
             // Kepala Sekolah tidak set deadline untuk dirinya sendiri (diset oleh Deputi Yayasan)
             $query .= " AND m.target_role != 'KEPALA_SEKOLAH' ";
-            if ($unitLevel === 'TK') {
+            $isTkUnit = in_array(strtoupper(trim($unitLevel)), ['TK', 'KB', 'TK/KB', 'KB/TK'], true);
+            if ($isTkUnit) {
                 $query .= " AND m.target_role IN ('GURU_TK', 'WALAS', 'TU') ";
             } else {
                 $query .= " AND m.target_role IN ('GURU_MAPEL', 'WALAS', 'TU') ";

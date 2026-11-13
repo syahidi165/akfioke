@@ -705,7 +705,7 @@ class PanitiaLombaController extends Controller {
 
     // --- 5B. PRESTASI GURU MANDIRI (DIISI OLEH MASING-MASING GURU) ---
     public function guruPrestasiMandiri(): void {
-        $this->requireRole(['walas', 'guru_mapel', 'guru_diniyah', 'guru_tahfidz', 'guru_mapel_kbtk', 'guru_supervisor']);
+        $this->requireRole(['walas', 'guru_mapel', 'guru_diniyah', 'guru_tahfidz', 'guru_mapel_kbtk', 'guru_tk', 'guru_supervisor']);
         $userId = Auth::id();
         $unitId = Auth::unitId();
         $taId = Auth::academicYearId();
@@ -738,7 +738,7 @@ class PanitiaLombaController extends Controller {
     }
 
     public function guruPrestasiMandiriSave(): void {
-        $this->requireRole(['walas', 'guru_mapel', 'guru_diniyah', 'guru_tahfidz', 'guru_mapel_kbtk', 'guru_supervisor']);
+        $this->requireRole(['walas', 'guru_mapel', 'guru_diniyah', 'guru_tahfidz', 'guru_mapel_kbtk', 'guru_tk', 'guru_supervisor']);
         $userId = Auth::id();
         $unitId = Auth::unitId();
         $taId = Auth::academicYearId();
