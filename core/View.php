@@ -23,25 +23,65 @@ class View {
         $unreadNotifCount = $currentUser ? Notification::countUnread($currentUser['id']) : 0;
         $unreadNotifs = $currentUser ? Notification::getUnread($currentUser['id'], 5) : [];
 
-        // Fitur Switch User Khusus Operator Yayasan (atau saat dalam mode impersonasi)
+        // Fitur Switch User: Operator Yayasan (bebas switch) atau TU / Operator Sekolah berizin
+        \App\Controllers\MasterController::ensureSwitchPermissionsTable();
+
         $isImpersonating = Auth::isImpersonating();
         $impersonator = Auth::impersonator();
-        $isOperatorYayasanOrImpersonating = Auth::hasRole('operator_yayasan') || $isImpersonating;
+        $isOperatorYayasan = Auth::hasRole('operator_yayasan');
+        
+        $currentUserId = (int)Auth::id();
+        $origUserId = $isImpersonating ? (int)($impersonator['id'] ?? $currentUserId) : $currentUserId;
+        
+        // Cek apakah user asal adalah operator yayasan
+        $origIsOperatorYayasan = $isOperatorYayasan;
+        if ($isImpersonating && $origUserId > 0) {
+            $origRoles = Database::fetchAll("SELECT r.name FROM roles r JOIN user_roles ur ON r.id = ur.role_id WHERE ur.user_id = ?", [$origUserId]);
+            $origRoleNames = array_column($origRoles, 'name');
+            $origIsOperatorYayasan = in_array('operator_yayasan', $origRoleNames, true);
+        }
+
+        // Cek apakah user (atau impersonator) memiliki izin switch
+        $hasGrantedPermissions = false;
+        if (!$origIsOperatorYayasan && $origUserId > 0) {
+            $permCount = (int)(Database::fetch("SELECT COUNT(*) as c FROM user_switch_permissions WHERE user_id = ?", [$origUserId])['c'] ?? 0);
+            $hasGrantedPermissions = ($permCount > 0);
+        }
+
+        $canSwitchUser = $origIsOperatorYayasan || $isImpersonating || ( (Auth::hasRole('tata_usaha') || Auth::hasRole('operator_sekolah')) && $hasGrantedPermissions );
+        $isOperatorYayasanOrImpersonating = $canSwitchUser; // untuk kompatibilitas jika ada view lain yang membaca variabel ini
+
         $switchableUsers = [];
-        if ($isOperatorYayasanOrImpersonating) {
+        if ($canSwitchUser) {
             try {
-                $switchableUsers = Database::fetchAll("
-                    SELECT u.id, u.username, u.full_name, u.email,
-                           COALESCE(un.name, 'Yayasan / Lintas Unit') as unit_name,
-                           (SELECT r.display_name FROM roles r JOIN user_roles ur ON r.id = ur.role_id WHERE ur.user_id = u.id ORDER BY ur.is_primary DESC, r.id ASC LIMIT 1) as role_display,
-                           (SELECT r.name FROM roles r JOIN user_roles ur ON r.id = ur.role_id WHERE ur.user_id = u.id ORDER BY ur.is_primary DESC, r.id ASC LIMIT 1) as role_name
-                    FROM users u
-                    LEFT JOIN employees e ON u.id = e.user_id AND e.is_deleted = 0
-                    LEFT JOIN units un ON COALESCE(u.unit_id, e.unit_id) = un.id
-                    WHERE u.is_active = 1
-                    GROUP BY u.id, u.username, u.full_name, u.email, un.name
-                    ORDER BY un.name ASC, role_display ASC, u.full_name ASC
-                ");
+                if ($origIsOperatorYayasan) {
+                    $switchableUsers = Database::fetchAll("
+                        SELECT u.id, u.username, u.full_name, u.email,
+                               COALESCE(un.name, 'Yayasan / Lintas Unit') as unit_name,
+                               (SELECT r.display_name FROM roles r JOIN user_roles ur ON r.id = ur.role_id WHERE ur.user_id = u.id ORDER BY ur.is_primary DESC, r.id ASC LIMIT 1) as role_display,
+                               (SELECT r.name FROM roles r JOIN user_roles ur ON r.id = ur.role_id WHERE ur.user_id = u.id ORDER BY ur.is_primary DESC, r.id ASC LIMIT 1) as role_name
+                        FROM users u
+                        LEFT JOIN employees e ON u.id = e.user_id AND e.is_deleted = 0
+                        LEFT JOIN units un ON COALESCE(u.unit_id, e.unit_id) = un.id
+                        WHERE u.is_active = 1
+                        GROUP BY u.id, u.username, u.full_name, u.email, un.name
+                        ORDER BY un.name ASC, role_display ASC, u.full_name ASC
+                    ");
+                } else {
+                    $switchableUsers = Database::fetchAll("
+                        SELECT u.id, u.username, u.full_name, u.email,
+                               COALESCE(un.name, 'Yayasan / Lintas Unit') as unit_name,
+                               (SELECT r.display_name FROM roles r JOIN user_roles ur ON r.id = ur.role_id WHERE ur.user_id = u.id ORDER BY ur.is_primary DESC, r.id ASC LIMIT 1) as role_display,
+                               (SELECT r.name FROM roles r JOIN user_roles ur ON r.id = ur.role_id WHERE ur.user_id = u.id ORDER BY ur.is_primary DESC, r.id ASC LIMIT 1) as role_name
+                        FROM users u
+                        JOIN user_switch_permissions usp ON u.id = usp.target_user_id
+                        LEFT JOIN employees e ON u.id = e.user_id AND e.is_deleted = 0
+                        LEFT JOIN units un ON COALESCE(u.unit_id, e.unit_id) = un.id
+                        WHERE usp.user_id = ? AND u.is_active = 1
+                        GROUP BY u.id, u.username, u.full_name, u.email, un.name
+                        ORDER BY un.name ASC, role_display ASC, u.full_name ASC
+                    ", [$origUserId]);
+                }
             } catch (\Throwable $e) {
                 $switchableUsers = [];
             }

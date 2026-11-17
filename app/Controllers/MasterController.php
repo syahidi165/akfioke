@@ -4462,4 +4462,143 @@ class MasterController extends Controller {
         $this->setFlash('success', "Kata sandi akun orang tua '{$targetUser['username']}' ({$targetUser['full_name']}) berhasil direset ke '{$defaultPassword}'.");
         $this->redirect(Auth::baseUrl() . '/users/parent-accounts');
     }
+
+    // --- 7C. PENGATURAN IZIN SWITCH AKUN (DELEGASI KE TU & OPERATOR SEKOLAH) ---
+    public static function ensureSwitchPermissionsTable(): void {
+        Database::execute("
+            CREATE TABLE IF NOT EXISTS `user_switch_permissions` (
+                `id` int(11) NOT NULL AUTO_INCREMENT,
+                `user_id` int(11) NOT NULL,
+                `target_user_id` int(11) NOT NULL,
+                `created_by` int(11) DEFAULT NULL,
+                `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (`id`),
+                UNIQUE KEY `user_target_unique` (`user_id`, `target_user_id`),
+                KEY `user_id` (`user_id`),
+                KEY `target_user_id` (`target_user_id`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        ");
+    }
+
+    public function switchPermissions(): void {
+        $this->requireRole('operator_yayasan');
+        self::ensureSwitchPermissionsTable();
+
+        $allUnits = Database::fetchAll("SELECT * FROM units ORDER BY id ASC");
+
+        // Ambil semua akun staf yang berhak didelegasikan izin (Tata Usaha & Operator Sekolah)
+        $eligibleUsers = Database::fetchAll("
+            SELECT u.id, u.username, u.full_name, u.email, u.phone, u.unit_id,
+                   COALESCE(un.name, 'Lintas Unit') as unit_name,
+                   r.name as role_name, r.display_name as role_display
+            FROM users u
+            JOIN user_roles ur ON u.id = ur.user_id
+            JOIN roles r ON ur.role_id = r.id
+            LEFT JOIN units un ON u.unit_id = un.id
+            WHERE r.name IN ('tata_usaha', 'operator_sekolah') AND u.is_active = 1
+            GROUP BY u.id, r.name
+            ORDER BY un.name ASC, r.name ASC, u.full_name ASC
+        ");
+
+        // Ambil pemetaan izin yang sudah ada
+        $permissions = Database::fetchAll("
+            SELECT usp.id, usp.user_id, usp.target_user_id, usp.created_at,
+                   u.full_name as target_name, u.username as target_username,
+                   COALESCE(un.name, 'Yayasan') as target_unit_name,
+                   r.display_name as target_role_display
+            FROM user_switch_permissions usp
+            JOIN users u ON usp.target_user_id = u.id
+            LEFT JOIN units un ON u.unit_id = un.id
+            LEFT JOIN user_roles ur ON u.id = ur.user_id AND ur.is_primary = 1
+            LEFT JOIN roles r ON ur.role_id = r.id
+            ORDER BY usp.user_id ASC, target_unit_name ASC, target_name ASC
+        ");
+
+        $permMap = [];
+        foreach ($permissions as $p) {
+            $permMap[$p['user_id']][] = $p;
+        }
+
+        // Ambil seluruh user target yang aktif yang bisa diberikan aksesnya (selain operator_yayasan)
+        $allTargetUsers = Database::fetchAll("
+            SELECT u.id, u.username, u.full_name, u.unit_id,
+                   COALESCE(un.name, 'Yayasan / Lintas Unit') as unit_name,
+                   r.display_name as role_display, r.name as role_name
+            FROM users u
+            LEFT JOIN units un ON u.unit_id = un.id
+            JOIN user_roles ur ON u.id = ur.user_id AND ur.is_primary = 1
+            JOIN roles r ON ur.role_id = r.id
+            WHERE u.is_active = 1 AND r.name != 'operator_yayasan'
+            ORDER BY un.name ASC, r.display_name ASC, u.full_name ASC
+        ");
+
+        $this->view('master/switch_permissions', [
+            'pageTitle'      => 'Pengaturan Izin Switch Akun (TU & Operator Sekolah)',
+            'eligibleUsers'  => $eligibleUsers,
+            'permMap'        => $permMap,
+            'allTargetUsers' => $allTargetUsers,
+            'allUnits'       => $allUnits
+        ]);
+    }
+
+    public function saveSwitchPermissions(): void {
+        $this->requireRole('operator_yayasan');
+        \Core\CSRF::validate();
+        self::ensureSwitchPermissionsTable();
+
+        $userId = (int)($_POST['user_id'] ?? 0);
+        $targetUserIds = $_POST['target_user_ids'] ?? [];
+        if (!is_array($targetUserIds)) {
+            $targetUserIds = [];
+        }
+
+        $user = Database::fetch("SELECT id, full_name, username FROM users WHERE id = ?", [$userId]);
+        if (!$user) {
+            $this->setFlash('error', 'Pengguna tidak ditemukan.');
+            $this->redirect(Auth::baseUrl() . '/settings/switch-permissions');
+            return;
+        }
+
+        // Hapus izin lama untuk user ini
+        Database::execute("DELETE FROM user_switch_permissions WHERE user_id = ?", [$userId]);
+
+        // Simpan izin baru
+        $inserted = 0;
+        $operatorId = Auth::id();
+        foreach ($targetUserIds as $tid) {
+            $tid = (int)$tid;
+            if ($tid > 0 && $tid !== $userId) {
+                // Pastikan target bukan operator_yayasan
+                $isYayasan = Database::fetch("SELECT ur.id FROM user_roles ur JOIN roles r ON ur.role_id = r.id WHERE ur.user_id = ? AND r.name = 'operator_yayasan'", [$tid]);
+                if (!$isYayasan) {
+                    Database::execute(
+                        "INSERT IGNORE INTO user_switch_permissions (user_id, target_user_id, created_by, created_at) VALUES (?, ?, ?, NOW())",
+                        [$userId, $tid, $operatorId]
+                    );
+                    $inserted++;
+                }
+            }
+        }
+
+        \Core\AuditLog::log('UPDATE_SWITCH_PERMISSIONS', 'user_switch_permissions', $userId, null, [
+            'username' => $user['username'],
+            'granted_count' => $inserted
+        ]);
+
+        $this->setFlash('success', "Izin alih akun untuk {$user['full_name']} (@{$user['username']}) berhasil diperbarui ({$inserted} akun target diizinkan).");
+        $this->redirect(Auth::baseUrl() . '/settings/switch-permissions');
+    }
+
+    public function revokeSwitchPermissions(): void {
+        $this->requireRole('operator_yayasan');
+        \Core\CSRF::validate();
+        self::ensureSwitchPermissionsTable();
+
+        $userId = (int)($_POST['user_id'] ?? 0);
+        Database::execute("DELETE FROM user_switch_permissions WHERE user_id = ?", [$userId]);
+
+        \Core\AuditLog::log('REVOKE_ALL_SWITCH_PERMISSIONS', 'user_switch_permissions', $userId);
+        $this->setFlash('success', 'Seluruh izin alih akun untuk pengguna tersebut berhasil dicabut.');
+        $this->redirect(Auth::baseUrl() . '/settings/switch-permissions');
+    }
 }

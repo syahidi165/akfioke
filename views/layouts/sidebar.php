@@ -90,6 +90,12 @@ if (!function_exists('isNavActive')) {
                 </a>
             </div>
             <div class="nav-item">
+                <a href="<?= $baseUrl ?>/settings/switch-permissions" class="nav-link <?= isNavActive('/settings/switch-permissions', $currentPath) ?>">
+                    <i class="fa-solid fa-user-lock"></i>
+                    <span class="nav-text">Izin Switch Akun</span>
+                </a>
+            </div>
+            <div class="nav-item">
                 <a href="<?= $baseUrl ?>/master/turnover" class="nav-link <?= isNavActive('/master/turnover', $currentPath) ?>">
                     <i class="fa-solid fa-people-arrows"></i>
                     <span class="nav-text">Mutasi & Turnover</span>
@@ -398,6 +404,14 @@ if (!function_exists('isNavActive')) {
                     <span class="nav-text">Akun Orang Tua</span>
                 </a>
             </div>
+            <?php if (!empty($canSwitchUser)): ?>
+                <div class="nav-item">
+                    <a href="javascript:void(0)" onclick="openSwitchUserModal()" class="nav-link" style="color: #0284c7; font-weight: 600;">
+                        <i class="fa-solid fa-people-arrows" style="color: #0284c7;"></i>
+                        <span class="nav-text">Switch User (Akses Akun)</span>
+                    </a>
+                </div>
+            <?php endif; ?>
             <div class="nav-item">
                 <a href="<?= $baseUrl ?>/alumni" class="nav-link <?= isNavActive('/alumni', $currentPath) ?>">
                     <i class="fa-solid fa-user-tie"></i>
@@ -461,6 +475,14 @@ if (!function_exists('isNavActive')) {
 
         <?php elseif ($role === 'tata_usaha'): ?>
             <div class="nav-section-title">TATA USAHA</div>
+            <?php if (!empty($canSwitchUser)): ?>
+                <div class="nav-item">
+                    <a href="javascript:void(0)" onclick="openSwitchUserModal()" class="nav-link" style="color: #0284c7; font-weight: 600;">
+                        <i class="fa-solid fa-people-arrows" style="color: #0284c7;"></i>
+                        <span class="nav-text">Switch User (Akses Akun)</span>
+                    </a>
+                </div>
+            <?php endif; ?>
             <div class="nav-item">
                 <a href="<?= $baseUrl ?>/tagihan/manage" class="nav-link <?= isNavActive('/tagihan/manage', $currentPath) ?>">
                     <i class="fa-solid fa-file-invoice-dollar"></i>

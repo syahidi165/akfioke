@@ -61,7 +61,11 @@ class DashboardController extends Controller {
             $deputiUserId = Auth::id();
             $deputiUnitIds = \App\Controllers\DeputiController::getDeputiUnitIds($deputiUserId);
             if (empty($deputiUnitIds)) {
-                $deputiUnitIds = [1];
+                $allU = Database::fetchAll("SELECT id FROM units ORDER BY id ASC");
+                $deputiUnitIds = array_column($allU, 'id');
+                if (empty($deputiUnitIds)) {
+                    $deputiUnitIds = [1];
+                }
             }
             $inDeputiUnits = implode(',', array_map('intval', $deputiUnitIds));
 
@@ -90,6 +94,34 @@ class DashboardController extends Controller {
             $teacherAttendanceByUnit = [];
             $studentAttendanceByUnit = [];
 
+            // Kondisi komprehensif penentuan Guru / Tenaga Pendidik
+            $teacherCondition = "(
+                e.position LIKE '%Guru%' OR e.level_posisi LIKE '%Guru%'
+                OR e.position LIKE '%Wali%' OR e.level_posisi LIKE '%Wali%'
+                OR e.position LIKE '%Walas%' OR e.level_posisi LIKE '%Walas%'
+                OR e.position LIKE '%Waka%' OR e.level_posisi LIKE '%Waka%'
+                OR e.position LIKE '%Wakil%' OR e.level_posisi LIKE '%Wakil%'
+                OR e.position LIKE '%Koor%' OR e.level_posisi LIKE '%Koor%'
+                OR e.position LIKE '%Tahta%' OR e.level_posisi LIKE '%Tahta%'
+                OR e.position LIKE '%Tahfidz%' OR e.level_posisi LIKE '%Tahfidz%'
+                OR e.position LIKE '%Tutor%' OR e.level_posisi LIKE '%Tutor%'
+                OR e.position LIKE '%Diniyah%' OR e.level_posisi LIKE '%Diniyah%'
+                OR e.position LIKE '%Pendidik%' OR e.level_posisi LIKE '%Pendidik%'
+                OR e.position LIKE '%Pengajar%' OR e.level_posisi LIKE '%Pengajar%'
+                OR (
+                    e.level_posisi NOT IN ('Kepala Sekolah', 'Operator Sekolah', 'Tata Usaha', 'TU', 'Tenaga Kebersihan', 'Cleaning Service', 'Security', 'Satpam', 'Driver', 'Direktur Pendidikan', 'Deputi Pendidikan')
+                    AND e.position NOT IN ('Kepala Sekolah', 'Operator Sekolah', 'Tata Usaha', 'TU', 'Tenaga Kebersihan', 'Cleaning Service', 'Security', 'Satpam', 'Driver', 'Direktur Pendidikan', 'Deputi Pendidikan')
+                    AND e.level_posisi NOT LIKE '%Kebersihan%' AND e.position NOT LIKE '%Kebersihan%'
+                    AND e.level_posisi NOT LIKE '%Security%' AND e.position NOT LIKE '%Security%'
+                    AND e.level_posisi NOT LIKE '%Satpam%' AND e.position NOT LIKE '%Satpam%'
+                    AND e.level_posisi NOT LIKE '%Cleaning%' AND e.position NOT LIKE '%Cleaning%'
+                    AND e.level_posisi NOT LIKE '%Tata Usaha%' AND e.position NOT LIKE '%Tata Usaha%'
+                    AND e.level_posisi NOT LIKE '%Kepala Sekolah%' AND e.position NOT LIKE '%Kepala Sekolah%'
+                    AND e.level_posisi != 'Kepsek' AND e.position != 'Kepsek'
+                    AND (e.level_posisi NOT LIKE '%Operator%' OR e.position LIKE '%Guru%' OR e.position LIKE '%Walas%' OR e.position LIKE '%Wakakur%')
+                )
+            )";
+
             $totalGuruYayasan = 0;
             $sumGuruHadir = 0;
             $sumGuruTotalDays = 0;
@@ -102,12 +134,12 @@ class DashboardController extends Controller {
                 $uid = (int)$u['id'];
 
                 // Kehadiran Guru Unit Ini
-                $totGuru = (int)(Database::fetch("SELECT COUNT(*) as c FROM employees WHERE unit_id = ? AND is_deleted = 0 AND (level_posisi LIKE '%Guru%' OR position LIKE '%Guru%')", [$uid])['c'] ?? 0);
+                $totGuru = (int)(Database::fetch("SELECT COUNT(*) as c FROM employees e WHERE e.unit_id = ? AND e.is_deleted = 0 AND (e.status = 'Aktif' OR e.status IS NULL) AND {$teacherCondition}", [$uid])['c'] ?? 0);
                 $guruAtt = Database::fetch(
                     "SELECT SUM(ea.hadir) as sum_hadir, SUM(ea.sakit) as sum_sakit, SUM(ea.izin) as sum_izin, SUM(ea.alpha) as sum_alpha, SUM(ea.terlambat_menit) as sum_terlambat
                      FROM employee_attendance ea 
                      JOIN employees e ON ea.employee_id = e.id 
-                     WHERE ea.unit_id = ? AND ea.academic_year_id = ? AND e.is_deleted = 0 AND (e.level_posisi LIKE '%Guru%' OR e.position LIKE '%Guru%')",
+                     WHERE ea.unit_id = ? AND ea.academic_year_id = ? AND e.is_deleted = 0 AND {$teacherCondition}",
                     [$uid, $taId]
                 );
                 $gHadir = (int)($guruAtt['sum_hadir'] ?? 0);
@@ -167,11 +199,17 @@ class DashboardController extends Controller {
                 ];
             }
 
+            $totalUnitsYayasanCount = (int)(Database::fetch("SELECT COUNT(*) as c FROM units")['c'] ?? 0);
+            $totalGuruAllUnits = (int)(Database::fetch("SELECT COUNT(*) as c FROM employees e WHERE e.unit_id IS NOT NULL AND e.is_deleted = 0 AND (e.status = 'Aktif' OR e.status IS NULL) AND {$teacherCondition}")['c'] ?? 0);
+
             $data['teacherAttendanceByUnit'] = $teacherAttendanceByUnit;
             $data['studentAttendanceByUnit'] = $studentAttendanceByUnit;
             $data['avgTeacherAttOverall'] = $sumGuruTotalDays > 0 ? round(($sumGuruHadir / $sumGuruTotalDays) * 100, 1) : 0;
             $data['avgStudentAttOverall'] = $sumSiswaTotalDays > 0 ? round(($sumSiswaHadir / $sumSiswaTotalDays) * 100, 1) : 0;
             $data['totalGuruYayasan'] = $totalGuruYayasan;
+            $data['totalGuruAllUnits'] = $totalGuruAllUnits;
+            $data['totalUnitsYayasanCount'] = $totalUnitsYayasanCount;
+            $data['isAllUnitsOverseen'] = (count($allUnits) >= $totalUnitsYayasanCount);
             $data['totalSiswaYayasan'] = $totalSiswaYayasan;
 
         } elseif ($role === 'kepala_sekolah') {

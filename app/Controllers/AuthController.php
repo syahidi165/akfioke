@@ -132,13 +132,15 @@ class AuthController extends Controller {
     }
 
     /**
-     * Alih peran masuk sebagai pengguna lain (Khusus Operator Yayasan)
+     * Alih peran masuk sebagai pengguna lain (Operator Yayasan, Operator Sekolah, & Tata Usaha berizin)
      */
     public function switchUser(): void {
         Auth::requireAuth();
-        if (!Auth::hasRole('operator_yayasan') && !Auth::isImpersonating()) {
+
+        $canSwitch = Auth::hasRole('operator_yayasan') || Auth::isImpersonating() || Auth::hasRole('operator_sekolah') || Auth::hasRole('tata_usaha');
+        if (!$canSwitch) {
             http_response_code(403);
-            die('Akses Ditolak (403): Fitur alih peran pengguna ini hanya dapat diakses oleh Operator Yayasan.');
+            die('Akses Ditolak (403): Fitur alih peran pengguna ini hanya dapat diakses oleh Operator Yayasan atau akun yang diberikan izin.');
         }
 
         $userId = (int)($_POST['user_id'] ?? 0);

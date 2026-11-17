@@ -34,9 +34,9 @@ class AbsensiController extends Controller {
                   AND ea.academic_year_id = ? 
                   AND ea.month_num = ?
              WHERE e.unit_id = ? AND e.is_deleted = 0 
-               AND (e.position LIKE '%Guru%' OR e.position LIKE '%Waka%' OR e.position LIKE '%Tutor%' OR e.level_posisi LIKE '%Guru%' OR e.level_posisi LIKE '%Waka%' OR e.level_posisi LIKE '%Tutor%')
-               AND e.level_posisi NOT IN ('Direktur Pendidikan', 'Deputi Direktur', 'Kepala Sekolah')
-               AND e.position NOT IN ('Direktur Pendidikan', 'Deputi Direktur', 'Kepala Sekolah')
+               AND (e.position LIKE '%Guru%' OR e.position LIKE '%Waka%' OR e.position LIKE '%Wakil%' OR e.position LIKE '%Wali%' OR e.position LIKE '%Walas%' OR e.position LIKE '%Koor%' OR e.position LIKE '%Tahta%' OR e.position LIKE '%Tahfidz%' OR e.position LIKE '%Diniyah%' OR e.position LIKE '%Tutor%' OR e.level_posisi LIKE '%Guru%' OR e.level_posisi LIKE '%Waka%' OR e.level_posisi LIKE '%Wakil%' OR e.level_posisi LIKE '%Wali%' OR e.level_posisi LIKE '%Walas%' OR e.level_posisi LIKE '%Koor%' OR e.level_posisi LIKE '%Tahta%' OR e.level_posisi LIKE '%Tahfidz%' OR e.level_posisi LIKE '%Diniyah%' OR e.level_posisi LIKE '%Tutor%')
+               AND e.level_posisi NOT IN ('Direktur Pendidikan', 'Deputi Direktur', 'Kepala Sekolah', 'Tata Usaha', 'Security', 'Satpam', 'Tenaga Kebersihan', 'Cleaning Service')
+               AND e.position NOT IN ('Direktur Pendidikan', 'Deputi Direktur', 'Kepala Sekolah', 'Tata Usaha', 'Security', 'Satpam', 'Tenaga Kebersihan', 'Cleaning Service')
              ORDER BY e.nama ASC",
             [$taId, $monthNum, $unitId]
         );
@@ -409,9 +409,9 @@ class AbsensiController extends Controller {
                   AND ea.academic_year_id = ? 
                   AND ea.month_num = ?
              WHERE e.unit_id = ? AND e.is_deleted = 0 
-               AND (e.position LIKE '%Guru%' OR e.position LIKE '%Waka%' OR e.position LIKE '%Tutor%' OR e.level_posisi LIKE '%Guru%' OR e.level_posisi LIKE '%Waka%' OR e.level_posisi LIKE '%Tutor%')
-               AND e.level_posisi NOT IN ('Direktur Pendidikan', 'Deputi Direktur', 'Kepala Sekolah')
-               AND e.position NOT IN ('Direktur Pendidikan', 'Deputi Direktur', 'Kepala Sekolah')
+               AND (e.position LIKE '%Guru%' OR e.position LIKE '%Waka%' OR e.position LIKE '%Wakil%' OR e.position LIKE '%Wali%' OR e.position LIKE '%Walas%' OR e.position LIKE '%Koor%' OR e.position LIKE '%Tahta%' OR e.position LIKE '%Tahfidz%' OR e.position LIKE '%Diniyah%' OR e.position LIKE '%Tutor%' OR e.level_posisi LIKE '%Guru%' OR e.level_posisi LIKE '%Waka%' OR e.level_posisi LIKE '%Wakil%' OR e.level_posisi LIKE '%Wali%' OR e.level_posisi LIKE '%Walas%' OR e.level_posisi LIKE '%Koor%' OR e.level_posisi LIKE '%Tahta%' OR e.level_posisi LIKE '%Tahfidz%' OR e.level_posisi LIKE '%Diniyah%' OR e.level_posisi LIKE '%Tutor%')
+               AND e.level_posisi NOT IN ('Direktur Pendidikan', 'Deputi Direktur', 'Kepala Sekolah', 'Tata Usaha', 'Security', 'Satpam', 'Tenaga Kebersihan', 'Cleaning Service')
+               AND e.position NOT IN ('Direktur Pendidikan', 'Deputi Direktur', 'Kepala Sekolah', 'Tata Usaha', 'Security', 'Satpam', 'Tenaga Kebersihan', 'Cleaning Service')
              ORDER BY e.nama ASC",
             [$taId, $monthNum, $unitId]
         );

@@ -155,6 +155,9 @@ Router::post('/settings/smtp/save', [MasterController::class, 'saveSmtpSettings'
 Router::post('/settings/smtp/test', [MasterController::class, 'testSmtp']);
 Router::get('/settings/app', [MasterController::class, 'appSettings']);
 Router::post('/settings/app/save', [MasterController::class, 'saveAppSettings']);
+Router::get('/settings/switch-permissions', [MasterController::class, 'switchPermissions']);
+Router::post('/settings/switch-permissions/save', [MasterController::class, 'saveSwitchPermissions']);
+Router::post('/settings/switch-permissions/revoke', [MasterController::class, 'revokeSwitchPermissions']);
 
 // 5. Administrasi Dokumen (Upload & Multi-Frequency Approval)
 Router::get('/administrasi/ks', [AdministrasiController::class, 'ksUploads']);

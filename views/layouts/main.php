@@ -13,8 +13,8 @@ include __DIR__ . '/sidebar.php';
                     <i class="fa-solid fa-user-secret" style="color: #fde047;"></i> Mode Alih Akun
                 </span>
                 <span>
-                    Operator Yayasan sedang mengakses sebagai: <strong><?= \Core\SecurityHelper::escape($currentUser['name'] ?? 'User') ?></strong> 
-                    <span style="opacity: 0.85;">(@<?= \Core\SecurityHelper::escape($currentUser['username'] ?? '') ?> &bull; Peran: <?= \Core\SecurityHelper::escape($activeRole['display_name'] ?? '') ?>)</span>
+                    Mode Alih Akun: Anda sedang mengakses sebagai <strong><?= \Core\SecurityHelper::escape($currentUser['name'] ?? 'User') ?></strong> 
+                    <span style="opacity: 0.85;">(@<?= \Core\SecurityHelper::escape($currentUser['username'] ?? '') ?> &bull; <?= \Core\SecurityHelper::escape($activeRole['display_name'] ?? '') ?>)</span>
                 </span>
             </div>
             <div style="display: flex; align-items: center; gap: 8px;">
@@ -24,7 +24,7 @@ include __DIR__ . '/sidebar.php';
                 <form method="POST" action="<?= $baseUrl ?>/revert-impersonate" style="margin: 0; display: inline;">
                     <?= $csrfField ?>
                     <button type="submit" class="btn btn-sm" style="background: #f59e0b; color: #1e1b4b; border: none; font-weight: 700; padding: 5px 14px; font-size: 12px; border-radius: 6px; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 2px 4px rgba(0,0,0,0.15); cursor: pointer;">
-                        <i class="fa-solid fa-arrow-rotate-left"></i> Kembali ke Operator Yayasan
+                        <i class="fa-solid fa-arrow-rotate-left"></i> Kembali ke Akun Asli<?= !empty($impersonator['full_name']) ? ' (' . \Core\SecurityHelper::escape($impersonator['full_name']) . ')' : '' ?>
                     </button>
                 </form>
             </div>
@@ -98,6 +98,7 @@ include __DIR__ . '/sidebar.php';
                         <button type="button" class="btn-quick-cat active" onclick="filterSwitchCat('', this)">Semua (<?= count($switchableUsers ?? []) ?>)</button>
                         <button type="button" class="btn-quick-cat" onclick="filterSwitchCat('Direktur|Deputi|Yayasan', this)">Pimpinan / Deputi</button>
                         <button type="button" class="btn-quick-cat" onclick="filterSwitchCat('Kepala Sekolah', this)">Kepala Sekolah</button>
+                        <button type="button" class="btn-quick-cat" onclick="filterSwitchCat('Tata Usaha|TU', this)">Tata Usaha</button>
                         <button type="button" class="btn-quick-cat" onclick="filterSwitchCat('Guru|Walas', this)">Guru &amp; Walas</button>
                         <button type="button" class="btn-quick-cat" onclick="filterSwitchCat('Operator', this)">Operator</button>
                     </div>
@@ -163,7 +164,8 @@ include __DIR__ . '/sidebar.php';
                 <!-- Footer Modal -->
                 <div style="padding: 12px 24px; border-top: 1px solid var(--border-color, #e2e8f0); background: #f8fafc; display: flex; justify-content: space-between; align-items: center;">
                     <div style="font-size: 11.5px; color: #64748b;">
-                        <i class="fa-solid fa-shield-halved" style="color: #0284c7; margin-right: 4px;"></i> Hanya dapat diakses oleh hak istimewa <strong>Operator Yayasan</strong>.
+                        <i class="fa-solid fa-shield-halved" style="color: #0284c7; margin-right: 4px;"></i> 
+                        <?= !empty($origIsOperatorYayasan) ? 'Hak akses penuh <strong>Operator Yayasan</strong> (seluruh akun pengguna).' : 'Daftar akun yang aksesnya telah diberikan oleh <strong>Operator Yayasan</strong>.' ?>
                     </div>
                     <button type="button" onclick="closeSwitchUserModal()" class="btn btn-sm btn-outline" style="padding: 5px 14px; font-size: 12px; cursor: pointer;">
                         Tutup

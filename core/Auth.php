@@ -511,9 +511,10 @@ class Auth {
             return null;
         }
         return [
-            'id'       => (int)$_SESSION['impersonator_user_id'],
-            'username' => $_SESSION['impersonator_username'] ?? '',
-            'name'     => $_SESSION['impersonator_name'] ?? '',
+            'id'        => (int)$_SESSION['impersonator_user_id'],
+            'username'  => $_SESSION['impersonator_username'] ?? '',
+            'name'      => $_SESSION['impersonator_name'] ?? '',
+            'full_name' => $_SESSION['impersonator_name'] ?? '',
         ];
     }
 
@@ -524,16 +525,50 @@ class Auth {
     public static function impersonate(int $targetUserId): array {
         self::startSession();
 
-        $canImpersonate = self::hasRole('operator_yayasan') || self::isImpersonating();
-        if (!$canImpersonate) {
-            return [
-                'success' => false,
-                'message' => 'Akses ditolak: Fitur beralih akun (switch user) hanya dimiliki oleh Operator Yayasan.'
-            ];
-        }
-
         if ($targetUserId <= 0) {
             return ['success' => false, 'message' => 'ID pengguna target tidak valid.'];
+        }
+
+        $currentUserId = (int)self::id();
+        $originalUserId = self::isImpersonating() ? (int)($_SESSION['impersonator_user_id'] ?? $currentUserId) : $currentUserId;
+
+        // Cek peran user asal
+        $origRoles = Database::fetchAll("SELECT r.name FROM roles r JOIN user_roles ur ON r.id = ur.role_id WHERE ur.user_id = ?", [$originalUserId]);
+        $origRoleNames = array_column($origRoles, 'name');
+        $origIsOperatorYayasan = in_array('operator_yayasan', $origRoleNames, true);
+
+        if (!$origIsOperatorYayasan) {
+            // Pengguna bukan Operator Yayasan: periksa apakah peran staf berhak (tata_usaha atau operator_sekolah)
+            $isEligibleStaff = false;
+            foreach ($origRoleNames as $rn) {
+                if (in_array($rn, ['tata_usaha', 'operator_sekolah'], true)) {
+                    $isEligibleStaff = true;
+                    break;
+                }
+            }
+
+            if (!$isEligibleStaff) {
+                return [
+                    'success' => false,
+                    'message' => 'Akses ditolak: Fitur beralih akun (switch user) hanya dimiliki oleh Operator Yayasan, atau staf yang diberikan izin.'
+                ];
+            }
+
+            // Pastikan tabel izin switch ada
+            \App\Controllers\MasterController::ensureSwitchPermissionsTable();
+
+            // Cek apakah target_user_id ada dalam daftar izin yang diberikan Operator Yayasan
+            $hasPerm = Database::fetch(
+                "SELECT id FROM user_switch_permissions WHERE user_id = ? AND target_user_id = ?",
+                [$originalUserId, $targetUserId]
+            );
+
+            if (!$hasPerm) {
+                return [
+                    'success' => false,
+                    'message' => 'Akses ditolak: Anda tidak memiliki izin dari Operator Yayasan untuk beralih ke akun ini.'
+                ];
+            }
         }
 
         $targetUser = Database::fetch("SELECT * FROM users WHERE id = ? AND is_active = 1", [$targetUserId]);
@@ -553,11 +588,12 @@ class Auth {
             return ['success' => false, 'message' => 'Pengguna target belum memiliki peran (role) yang ditugaskan.'];
         }
 
-        // Jika belum ada identitas impersonator, catat identitas asli Operator Yayasan
+        // Jika belum ada identitas impersonator, catat identitas asli
         if (empty($_SESSION['impersonator_user_id'])) {
             $_SESSION['impersonator_user_id'] = (int)$_SESSION['user_id'];
             $_SESSION['impersonator_username'] = $_SESSION['user_username'] ?? '';
             $_SESSION['impersonator_name'] = $_SESSION['user_name'] ?? '';
+            $_SESSION['impersonator_unit_id'] = $_SESSION['unit_id'] ?? null;
         }
 
         // Ambil data pegawai/siswa untuk unit_id
@@ -593,7 +629,7 @@ class Auth {
     }
 
     /**
-     * Kembali ke akun Operator Yayasan asli dari mode penyamaran/impersonasi.
+     * Kembali ke akun asli dari mode penyamaran/impersonasi.
      */
     public static function revertImpersonate(): array {
         self::startSession();
@@ -606,7 +642,7 @@ class Auth {
         $origUser = Database::fetch("SELECT * FROM users WHERE id = ?", [$origUserId]);
 
         if (!$origUser) {
-            return ['success' => false, 'message' => 'Data Operator Yayasan asal tidak ditemukan di database.'];
+            return ['success' => false, 'message' => 'Data pengguna asal tidak ditemukan di database.'];
         }
 
         $roles = Database::fetchAll(
@@ -634,13 +670,14 @@ class Auth {
         $_SESSION['force_change_password'] = (bool)$origUser['force_change_password'];
         $_SESSION['roles'] = $roles;
         $_SESSION['active_role'] = $opRole;
-        $_SESSION['unit_id'] = null;
+        $_SESSION['unit_id'] = $_SESSION['impersonator_unit_id'] ?? ($origUser['unit_id'] ?? null);
         $_SESSION['last_activity'] = time();
 
         unset(
             $_SESSION['impersonator_user_id'],
             $_SESSION['impersonator_username'],
-            $_SESSION['impersonator_name']
+            $_SESSION['impersonator_name'],
+            $_SESSION['impersonator_unit_id']
         );
 
         session_regenerate_id(true);
@@ -649,7 +686,7 @@ class Auth {
 
         return [
             'success' => true,
-            'message' => 'Berhasil kembali ke akun Operator Yayasan.'
+            'message' => "Berhasil kembali ke akun asli ({$origUser['full_name']})."
         ];
     }
 }

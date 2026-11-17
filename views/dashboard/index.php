@@ -233,7 +233,9 @@ use Core\SecurityHelper;
             <div class="stat-icon emerald"><i class="fa-solid fa-user-check"></i></div>
             <div>
                 <div class="stat-value"><?= number_format((float)($avgTeacherAttOverall ?? 0), 1) ?>%</div>
-                <div class="stat-label">Kehadiran Guru Yayasan (<?= $totalGuruYayasan ?? 0 ?> Guru)</div>
+                <div class="stat-label">
+                    Kehadiran Guru <?= !empty($isAllUnitsOverseen) ? 'Yayasan' : 'Unit Binaan' ?> (<?= $totalGuruYayasan ?? 0 ?><?= (!empty($isAllUnitsOverseen) || empty($totalGuruAllUnits) || $totalGuruAllUnits === ($totalGuruYayasan ?? 0)) ? '' : ' / ' . $totalGuruAllUnits . ' Total' ?> Guru)
+                </div>
             </div>
         </div>
         <div class="stat-card">
