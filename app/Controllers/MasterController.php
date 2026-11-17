@@ -4574,7 +4574,7 @@ class MasterController extends Controller {
                 $tid = (int)$tid;
                 if ($tid > 0 && $tid !== $userId) {
                     // Pastikan target bukan operator_yayasan
-                    $isYayasan = Database::fetch("SELECT ur.id FROM user_roles ur JOIN roles r ON ur.role_id = r.id WHERE ur.user_id = ? AND r.name = 'operator_yayasan'", [$tid]);
+                    $isYayasan = Database::fetch("SELECT 1 FROM user_roles ur JOIN roles r ON ur.role_id = r.id WHERE ur.user_id = ? AND r.name = 'operator_yayasan' LIMIT 1", [$tid]);
                     if (!$isYayasan) {
                         Database::execute(
                             "INSERT IGNORE INTO user_switch_permissions (user_id, target_user_id, created_by, created_at) VALUES (?, ?, ?, NOW())",
