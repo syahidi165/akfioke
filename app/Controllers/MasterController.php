@@ -573,13 +573,17 @@ class MasterController extends Controller {
             $roles = Database::fetchAll("SELECT * FROM roles WHERE name NOT IN ('operator_yayasan', 'direktur_pendidikan', 'deputi_pendidikan', 'pembina_yayasan', 'operator_sekolah', 'direktur_pengadaan', 'direktur_sarpras', 'hrd') ORDER BY display_name ASC");
         }
 
+        $pendingImport = $_SESSION['pending_employee_import'] ?? null;
+        unset($_SESSION['pending_employee_import']);
+
         $this->view('master/employees', [
-            'pageTitle'  => 'Data Master Guru, Karyawan & Akun Pengguna Yayasan',
-            'employees'  => $employees,
-            'units'      => $units,
-            'superiors'  => $superiors,
-            'roles'      => $roles,
-            'unitFilter' => $unitFilter
+            'pageTitle'     => 'Data Master Guru, Karyawan & Akun Pengguna Yayasan',
+            'employees'     => $employees,
+            'units'         => $units,
+            'superiors'     => $superiors,
+            'roles'         => $roles,
+            'unitFilter'    => $unitFilter,
+            'pendingImport' => $pendingImport
         ]);
     }
 
@@ -1553,6 +1557,598 @@ class MasterController extends Controller {
         }
 
         $this->redirect($redirectUrl);
+    }
+
+    // --- VERIFIKASI PRA-IMPOR GURU & KARYAWAN (PREVIEW & ROW FILTER/DELETE) ---
+    public function verifyImportEmployees(): void {
+        $this->requireRole(['operator_sekolah', 'operator_yayasan']);
+        $isYayasan = Auth::hasRole('operator_yayasan');
+        $redirectUrl = Auth::baseUrl() . ($isYayasan ? '/master/employees' : '/users/school-accounts');
+
+        $isAjax = (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') 
+            || (isset($_SERVER['HTTP_ACCEPT']) && strpos($_SERVER['HTTP_ACCEPT'], 'application/json') !== false);
+
+        if (!isset($_FILES['file']) || $_FILES['file']['error'] !== UPLOAD_ERR_OK) {
+            $msg = 'Berkas Excel tidak valid atau gagal diunggah.';
+            if ($isAjax) {
+                header('Content-Type: application/json; charset=utf-8');
+                echo json_encode(['success' => false, 'message' => $msg]);
+            } else {
+                $this->setFlash('danger', $msg);
+                $this->redirect($redirectUrl);
+            }
+            return;
+        }
+
+        $tmpFile = $_FILES['file']['tmp_name'];
+        $ext = strtolower(pathinfo($_FILES['file']['name'], PATHINFO_EXTENSION));
+        if (!in_array($ext, ['xlsx', 'xls'], true)) {
+            $msg = 'Hanya berkas Excel dengan ekstensi .xlsx atau .xls yang diperbolehkan.';
+            if ($isAjax) {
+                header('Content-Type: application/json; charset=utf-8');
+                echo json_encode(['success' => false, 'message' => $msg]);
+            } else {
+                $this->setFlash('danger', $msg);
+                $this->redirect($redirectUrl);
+            }
+            return;
+        }
+
+        // Default Unit dari modal (jika ada)
+        $defaultModalUnitId = 0;
+        if ($isYayasan) {
+            $defaultModalUnitId = (int)($_POST['unit_id'] ?? 0);
+            if ($defaultModalUnitId < 0) {
+                $defaultModalUnitId = null; // Kantor Yayasan
+            }
+        } else {
+            $defaultModalUnitId = Auth::unitId();
+        }
+
+        // Cache all active units
+        $allUnits = Database::fetchAll("SELECT id, name, code FROM units");
+        $unitById = [];
+        $unitByCode = [];
+        $unitByName = [];
+        foreach ($allUnits as $u) {
+            $uId = (int)$u['id'];
+            $unitById[$uId] = $u;
+            $unitByCode[strtolower(trim($u['code']))] = $u;
+            $unitByName[strtolower(trim($u['name']))] = $u;
+        }
+
+        // Cache roles & aliases
+        $rolesRaw = Database::fetchAll("SELECT id, name, display_name FROM roles");
+        $roleMap = [];
+        $roleById = [];
+        $fallbackRoleId = null;
+        foreach ($rolesRaw as $r) {
+            $rId = (int)$r['id'];
+            $roleById[$rId] = $r;
+            $normName = strtolower(trim($r['name']));
+            $normDisp = strtolower(trim($r['display_name']));
+            $roleMap[$normName] = $rId;
+            $roleMap[$normDisp] = $rId;
+            if ($normName === 'guru_mapel') {
+                $fallbackRoleId = $rId;
+            }
+        }
+        if (!$fallbackRoleId && !empty($rolesRaw)) {
+            $fallbackRoleId = (int)$rolesRaw[0]['id'];
+        }
+
+        $roleAliases = [
+            'guru' => $fallbackRoleId,
+            'guru mapel' => $fallbackRoleId,
+            'guru mapel umum' => $fallbackRoleId,
+            'guru mata pelajaran' => $fallbackRoleId,
+            'guru wali kelas' => $roleMap['walas'] ?? $fallbackRoleId,
+            'wali kelas' => $roleMap['walas'] ?? $fallbackRoleId,
+            'walas' => $roleMap['walas'] ?? $fallbackRoleId,
+            'guru tahfidz' => $roleMap['guru_tahfidz'] ?? $fallbackRoleId,
+            'tahfidz' => $roleMap['guru_tahfidz'] ?? $fallbackRoleId,
+            'guru diniyah' => $roleMap['guru_diniyah'] ?? $fallbackRoleId,
+            'diniyah' => $roleMap['guru_diniyah'] ?? $fallbackRoleId,
+            'guru tk/kb' => $roleMap['guru_tk'] ?? ($roleMap['guru_mapel_kbtk'] ?? $fallbackRoleId),
+            'guru tk' => $roleMap['guru_tk'] ?? ($roleMap['guru_mapel_kbtk'] ?? $fallbackRoleId),
+            'guru kb' => $roleMap['guru_tk'] ?? ($roleMap['guru_mapel_kbtk'] ?? $fallbackRoleId),
+            'guru kbtk' => $roleMap['guru_tk'] ?? ($roleMap['guru_mapel_kbtk'] ?? $fallbackRoleId),
+            'guru kb/tk' => $roleMap['guru_tk'] ?? ($roleMap['guru_mapel_kbtk'] ?? $fallbackRoleId),
+            'guru kelas tk' => $roleMap['guru_tk'] ?? ($roleMap['guru_mapel_kbtk'] ?? $fallbackRoleId),
+            'guru kelas kb' => $roleMap['guru_tk'] ?? ($roleMap['guru_mapel_kbtk'] ?? $fallbackRoleId),
+            'guru mapel kb/tk' => $roleMap['guru_mapel_kbtk'] ?? ($roleMap['guru_tk'] ?? $fallbackRoleId),
+            'guru mapel kbtk' => $roleMap['guru_mapel_kbtk'] ?? ($roleMap['guru_tk'] ?? $fallbackRoleId),
+            'kepala sekolah' => $roleMap['kepala_sekolah'] ?? $fallbackRoleId,
+            'kepsek' => $roleMap['kepala_sekolah'] ?? $fallbackRoleId,
+            'tata usaha' => $roleMap['tata_usaha'] ?? $fallbackRoleId,
+            'tu' => $roleMap['tata_usaha'] ?? $fallbackRoleId,
+            'staf tu' => $roleMap['tata_usaha'] ?? $fallbackRoleId,
+            'staff tu' => $roleMap['tata_usaha'] ?? $fallbackRoleId,
+            'operator sekolah' => $roleMap['operator_sekolah'] ?? $fallbackRoleId,
+            'operator' => $roleMap['operator_sekolah'] ?? $fallbackRoleId,
+            'ops' => $roleMap['operator_sekolah'] ?? $fallbackRoleId,
+            'security' => $roleMap['security'] ?? $fallbackRoleId,
+            'satpam' => $roleMap['security'] ?? $fallbackRoleId,
+            'cleaning service' => $roleMap['cleaning_service'] ?? $fallbackRoleId,
+            'cs' => $roleMap['cleaning_service'] ?? $fallbackRoleId,
+            'kebersihan' => $roleMap['cleaning_service'] ?? $fallbackRoleId,
+            'sarpras' => $roleMap['sarpras'] ?? $fallbackRoleId,
+            'direktur pengadaan' => $roleMap['direktur_pengadaan'] ?? null,
+            'direktur sarpras' => $roleMap['direktur_sarpras'] ?? null,
+            'hrd' => $roleMap['hrd'] ?? null,
+            'hrd yayasan' => $roleMap['hrd'] ?? null,
+        ];
+
+        // Cache existing DB records to check duplicates
+        $existingEmployeesRaw = Database::fetchAll("SELECT id, user_id, nipy, nik, nama, unit_id, is_deleted FROM employees");
+        $existingNipyMap = [];
+        $existingNikMap = [];
+        $existingNamaMap = [];
+        foreach ($existingEmployeesRaw as $e) {
+            if ((int)$e['is_deleted'] === 0) {
+                if (!empty($e['nipy'])) $existingNipyMap[strtolower(trim($e['nipy']))] = $e['nama'];
+                if (!empty($e['nik'])) $existingNikMap[strtolower(trim($e['nik']))] = $e['nama'];
+                $unitKey = $e['unit_id'] ? (int)$e['unit_id'] : 0;
+                $existingNamaMap[$unitKey . '_' . strtolower(trim($e['nama']))] = $e['nipy'];
+            }
+        }
+
+        $existingUsersRaw = Database::fetchAll("SELECT id, username, email FROM users");
+        $existingUsernameMap = [];
+        $existingEmailMap = [];
+        foreach ($existingUsersRaw as $u) {
+            $existingUsernameMap[strtolower(trim($u['username']))] = (int)$u['id'];
+            if (!empty($u['email'])) $existingEmailMap[strtolower(trim($u['email']))] = (int)$u['id'];
+        }
+
+        try {
+            $spreadsheet = IOFactory::load($tmpFile);
+            $sheet = $spreadsheet->getActiveSheet();
+            $highestRow = $sheet->getHighestRow();
+            $highestColumn = $sheet->getHighestColumn();
+            $highestColIndex = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::columnIndexFromString($highestColumn);
+        } catch (\Throwable $e) {
+            $msg = 'Gagal membaca berkas Excel: ' . $e->getMessage();
+            if ($isAjax) {
+                header('Content-Type: application/json; charset=utf-8');
+                echo json_encode(['success' => false, 'message' => $msg]);
+            } else {
+                $this->setFlash('danger', $msg);
+                $this->redirect($redirectUrl);
+            }
+            return;
+        }
+
+        // Dynamic Header Mapping
+        $colMap = [];
+        for ($col = 1; $col <= $highestColIndex; $col++) {
+            $colLetter = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($col);
+            $headerText = strtolower(trim((string)$sheet->getCell("{$colLetter}1")->getValue()));
+            if (empty($headerText)) continue;
+
+            if (strpos($headerText, 'nama') !== false) {
+                $colMap['nama'] = $colLetter;
+            } elseif (strpos($headerText, 'nipy') !== false) {
+                $colMap['nipy'] = $colLetter;
+            } elseif (strpos($headerText, 'nik') !== false) {
+                $colMap['nik'] = $colLetter;
+            } elseif (strpos($headerText, 'kelamin') !== false || strpos($headerText, 'gender') !== false || $headerText === 'jk') {
+                $colMap['gender'] = $colLetter;
+            } elseif (strpos($headerText, 'unit') !== false || strpos($headerText, 'satuan') !== false || strpos($headerText, 'sekolah') !== false) {
+                $colMap['unit'] = $colLetter;
+            } elseif (strpos($headerText, 'posisi') !== false || strpos($headerText, 'jabatan') !== false) {
+                $colMap['posisi'] = $colLetter;
+            } elseif (strpos($headerText, 'pendidikan') !== false || strpos($headerText, 'tingkat') !== false) {
+                $colMap['pendidikan'] = $colLetter;
+            } elseif (strpos($headerText, 'tmt') !== false || strpos($headerText, 'mulai') !== false) {
+                $colMap['tmt'] = $colLetter;
+            } elseif (strpos($headerText, 'peran') !== false || strpos($headerText, 'role') !== false) {
+                $colMap['role'] = $colLetter;
+            } elseif (strpos($headerText, 'username') !== false || strpos($headerText, 'akun') !== false) {
+                $colMap['username'] = $colLetter;
+            } elseif (strpos($headerText, 'password') !== false || strpos($headerText, 'sandi') !== false) {
+                $colMap['password'] = $colLetter;
+            } elseif (strpos($headerText, 'wa') !== false || strpos($headerText, 'hp') !== false || strpos($headerText, 'telp') !== false || strpos($headerText, 'kontak') !== false) {
+                $colMap['phone'] = $colLetter;
+            } elseif (strpos($headerText, 'email') !== false || strpos($headerText, 'surel') !== false) {
+                $colMap['email'] = $colLetter;
+            }
+        }
+
+        $hasPosisiInHeader = isset($colMap['posisi']);
+        $colNama       = $colMap['nama'] ?? 'B';
+        $colNipy       = $colMap['nipy'] ?? 'C';
+        $colNik        = $colMap['nik'] ?? 'D';
+        $colGender     = $colMap['gender'] ?? 'E';
+        $colUnit       = $colMap['unit'] ?? 'F';
+        $colPosisi     = $colMap['posisi'] ?? null;
+        $colPendidikan = $colMap['pendidikan'] ?? ($hasPosisiInHeader ? 'H' : 'G');
+        $colTmt        = $colMap['tmt'] ?? ($hasPosisiInHeader ? 'I' : 'H');
+        $colRole       = $colMap['role'] ?? ($hasPosisiInHeader ? 'J' : 'I');
+        $colUsername   = $colMap['username'] ?? ($hasPosisiInHeader ? 'K' : 'J');
+        $colPassword   = $colMap['password'] ?? ($hasPosisiInHeader ? 'L' : 'K');
+        $colPhone      = $colMap['phone'] ?? ($hasPosisiInHeader ? 'M' : 'L');
+        $colEmail      = $colMap['email'] ?? ($hasPosisiInHeader ? 'N' : 'M');
+
+        $parsedRows = [];
+        $fileNamaSeen = [];
+        $fileNipySeen = [];
+        $fileNikSeen = [];
+        $fileUsernameSeen = [];
+        $fileEmailSeen = [];
+        $validCount = 0;
+        $invalidCount = 0;
+
+        for ($row = 2; $row <= $highestRow; $row++) {
+            $nama = trim((string)$sheet->getCell("{$colNama}{$row}")->getValue());
+            $nipy = $colNipy ? trim((string)$sheet->getCell("{$colNipy}{$row}")->getValue()) : '';
+            $nik  = $colNik ? trim((string)$sheet->getCell("{$colNik}{$row}")->getValue()) : '';
+
+            if (empty($nama) && empty($nipy) && empty($nik)) {
+                continue;
+            }
+
+            $errors = [];
+
+            // 1. Validasi Nama & Cek Duplikat
+            if (empty($nama)) {
+                $errors[] = "Nama pegawai wajib diisi.";
+            } else {
+                $namaKey = strtolower($nama);
+                if (isset($fileNamaSeen[$namaKey])) {
+                    $errors[] = "Nama pegawai '{$nama}' duplikat di dalam berkas Excel (baris {$fileNamaSeen[$namaKey]}).";
+                } else {
+                    $fileNamaSeen[$namaKey] = $row;
+                }
+            }
+
+            // 2. Gender
+            $genderRaw = $colGender ? strtoupper(trim((string)$sheet->getCell("{$colGender}{$row}")->getValue())) : '';
+            if (empty($genderRaw) || !in_array($genderRaw, ['L', 'P', 'LAKI-LAKI', 'PEREMPUAN'], true)) {
+                $errors[] = "Jenis Kelamin '{$genderRaw}' tidak valid (wajib L atau P).";
+                $gender = 'L';
+            } else {
+                $gender = (str_starts_with($genderRaw, 'P')) ? 'P' : 'L';
+            }
+
+            // 3. Unit resolution
+            $targetUnitId = null;
+            $targetUnitName = 'Kantor Yayasan (Lintas Unit)';
+            $uCode = 'YAY';
+
+            if ($colUnit) {
+                $unitVal = trim((string)$sheet->getCell("{$colUnit}{$row}")->getValue());
+                $unitNorm = strtolower($unitVal);
+                if (!empty($unitNorm) && !in_array($unitNorm, ['-', '0', 'yayasan', 'kantor yayasan', 'lintas unit', 'pusat', 'kantor yayasan (lintas unit)'])) {
+                    if (isset($unitByCode[$unitNorm])) {
+                        $targetUnitId = $unitByCode[$unitNorm]['id'];
+                        $targetUnitName = $unitByCode[$unitNorm]['name'];
+                        $uCode = $unitByCode[$unitNorm]['code'];
+                    } elseif (isset($unitByName[$unitNorm])) {
+                        $targetUnitId = $unitByName[$unitNorm]['id'];
+                        $targetUnitName = $unitByName[$unitNorm]['name'];
+                        $uCode = $unitByName[$unitNorm]['code'];
+                    } elseif (is_numeric($unitVal) && isset($unitById[(int)$unitVal])) {
+                        $targetUnitId = (int)$unitVal;
+                        $targetUnitName = $unitById[$targetUnitId]['name'];
+                        $uCode = $unitById[$targetUnitId]['code'];
+                    } else {
+                        foreach ($allUnits as $u) {
+                            if (stripos($u['name'], $unitVal) !== false || stripos($unitVal, $u['name']) !== false || stripos($unitVal, $u['code']) !== false) {
+                                $targetUnitId = $u['id'];
+                                $targetUnitName = $u['name'];
+                                $uCode = $u['code'];
+                                break;
+                            }
+                        }
+                    }
+
+                    if ($targetUnitId === null) {
+                        $errors[] = "Unit Satuan '{$unitVal}' tidak ditemukan.";
+                    }
+                }
+            }
+
+            if ($targetUnitId === null && $defaultModalUnitId && isset($unitById[$defaultModalUnitId])) {
+                $targetUnitId = $defaultModalUnitId;
+                $targetUnitName = $unitById[$defaultModalUnitId]['name'];
+                $uCode = $unitById[$defaultModalUnitId]['code'];
+            }
+
+            // Cek nama duplikat di DB untuk unit ini
+            if (!empty($nama)) {
+                $uKey = $targetUnitId ? (int)$targetUnitId : 0;
+                $nKey = $uKey . '_' . strtolower($nama);
+                if (isset($existingNamaMap[$nKey])) {
+                    $errors[] = "Nama '{$nama}' sudah terdaftar aktif di unit ini (NIPY: {$existingNamaMap[$nKey]}).";
+                }
+            }
+
+            // 4. NIPY & Duplikat
+            if (!empty($nipy)) {
+                $nipyKey = strtolower($nipy);
+                if (isset($fileNipySeen[$nipyKey])) {
+                    $errors[] = "NIPY '{$nipy}' duplikat di dalam berkas Excel (baris {$fileNipySeen[$nipyKey]}).";
+                } else {
+                    $fileNipySeen[$nipyKey] = $row;
+                }
+
+                if (isset($existingNipyMap[$nipyKey])) {
+                    $errors[] = "NIPY '{$nipy}' sudah terdaftar untuk pegawai: {$existingNipyMap[$nipyKey]}.";
+                }
+            } else {
+                $nipy = $uCode . '-' . date('y') . rand(1000, 9999);
+            }
+
+            // 5. NIK & Duplikat
+            if (!empty($nik)) {
+                $nikKey = strtolower($nik);
+                if (isset($fileNikSeen[$nikKey])) {
+                    $errors[] = "NIK '{$nik}' duplikat di dalam berkas Excel (baris {$fileNikSeen[$nikKey]}).";
+                } else {
+                    $fileNikSeen[$nikKey] = $row;
+                }
+
+                if (isset($existingNikMap[$nikKey])) {
+                    $errors[] = "NIK '{$nik}' sudah terdaftar untuk pegawai: {$existingNikMap[$nikKey]}.";
+                }
+            }
+
+            // 6. Pendidikan
+            $pendidikanRaw = $colPendidikan ? trim((string)$sheet->getCell("{$colPendidikan}{$row}")->getValue()) : '';
+            $pendidikan = strtoupper($pendidikanRaw);
+            $validEdu = ['S1', 'S2', 'S3', 'D3', 'D1', 'D2', 'D4', 'SMA/SMK', 'SMA', 'SMK', 'SMP', 'SD', 'MA', 'MTS'];
+            if (!empty($pendidikan) && !in_array($pendidikan, $validEdu, true)) {
+                $errors[] = "Tingkat Pendidikan '{$pendidikanRaw}' tidak valid (pilihan: S1, S2, S3, D3, SMA/SMK).";
+            }
+            if (empty($pendidikan)) $pendidikan = 'S1';
+
+            // 7. TMT
+            $tmt = date('Y-m-d');
+            if ($colTmt) {
+                $tmtVal = $sheet->getCell("{$colTmt}{$row}")->getValue();
+                if (!empty($tmtVal)) {
+                    if (is_numeric($tmtVal) && $tmtVal > 25000 && $tmtVal < 60000) {
+                        try {
+                            $tmt = \PhpOffice\PhpSpreadsheet\Shared\Date::excelToDateTimeObject($tmtVal)->format('Y-m-d');
+                        } catch (\Throwable) {
+                            $tmt = date('Y-m-d');
+                        }
+                    } else {
+                        $tmtStr = trim((string)$tmtVal);
+                        if (preg_match('/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})$/', $tmtStr, $m)) {
+                            $tmt = sprintf('%04d-%02d-%02d', $m[1], $m[2], $m[3]);
+                        } elseif (preg_match('/^(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})$/', $tmtStr, $m)) {
+                            $tmt = sprintf('%04d-%02d-%02d', $m[3], $m[2], $m[1]);
+                        } else {
+                            $errors[] = "Format TMT '{$tmtStr}' tidak valid.";
+                        }
+                    }
+                }
+            }
+
+            // 8. Peran Sistem (Role)
+            $roleRaw = $colRole ? trim((string)$sheet->getCell("{$colRole}{$row}")->getValue()) : '';
+            $roleText = strtolower($roleRaw);
+            if (empty($roleText)) {
+                $errors[] = "Kolom Peran Sistem (Role) wajib diisi.";
+                $roleId = $fallbackRoleId;
+            } else {
+                $roleId = $roleAliases[$roleText] ?? ($roleMap[$roleText] ?? null);
+                if (!$roleId) {
+                    $errors[] = "Peran '{$roleRaw}' tidak ditemukan dalam daftar peran resmi.";
+                    $roleId = $fallbackRoleId;
+                } elseif (!$isYayasan) {
+                    $checkRoleName = $roleById[$roleId]['name'] ?? '';
+                    if (in_array($checkRoleName, ['operator_yayasan', 'direktur_pendidikan', 'deputi_pendidikan', 'pembina_yayasan', 'direktur_pengadaan', 'direktur_sarpras', 'hrd'], true)) {
+                        $errors[] = "Operator Sekolah tidak diizinkan menetapkan peran '{$roleRaw}'.";
+                    }
+                }
+            }
+
+            $roleObj = $roleById[$roleId] ?? ['name' => 'guru_mapel', 'display_name' => 'Guru Mapel Umum'];
+            $posisi = '';
+            if ($colPosisi) {
+                $posisi = trim((string)$sheet->getCell("{$colPosisi}{$row}")->getValue());
+            }
+            if (empty($posisi)) {
+                $posisi = $roleObj['display_name'] ?? 'Guru Mapel Umum';
+            }
+
+            // 9. Username
+            $username = $colUsername ? trim((string)$sheet->getCell("{$colUsername}{$row}")->getValue()) : '';
+            if (empty($username)) {
+                $cleanNipy = strtolower(preg_replace('/[^a-zA-Z0-9]/', '', $nipy));
+                $username = !empty($cleanNipy) ? $cleanNipy : (strtolower(preg_replace('/[^a-zA-Z0-9]/', '', substr($nama, 0, 8))) . '.' . strtolower($uCode));
+            } else {
+                $username = strtolower(preg_replace('/[^a-zA-Z0-9._-]/', '', $username));
+            }
+
+            $uKey = strtolower($username);
+            if (isset($fileUsernameSeen[$uKey])) {
+                $errors[] = "Username '{$username}' duplikat di dalam berkas Excel (baris {$fileUsernameSeen[$uKey]}).";
+            } else {
+                $fileUsernameSeen[$uKey] = $row;
+            }
+            if (isset($existingUsernameMap[$uKey])) {
+                $errors[] = "Username '{$username}' sudah digunakan di sistem.";
+            }
+
+            // 10. Password, Phone & Email
+            $password = $colPassword ? trim((string)$sheet->getCell("{$colPassword}{$row}")->getValue()) : '';
+            if (empty($password)) $password = 'password123';
+
+            $phone = $colPhone ? trim((string)$sheet->getCell("{$colPhone}{$row}")->getValue()) : '';
+            $email = $colEmail ? trim((string)$sheet->getCell("{$colEmail}{$row}")->getValue()) : '';
+            if (!empty($email)) {
+                if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                    $errors[] = "Format email '{$email}' tidak valid.";
+                } else {
+                    $eKey = strtolower($email);
+                    if (isset($fileEmailSeen[$eKey])) {
+                        $errors[] = "Email '{$email}' duplikat di dalam berkas Excel (baris {$fileEmailSeen[$eKey]}).";
+                    } else {
+                        $fileEmailSeen[$eKey] = $row;
+                    }
+                    if (isset($existingEmailMap[$eKey])) {
+                        $errors[] = "Email '{$email}' sudah digunakan di sistem.";
+                    }
+                }
+            }
+
+            $isValid = empty($errors);
+            if ($isValid) {
+                $validCount++;
+            } else {
+                $invalidCount++;
+            }
+
+            $parsedRows[] = [
+                'temp_id'          => $row,
+                'row_num'          => $row,
+                'nama'             => $nama,
+                'nipy'             => $nipy,
+                'nik'              => $nik,
+                'gender'           => $gender,
+                'gender_raw'       => $genderRaw,
+                'unit_id'          => $targetUnitId,
+                'unit_name'        => $targetUnitName,
+                'posisi'           => $posisi,
+                'pendidikan'       => $pendidikan,
+                'tmt'              => $tmt,
+                'role_id'          => $roleId,
+                'role_name'        => $roleObj['name'] ?? '',
+                'role_display'     => $roleObj['display_name'] ?? '',
+                'username'         => $username,
+                'password'         => $password,
+                'phone'            => $phone,
+                'email'            => $email,
+                'is_valid'         => $isValid,
+                'errors'           => $errors
+            ];
+        }
+
+        $responseData = [
+            'success'       => true,
+            'total_rows'    => count($parsedRows),
+            'valid_count'   => $validCount,
+            'invalid_count' => $invalidCount,
+            'rows'          => $parsedRows
+        ];
+
+        if ($isAjax) {
+            header('Content-Type: application/json; charset=utf-8');
+            echo json_encode($responseData);
+            return;
+        } else {
+            $_SESSION['pending_employee_import'] = $responseData;
+            $this->redirect($redirectUrl);
+            return;
+        }
+    }
+
+    // --- KONFIRMASI SIMPAN PEGAWAI DARI HASIL VERIFIKASI ---
+    public function confirmImportEmployees(): void {
+        header('Content-Type: application/json; charset=utf-8');
+        $this->requireRole(['operator_sekolah', 'operator_yayasan']);
+        $isYayasan = Auth::hasRole('operator_yayasan');
+
+        $employeesJson = $_POST['employees_json'] ?? '';
+        $employees = json_decode($employeesJson, true);
+
+        if (!is_array($employees) || empty($employees)) {
+            echo json_encode(['success' => false, 'message' => 'Tidak ada data pegawai valid yang dikirim untuk disimpan.']);
+            return;
+        }
+
+        $imported = 0;
+        $skipped = 0;
+        $errors = [];
+
+        Database::beginTransaction();
+        try {
+            foreach ($employees as $emp) {
+                if (empty($emp['is_valid'])) {
+                    $skipped++;
+                    continue;
+                }
+
+                $nama = trim($emp['nama'] ?? '');
+                $nipy = trim($emp['nipy'] ?? '');
+                $username = trim($emp['username'] ?? '');
+                $roleId = (int)($emp['role_id'] ?? 0);
+                if (empty($nama) || empty($username) || $roleId <= 0) {
+                    $skipped++;
+                    continue;
+                }
+
+                // Cek lagi ke database untuk mencegah duplikasi
+                $uCheck = Database::fetch("SELECT id FROM users WHERE username = ?", [$username]);
+                if ($uCheck) {
+                    $skipped++;
+                    $errors[] = "Username '{$username}' ({$nama}) sudah terdaftar di sistem.";
+                    continue;
+                }
+
+                if (!empty($nipy)) {
+                    $nCheck = Database::fetch("SELECT id, is_deleted FROM employees WHERE nipy = ?", [$nipy]);
+                    if ($nCheck && (int)$nCheck['is_deleted'] === 0) {
+                        $skipped++;
+                        $errors[] = "NIPY '{$nipy}' ({$nama}) sudah terdaftar di sistem.";
+                        continue;
+                    }
+                }
+
+                $targetUnitId = !empty($emp['unit_id']) ? (int)$emp['unit_id'] : null;
+                $nik = !empty($emp['nik']) ? trim($emp['nik']) : null;
+                $gender = in_array(strtoupper($emp['gender'] ?? 'L'), ['L', 'P'], true) ? strtoupper($emp['gender']) : 'L';
+                $pendidikan = !empty($emp['pendidikan']) ? trim($emp['pendidikan']) : 'S1';
+                $tmt = !empty($emp['tmt']) ? $emp['tmt'] : date('Y-m-d');
+                $posisi = !empty($emp['posisi']) ? trim($emp['posisi']) : 'Guru Mapel Umum';
+                $password = !empty($emp['password']) ? $emp['password'] : 'password123';
+                $phone = !empty($emp['phone']) ? trim($emp['phone']) : null;
+                $email = !empty($emp['email']) ? trim($emp['email']) : null;
+
+                $passHash = password_hash($password, PASSWORD_DEFAULT);
+                $forceChange = ($password === 'password123') ? 1 : 0;
+
+                Database::execute(
+                    "INSERT INTO users (username, password_hash, full_name, email, phone, unit_id, is_active, force_change_password)
+                     VALUES (?, ?, ?, ?, ?, ?, 1, ?)",
+                    [$username, $passHash, $nama, $email, $phone, $targetUnitId, $forceChange]
+                );
+                $finalUserId = (int)Database::lastInsertId();
+
+                Database::execute("INSERT IGNORE INTO user_roles (user_id, role_id, is_primary) VALUES (?, ?, 1)", [$finalUserId, $roleId]);
+
+                Database::execute(
+                    "INSERT INTO employees (user_id, nipy, nik, nama, gender, tingkat_pendidikan, tmt, level_posisi, unit_id, contact_phone, email, status)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Aktif')",
+                    [$finalUserId, $nipy, $nik, $nama, $gender, $pendidikan, $tmt, $posisi, $targetUnitId, $phone, $email]
+                );
+                $newEmpId = (int)Database::lastInsertId();
+
+                AuditLog::log('IMPORT_EMPLOYEE', 'employees', $newEmpId, null, [
+                    'username' => $username, 'unit_id' => $targetUnitId, 'role_id' => $roleId, 'nipy' => $nipy
+                ]);
+
+                $imported++;
+            }
+
+            Database::commit();
+        } catch (\Throwable $e) {
+            Database::rollBack();
+            echo json_encode(['success' => false, 'message' => 'Gagal menyimpan data pegawai ke database: ' . $e->getMessage()]);
+            return;
+        }
+
+        $msg = "Alhamdulillah, berhasil memasukkan {$imported} data pegawai & akun login valid ke dalam sistem.";
+        if ($skipped > 0) {
+            $msg .= " ({$skipped} baris data bermasalah/duplikat dilewati).";
+        }
+
+        $this->setFlash('success', $msg);
+        echo json_encode(['success' => true, 'message' => $msg, 'imported' => $imported, 'skipped' => $skipped]);
     }
 
     public function turnover(): void {
@@ -2550,11 +3146,29 @@ class MasterController extends Controller {
             ];
         }
 
-        // Existing students NIS in DB
+        // Existing students NIS, NISN, NIK, Nama in DB to detect duplicates
         $existingNisRaw = Database::fetchAll("SELECT nis, nama FROM students WHERE nis IS NOT NULL AND nis != ''");
         $existingNisMap = [];
         foreach ($existingNisRaw as $r) {
             $existingNisMap[strtolower(trim($r['nis']))] = $r['nama'];
+        }
+
+        $existingNisnRaw = Database::fetchAll("SELECT nisn, nama FROM students WHERE nisn IS NOT NULL AND nisn != ''");
+        $existingNisnMap = [];
+        foreach ($existingNisnRaw as $r) {
+            $existingNisnMap[strtolower(trim($r['nisn']))] = $r['nama'];
+        }
+
+        $existingNikRaw = Database::fetchAll("SELECT nik, nama FROM students WHERE nik IS NOT NULL AND nik != ''");
+        $existingNikMap = [];
+        foreach ($existingNikRaw as $r) {
+            $existingNikMap[strtolower(trim($r['nik']))] = $r['nama'];
+        }
+
+        $existingNamaRaw = Database::fetchAll("SELECT LOWER(TRIM(nama)) as n_key, nama, nis FROM students WHERE unit_id = ? AND status = 'Aktif'", [$unitId]);
+        $existingNamaMap = [];
+        foreach ($existingNamaRaw as $r) {
+            $existingNamaMap[$r['n_key']] = $r['nis'];
         }
 
         $unit = Database::fetch("SELECT name FROM units WHERE id = ?", [$unitId]);
@@ -2577,7 +3191,10 @@ class MasterController extends Controller {
         }
 
         $parsedRows = [];
+        $fileNamaSeen = [];
         $fileNisSeen = [];
+        $fileNisnSeen = [];
+        $fileNikSeen = [];
         $validCount = 0;
         $invalidCount = 0;
 
@@ -2602,12 +3219,23 @@ class MasterController extends Controller {
 
             $errors = [];
 
-            // 1. Validasi Nama
+            // 1. Validasi & Cek Duplikasi Nama
             if (empty($nama)) {
                 $errors[] = "Nama santri wajib diisi.";
+            } else {
+                $namaKey = strtolower($nama);
+                if (isset($fileNamaSeen[$namaKey])) {
+                    $errors[] = "Nama santri '{$nama}' duplikat di dalam berkas Excel (baris {$fileNamaSeen[$namaKey]}).";
+                } else {
+                    $fileNamaSeen[$namaKey] = $row;
+                }
+
+                if (isset($existingNamaMap[$namaKey])) {
+                    $errors[] = "Nama santri '{$nama}' sudah terdaftar aktif di unit ini (NIS: {$existingNamaMap[$namaKey]}).";
+                }
             }
 
-            // 2. Validasi NIS
+            // 2. Validasi & Cek Duplikasi NIS
             if (empty($nis)) {
                 $errors[] = "NIS wajib diisi.";
             } else {
@@ -2620,6 +3248,34 @@ class MasterController extends Controller {
 
                 if (isset($existingNisMap[$nisKey])) {
                     $errors[] = "NIS '{$nis}' sudah terdaftar untuk santri: {$existingNisMap[$nisKey]}.";
+                }
+            }
+
+            // 2b. Cek Duplikasi NISN (jika diisi)
+            if (!empty($nisn)) {
+                $nisnKey = strtolower($nisn);
+                if (isset($fileNisnSeen[$nisnKey])) {
+                    $errors[] = "NISN '{$nisn}' duplikat di dalam berkas Excel (baris {$fileNisnSeen[$nisnKey]}).";
+                } else {
+                    $fileNisnSeen[$nisnKey] = $row;
+                }
+
+                if (isset($existingNisnMap[$nisnKey])) {
+                    $errors[] = "NISN '{$nisn}' sudah terdaftar untuk santri: {$existingNisnMap[$nisnKey]}.";
+                }
+            }
+
+            // 2c. Cek Duplikasi NIK (jika diisi)
+            if (!empty($nik)) {
+                $nikKey = strtolower($nik);
+                if (isset($fileNikSeen[$nikKey])) {
+                    $errors[] = "NIK '{$nik}' duplikat di dalam berkas Excel (baris {$fileNikSeen[$nikKey]}).";
+                } else {
+                    $fileNikSeen[$nikKey] = $row;
+                }
+
+                if (isset($existingNikMap[$nikKey])) {
+                    $errors[] = "NIK '{$nik}' sudah terdaftar untuk santri: {$existingNikMap[$nikKey]}.";
                 }
             }
 
@@ -2780,7 +3436,7 @@ class MasterController extends Controller {
                     continue;
                 }
 
-                // Cek lagi ke database untuk mengantisipasi duplikasi
+                // Cek lagi ke database untuk mengantisipasi duplikasi NIS, NISN, NIK, dan Nama
                 $sCheck = Database::fetch("SELECT id FROM students WHERE nis = ?", [$nis]);
                 if ($sCheck) {
                     $skipped++;
@@ -2789,7 +3445,31 @@ class MasterController extends Controller {
                 }
 
                 $nisn = trim($s['nisn'] ?? '');
+                if (!empty($nisn)) {
+                    $nisnCheck = Database::fetch("SELECT id, nama FROM students WHERE nisn = ?", [$nisn]);
+                    if ($nisnCheck) {
+                        $skipped++;
+                        $errors[] = "NISN '{$nisn}' ({$nama}) sudah terdaftar di sistem untuk {$nisnCheck['nama']}.";
+                        continue;
+                    }
+                }
+
                 $nik = trim($s['nik'] ?? '');
+                if (!empty($nik)) {
+                    $nikCheck = Database::fetch("SELECT id, nama FROM students WHERE nik = ?", [$nik]);
+                    if ($nikCheck) {
+                        $skipped++;
+                        $errors[] = "NIK '{$nik}' ({$nama}) sudah terdaftar di sistem untuk {$nikCheck['nama']}.";
+                        continue;
+                    }
+                }
+
+                $namaCheck = Database::fetch("SELECT id, nis FROM students WHERE unit_id = ? AND nama = ? AND status = 'Aktif'", [$unitId, $nama]);
+                if ($namaCheck) {
+                    $skipped++;
+                    $errors[] = "Nama santri '{$nama}' sudah terdaftar aktif di unit ini (NIS: {$namaCheck['nis']}).";
+                    continue;
+                }
                 $gender = in_array(strtoupper($s['gender'] ?? 'L'), ['L', 'P'], true) ? strtoupper($s['gender']) : 'L';
                 $birthplace = trim($s['birthplace'] ?? '');
                 $birthdate = !empty($s['birthdate']) ? $s['birthdate'] : null;
@@ -3599,6 +4279,9 @@ class MasterController extends Controller {
         $empSql .= " ORDER BY e.unit_id ASC, e.nama ASC";
         $existingEmployees = Database::fetchAll($empSql, $empParams);
 
+        $pendingImport = $_SESSION['pending_employee_import'] ?? null;
+        unset($_SESSION['pending_employee_import']);
+
         $this->view('master/school_accounts', [
             'pageTitle'         => $isYayasan ? 'Kelola Akun Operator & Pengguna Seluruh Satuan Pendidikan' : 'Kelola Akun Guru & Karyawan Sekolah',
             'users'             => $users,
@@ -3607,7 +4290,8 @@ class MasterController extends Controller {
             'unitFilter'        => $unitFilter,
             'isYayasan'         => $isYayasan,
             'currentUnit'       => $unitId,
-            'existingEmployees' => $existingEmployees
+            'existingEmployees' => $existingEmployees,
+            'pendingImport'     => $pendingImport
         ]);
     }
 

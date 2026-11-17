@@ -252,7 +252,12 @@ $posCode = $assessment['position_code'] ?? '';
                                             <?= $it['weight'] ?>
                                         </td>
                                         <td>
-                                            <input type="number" step="0.1" name="actual_val[<?= $it['id'] ?>]" class="form-control" style="text-align: center; font-family: monospace; font-size: 13px; font-weight: 600;" value="<?= $actual ?>" required>
+                                            <?php if ($it['section'] === 'B'): ?>
+                                                <div style="text-align: center; color: var(--text-muted); font-size: 13px;">-</div>
+                                                <input type="hidden" name="actual_val[<?= $it['id'] ?>]" value="<?= $actual ?>">
+                                            <?php else: ?>
+                                                <input type="number" step="0.1" name="actual_val[<?= $it['id'] ?>]" class="form-control" style="text-align: center; font-family: monospace; font-size: 13px; font-weight: 600;" value="<?= $actual ?>" required>
+                                            <?php endif; ?>
                                         </td>
                                         <td>
                                             <input type="number" step="0.1" 

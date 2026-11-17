@@ -295,20 +295,30 @@ $badgeGrade = match($grade) {
                                 </td>
                                 <td style="text-align: center;">
                                     <?php if ($isDraft): ?>
-                                        <div style="display: inline-flex; align-items: center; gap: 6px;">
-                                            <input type="number" step="0.1" name="self_score[<?= $it['id'] ?>]" 
-                                                   class="form-control" 
-                                                   style="width: 85px; text-align: center; font-weight: 700; font-family: monospace; padding: 6px;" 
-                                                   value="<?= htmlspecialchars((string)$selfScore) ?>" required>
-                                            <span style="font-size: 11px; color: var(--text-muted);"><?= SecurityHelper::escape($it['unit_type']) ?></span>
-                                        </div>
+                                        <?php if ($it['section'] === 'A'): ?>
+                                            <div style="display: inline-flex; align-items: center; gap: 6px;">
+                                                <input type="number" step="0.1" name="self_score[<?= $it['id'] ?>]" 
+                                                       class="form-control" 
+                                                       style="width: 85px; text-align: center; font-weight: 700; font-family: monospace; padding: 6px;" 
+                                                       value="<?= htmlspecialchars((string)$selfScore) ?>" required>
+                                                <span style="font-size: 11px; color: var(--text-muted);"><?= SecurityHelper::escape($it['unit_type']) ?></span>
+                                            </div>
+                                        <?php else: ?>
+                                            <span class="badge" style="background: #f8fafc; color: #64748b; font-size: 11px; padding: 4px 8px; border: 1px dashed #cbd5e1;">
+                                                <i class="fa-solid fa-user-tie" style="margin-right: 4px;"></i> Dinilai Murni oleh Atasan
+                                            </span>
+                                        <?php endif; ?>
                                     <?php else: ?>
-                                        <span style="font-family: monospace; font-weight: 700; font-size: 14px; color: var(--text-main);">
-                                            <?= htmlspecialchars((string)$selfScore) ?>
-                                        </span>
-                                        <span style="font-size: 11px; color: var(--text-muted); margin-left: 2px;">
-                                            <?= SecurityHelper::escape($it['unit_type']) ?>
-                                        </span>
+                                        <?php if ($it['section'] === 'A'): ?>
+                                            <span style="font-family: monospace; font-weight: 700; font-size: 14px; color: var(--text-main);">
+                                                <?= htmlspecialchars((string)$selfScore) ?>
+                                            </span>
+                                            <span style="font-size: 11px; color: var(--text-muted); margin-left: 2px;">
+                                                <?= SecurityHelper::escape($it['unit_type']) ?>
+                                            </span>
+                                        <?php else: ?>
+                                            <span style="color: var(--text-muted); font-size: 12px;">-</span>
+                                        <?php endif; ?>
                                     <?php endif; ?>
                                 </td>
                                 <?php if (!$isDraft): ?>
@@ -334,8 +344,8 @@ $badgeGrade = match($grade) {
             <?php if ($isDraft): ?>
                 <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px; margin-top: 24px; padding-top: 18px; border-top: 1px solid var(--border-color);">
                     <div style="font-size: 13px; color: var(--text-muted);">
-                        <i class="fa-solid fa-circle-exclamation" style="color: var(--warning); margin-right: 4px;"></i>
-                        Pastikan seluruh data capaian mandiri telah terisi dengan benar sebelum mengirimkan ke atasan langsung.
+                        <i class="fa-solid fa-circle-info" style="color: var(--primary); margin-right: 4px;"></i>
+                        Pengajuan mandiri difokuskan pada <strong>Bagian A (Target Program & Tugas Pokok)</strong>. Bagian B (Sikap & Perilaku) dan Bagian C (Presensi & Kedisiplinan) dinilai secara murni oleh atasan langsung.
                     </div>
                     <button type="submit" class="btn btn-primary" style="padding: 10px 24px; font-weight: 600;">
                         <i class="fa-solid fa-paper-plane"></i> Ajukan Penilaian Mandiri ke Atasan

@@ -103,10 +103,26 @@ class AkfiController extends Controller {
             return;
         }
 
-        // Simpan skor mandiri
+        // Filter agar HANYA Bagian A yang diajukan mandiri oleh pegawai, Bagian B & C murni dari atasan
+        $templateItems = Database::fetchAll(
+            "SELECT id, section FROM akfi_template_items WHERE template_id = ?",
+            [$assessment['template_id']]
+        );
+        $sectionAMap = [];
+        foreach ($templateItems as $ti) {
+            if ($ti['section'] === 'A') {
+                $sectionAMap[$ti['id']] = true;
+            }
+        }
+
+        // Simpan skor mandiri hanya untuk Bagian A
         $existingItems = !empty($assessment['items_json']) ? json_decode($assessment['items_json'], true) : [];
         foreach ($selfScores as $itemId => $val) {
-            $existingItems[$itemId]['self_score'] = (float)$val;
+            if (isset($sectionAMap[$itemId])) {
+                $existingItems[$itemId]['self_score'] = (float)$val;
+            } else {
+                unset($existingItems[$itemId]['self_score']);
+            }
         }
 
         Database::execute(
@@ -1230,13 +1246,14 @@ class AkfiController extends Controller {
                 $html .= "<tr class='section-header'><td colspan='7'>{$secTitle}</td></tr>";
             }
 
+            $realisasiText = ($it['section'] === 'B') ? '-' : "{$actual} {$it['unit_type']}";
             $html .= "
                 <tr>
                     <td align='center'>" . ($idx + 1) . "</td>
                     <td>{$it['category']}</td>
                     <td>{$it['item_name']}</td>
                     <td align='center'>{$it['target_val']} {$it['unit_type']}</td>
-                    <td align='center'>{$actual} {$it['unit_type']}</td>
+                    <td align='center'>{$realisasiText}</td>
                     <td align='center'>{$it['weight']}</td>
                     <td align='center'><strong>{$score}</strong></td>
                 </tr>
@@ -1969,6 +1986,28 @@ class AkfiController extends Controller {
         );
         $unitDiniyahAvg = (!empty($diniyahGrades['avg_score'])) ? round((float)$diniyahGrades['avg_score'], 1) : 0.0;
 
+        // % Capaian Baca Latin Satuan (TK/KB)
+        $bacaLatinGrades = Database::fetch(
+            "SELECT AVG(g.score) as avg_score 
+             FROM student_grades g
+             JOIN subjects s ON g.subject_id = s.id
+             WHERE s.unit_id = ? AND g.academic_year_id = ? 
+               AND (s.type = 'Baca Latin' OR s.name LIKE '%Baca Latin%')",
+            [$unitId, $taId]
+        );
+        $unitBacaLatinPct = (!empty($bacaLatinGrades['avg_score'])) ? round((float)$bacaLatinGrades['avg_score'], 1) : 0.0;
+
+        // % Capaian National Kurikulum Satuan (TK/KB)
+        $nationalGrades = Database::fetch(
+            "SELECT AVG(g.score) as avg_score 
+             FROM student_grades g
+             JOIN subjects s ON g.subject_id = s.id
+             WHERE s.unit_id = ? AND g.academic_year_id = ? 
+               AND (s.type = 'National Kurikulum' OR s.name LIKE '%National Kurikulum%' OR s.name LIKE '%Kurikulum Nasional%')",
+            [$unitId, $taId]
+        );
+        $unitNationalKurikulumPct = (!empty($nationalGrades['avg_score'])) ? round((float)$nationalGrades['avg_score'], 1) : 0.0;
+
         // % Guru dengan nilai KPI B atau A (Target 100%)
         // Dihitung: (Jumlah staf/guru di unit dengan nilai AKFI A atau B / Total staf/guru di unit) * 100%
         $totStaffInUnit = (int)(Database::fetch(
@@ -2149,6 +2188,8 @@ class AkfiController extends Controller {
             'unit_tahfidz_pct'        => $unitTahfidzPct,
             'unit_tahsin_pct'         => $unitTahsinPct,
             'unit_diniyah_avg'        => $unitDiniyahAvg,
+            'unit_baca_latin_pct'     => $unitBacaLatinPct,
+            'unit_national_kurikulum_pct' => $unitNationalKurikulumPct,
             'unit_tunggakan_ratio'    => $unitTunggakanRatio,
             'unit_lomba_resmi_count'  => $unitLombaResmiCount,
             'unit_guru_kpi_b'         => $unitGuruKpiB,

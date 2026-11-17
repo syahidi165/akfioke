@@ -108,6 +108,8 @@ Router::post('/master/employees/delete', [MasterController::class, 'deleteEmploy
 Router::get('/master/employees/export', [MasterController::class, 'exportEmployees']);
 Router::get('/master/employees/template', [MasterController::class, 'templateEmployees']);
 Router::post('/master/employees/import', [MasterController::class, 'importEmployees']);
+Router::post('/master/employees/verify-import', [MasterController::class, 'verifyImportEmployees']);
+Router::post('/master/employees/confirm-import', [MasterController::class, 'confirmImportEmployees']);
 Router::get('/master/turnover', [MasterController::class, 'turnover']);
 Router::post('/master/turnover/save', [MasterController::class, 'saveTurnover']);
 Router::get('/master/akfi-templates', [MasterController::class, 'akfiTemplates']);
