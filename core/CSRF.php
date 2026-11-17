@@ -46,12 +46,20 @@ class CSRF {
     }
 
     public static function check(): void {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             $token = $_POST['csrf_token'] ?? $_SERVER['HTTP_X_CSRF_TOKEN'] ?? null;
             if (!self::validateToken($token)) {
                 http_response_code(403);
                 die('Akses Ditolak: Token CSRF tidak valid atau sesi telah berakhir. Silakan muat ulang halaman.');
             }
         }
+    }
+
+    public static function validate(?string $token = null): bool {
+        if ($token !== null) {
+            return self::validateToken($token);
+        }
+        self::check();
+        return true;
     }
 }

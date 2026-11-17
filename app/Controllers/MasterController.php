@@ -4339,7 +4339,7 @@ class MasterController extends Controller {
 
     public function saveParentAccount(): void {
         $this->requireRole(['operator_sekolah', 'operator_yayasan']);
-        \Core\CSRF::validate();
+        \Core\CSRF::check();
 
         $id = (int)($_POST['id'] ?? 0);
         $action = $_POST['action'] ?? 'save_profile';
@@ -4418,7 +4418,7 @@ class MasterController extends Controller {
 
     public function resetParentPassword(): void {
         $this->requireRole(['operator_sekolah', 'operator_yayasan']);
-        \Core\CSRF::validate();
+        \Core\CSRF::check();
 
         $id = (int)($_POST['id'] ?? 0);
         $isYayasan = Auth::hasRole('operator_yayasan');
@@ -4465,19 +4465,23 @@ class MasterController extends Controller {
 
     // --- 7C. PENGATURAN IZIN SWITCH AKUN (DELEGASI KE TU & OPERATOR SEKOLAH) ---
     public static function ensureSwitchPermissionsTable(): void {
-        Database::execute("
-            CREATE TABLE IF NOT EXISTS `user_switch_permissions` (
-                `id` int(11) NOT NULL AUTO_INCREMENT,
-                `user_id` int(11) NOT NULL,
-                `target_user_id` int(11) NOT NULL,
-                `created_by` int(11) DEFAULT NULL,
-                `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
-                PRIMARY KEY (`id`),
-                UNIQUE KEY `user_target_unique` (`user_id`, `target_user_id`),
-                KEY `user_id` (`user_id`),
-                KEY `target_user_id` (`target_user_id`)
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-        ");
+        try {
+            Database::execute("
+                CREATE TABLE IF NOT EXISTS `user_switch_permissions` (
+                    `id` int(11) NOT NULL AUTO_INCREMENT,
+                    `user_id` int(11) NOT NULL,
+                    `target_user_id` int(11) NOT NULL,
+                    `created_by` int(11) DEFAULT NULL,
+                    `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (`id`),
+                    UNIQUE KEY `user_target_unique` (`user_id`, `target_user_id`),
+                    KEY `user_id` (`user_id`),
+                    KEY `target_user_id` (`target_user_id`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            ");
+        } catch (\Throwable $e) {
+            error_log('Gagal memastikan tabel user_switch_permissions: ' . $e->getMessage());
+        }
     }
 
     public function switchPermissions(): void {
@@ -4543,62 +4547,74 @@ class MasterController extends Controller {
 
     public function saveSwitchPermissions(): void {
         $this->requireRole('operator_yayasan');
-        \Core\CSRF::validate();
+        \Core\CSRF::check();
         self::ensureSwitchPermissionsTable();
 
-        $userId = (int)($_POST['user_id'] ?? 0);
-        $targetUserIds = $_POST['target_user_ids'] ?? [];
-        if (!is_array($targetUserIds)) {
-            $targetUserIds = [];
-        }
+        try {
+            $userId = (int)($_POST['user_id'] ?? 0);
+            $targetUserIds = $_POST['target_user_ids'] ?? [];
+            if (!is_array($targetUserIds)) {
+                $targetUserIds = [];
+            }
 
-        $user = Database::fetch("SELECT id, full_name, username FROM users WHERE id = ?", [$userId]);
-        if (!$user) {
-            $this->setFlash('error', 'Pengguna tidak ditemukan.');
-            $this->redirect(Auth::baseUrl() . '/settings/switch-permissions');
-            return;
-        }
+            $user = Database::fetch("SELECT id, full_name, username FROM users WHERE id = ?", [$userId]);
+            if (!$user) {
+                $this->setFlash('error', 'Pengguna tidak ditemukan.');
+                $this->redirect(Auth::baseUrl() . '/settings/switch-permissions');
+                return;
+            }
 
-        // Hapus izin lama untuk user ini
-        Database::execute("DELETE FROM user_switch_permissions WHERE user_id = ?", [$userId]);
+            // Hapus izin lama untuk user ini
+            Database::execute("DELETE FROM user_switch_permissions WHERE user_id = ?", [$userId]);
 
-        // Simpan izin baru
-        $inserted = 0;
-        $operatorId = Auth::id();
-        foreach ($targetUserIds as $tid) {
-            $tid = (int)$tid;
-            if ($tid > 0 && $tid !== $userId) {
-                // Pastikan target bukan operator_yayasan
-                $isYayasan = Database::fetch("SELECT ur.id FROM user_roles ur JOIN roles r ON ur.role_id = r.id WHERE ur.user_id = ? AND r.name = 'operator_yayasan'", [$tid]);
-                if (!$isYayasan) {
-                    Database::execute(
-                        "INSERT IGNORE INTO user_switch_permissions (user_id, target_user_id, created_by, created_at) VALUES (?, ?, ?, NOW())",
-                        [$userId, $tid, $operatorId]
-                    );
-                    $inserted++;
+            // Simpan izin baru
+            $inserted = 0;
+            $operatorId = Auth::id();
+            foreach ($targetUserIds as $tid) {
+                $tid = (int)$tid;
+                if ($tid > 0 && $tid !== $userId) {
+                    // Pastikan target bukan operator_yayasan
+                    $isYayasan = Database::fetch("SELECT ur.id FROM user_roles ur JOIN roles r ON ur.role_id = r.id WHERE ur.user_id = ? AND r.name = 'operator_yayasan'", [$tid]);
+                    if (!$isYayasan) {
+                        Database::execute(
+                            "INSERT IGNORE INTO user_switch_permissions (user_id, target_user_id, created_by, created_at) VALUES (?, ?, ?, NOW())",
+                            [$userId, $tid, $operatorId]
+                        );
+                        $inserted++;
+                    }
                 }
             }
+
+            \Core\AuditLog::log('UPDATE_SWITCH_PERMISSIONS', 'user_switch_permissions', $userId, null, [
+                'username' => $user['username'],
+                'granted_count' => $inserted
+            ]);
+
+            $this->setFlash('success', "Izin alih akun untuk {$user['full_name']} (@{$user['username']}) berhasil diperbarui ({$inserted} akun target diizinkan).");
+        } catch (\Throwable $e) {
+            error_log('Gagal menyimpan izin switch akun: ' . $e->getMessage());
+            $this->setFlash('error', 'Terjadi kesalahan saat menyimpan pengaturan izin: ' . $e->getMessage());
         }
 
-        \Core\AuditLog::log('UPDATE_SWITCH_PERMISSIONS', 'user_switch_permissions', $userId, null, [
-            'username' => $user['username'],
-            'granted_count' => $inserted
-        ]);
-
-        $this->setFlash('success', "Izin alih akun untuk {$user['full_name']} (@{$user['username']}) berhasil diperbarui ({$inserted} akun target diizinkan).");
         $this->redirect(Auth::baseUrl() . '/settings/switch-permissions');
     }
 
     public function revokeSwitchPermissions(): void {
         $this->requireRole('operator_yayasan');
-        \Core\CSRF::validate();
+        \Core\CSRF::check();
         self::ensureSwitchPermissionsTable();
 
-        $userId = (int)($_POST['user_id'] ?? 0);
-        Database::execute("DELETE FROM user_switch_permissions WHERE user_id = ?", [$userId]);
+        try {
+            $userId = (int)($_POST['user_id'] ?? 0);
+            Database::execute("DELETE FROM user_switch_permissions WHERE user_id = ?", [$userId]);
 
-        \Core\AuditLog::log('REVOKE_ALL_SWITCH_PERMISSIONS', 'user_switch_permissions', $userId);
-        $this->setFlash('success', 'Seluruh izin alih akun untuk pengguna tersebut berhasil dicabut.');
+            \Core\AuditLog::log('REVOKE_ALL_SWITCH_PERMISSIONS', 'user_switch_permissions', $userId);
+            $this->setFlash('success', 'Seluruh izin alih akun untuk pengguna tersebut berhasil dicabut.');
+        } catch (\Throwable $e) {
+            error_log('Gagal mencabut izin switch akun: ' . $e->getMessage());
+            $this->setFlash('error', 'Terjadi kesalahan saat mencabut izin: ' . $e->getMessage());
+        }
+
         $this->redirect(Auth::baseUrl() . '/settings/switch-permissions');
     }
 }
