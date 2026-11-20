@@ -767,7 +767,7 @@ $activeConflicts = $isTahfidzOnly ? ($tahfidzConflicts ?? []) : $conflicts;
 <!-- ============================================================ -->
 <!-- MODAL 2: TUGASKAN GURU PENGGANTI (INVAL / GURU BADAL)        -->
 <!-- ============================================================ -->
-<div class="modal-overlay" id="substituteModal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1050; align-items: center; justify-content: center; backdrop-filter: blur(2px);">
+<div class="modal-overlay" id="substituteModal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1070; align-items: center; justify-content: center; backdrop-filter: blur(2px);">
     <div class="card" style="width: 100%; max-width: 540px; max-height: 90vh; overflow-y: auto; margin: 20px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.2);">
         <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e2e8f0; padding: 14px 18px; background: #fffbeb;">
             <h3 class="card-title" style="margin: 0; font-size: 1.05rem; display: flex; align-items: center; gap: 8px; color: #b45309;">
@@ -958,11 +958,11 @@ $activeConflicts = $isTahfidzOnly ? ($tahfidzConflicts ?? []) : $conflicts;
 <!-- ============================================================ -->
 <!-- MODAL 4: EDIT JAM PELAJARAN (SLOT WAKTU TUNGGAL)             -->
 <!-- ============================================================ -->
-<div class="modal-overlay" id="editSlotModal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1050; align-items: center; justify-content: center; backdrop-filter: blur(2px);">
+<div class="modal-overlay" id="editSlotModal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1070; align-items: center; justify-content: center; backdrop-filter: blur(2px);">
     <div class="card" style="width: 100%; max-width: 490px; max-height: 90vh; overflow-y: auto; margin: 20px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.2);">
         <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e2e8f0; padding: 14px 18px; background: #e0e7ff;">
-            <h3 class="card-title" style="margin: 0; font-size: 1.05rem; display: flex; align-items: center; gap: 8px; color: #3730a3;">
-                <i class="fa-solid fa-clock"></i> Edit Jam Pelajaran (Slot Waktu)
+            <h3 class="card-title" style="margin: 0; font-size: 1.05rem; display: flex; align-items: center; gap: 8px; color: #3730a3;" id="slotModalTitle">
+                <i class="fa-solid fa-clock"></i> <span id="slotModalTitleText">Edit Jam Pelajaran (Slot Waktu)</span>
             </h3>
             <button type="button" class="btn btn-sm btn-light" onclick="closeModal('editSlotModal')">&times;</button>
         </div>
@@ -1669,6 +1669,8 @@ function fetchRadarStatus() {
 
 // Open Modal Edit Slot Waktu
 function openEditSlotModal(day, jam, timeStart, timeEnd, label, isBreak, breakType) {
+    const titleEl = document.getElementById('slotModalTitleText');
+    if (titleEl) titleEl.textContent = 'Edit Jam Pelajaran (Slot Waktu)';
     document.getElementById('slotDayInput').value = day;
     document.getElementById('slotJamKeInput').value = jam;
     document.getElementById('slotTimeStartInput').value = timeStart;
@@ -1760,6 +1762,8 @@ function openNewSlotModalForDay(day) {
     }
 
     openEditSlotModal(day, nextJam, nextStart, nextEnd, 'Jam Ke-' + nextJam, 0, 'none');
+    const titleEl = document.getElementById('slotModalTitleText');
+    if (titleEl) titleEl.textContent = 'Tambah Jam Baru - Hari ' + day;
 }
 
 function closeModal(modalId) {

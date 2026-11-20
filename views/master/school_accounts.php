@@ -267,7 +267,7 @@ if ($isYayasan) {
                                                 }
                                             ?>
                                             <?php if ($canUnassign && count($roleItems) > 1): ?>
-                                                <form method="POST" action="<?= $baseUrl ?>/users/school-accounts/unassign-role" style="display: inline;" onsubmit="return confirm('Cabut peran <?= SecurityHelper::escape($rDisplay) ?> dari <?= SecurityHelper::escape($u['username']) ?>?')">
+                                                <form method="POST" action="<?= $baseUrl ?>/users/school-accounts/unassign-role" style="display: inline;" onsubmit="return confirm('Cabut peran <?= addslashes(SecurityHelper::escape($rDisplay)) ?> dari <?= addslashes(SecurityHelper::escape($u['username'])) ?>?')">
                                                     <?= CSRF::inputField() ?>
                                                     <input type="hidden" name="user_id" value="<?= $u['id'] ?>">
                                                     <input type="hidden" name="role_id" value="<?= $rId ?>">
@@ -281,7 +281,10 @@ if ($isYayasan) {
 
                                     <!-- Tombol Tambah Peran -->
                                     <button type="button" class="btn btn-outline btn-sm" style="padding: 2px 8px; font-size: 11px;" 
-                                            onclick="openAssignRoleModal(<?= $u['id'] ?>, '<?= SecurityHelper::escape($u['username']) ?>', '<?= SecurityHelper::escape($u['full_name']) ?>')" 
+                                            data-user-id="<?= (int)$u['id'] ?>"
+                                            data-username="<?= htmlspecialchars($u['username'] ?? '', ENT_QUOTES, 'UTF-8') ?>"
+                                            data-fullname="<?= htmlspecialchars($u['full_name'] ?? '', ENT_QUOTES, 'UTF-8') ?>"
+                                            onclick="openAssignRoleModalFromBtn(this)" 
                                             title="Tambah Peran untuk pengguna ini">
                                         <i class="fa-solid fa-plus"></i> Peran
                                     </button>
@@ -883,6 +886,12 @@ function openCreateStaffModal() {
 function closeCreateStaffModal() {
     let m = document.getElementById('modalCreateStaff');
     if (m) m.style.display = 'none';
+}
+function openAssignRoleModalFromBtn(btn) {
+    const userId = btn.getAttribute('data-user-id');
+    const username = btn.getAttribute('data-username') || '';
+    const fullName = btn.getAttribute('data-fullname') || '';
+    openAssignRoleModal(userId, username, fullName);
 }
 function openAssignRoleModal(userId, username, fullName) {
     document.getElementById('assign_user_id').value = userId;

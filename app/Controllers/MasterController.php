@@ -4485,15 +4485,23 @@ class MasterController extends Controller {
         }
 
         if (!$isYayasan) {
-            $userEmp = Database::fetch("SELECT unit_id FROM employees WHERE user_id = ?", [$userId]);
-            $userUnitId = $targetUser['unit_id'] ?: ($userEmp['unit_id'] ?? 0);
-            if ($userUnitId != Auth::unitId()) {
+            $userEmp = Database::fetch("SELECT unit_id FROM employees WHERE user_id = ? AND is_deleted = 0 ORDER BY id DESC LIMIT 1", [$userId]);
+            $userUnitId = (int)($targetUser['unit_id'] ?? 0);
+            $empUnitId = (int)($userEmp['unit_id'] ?? 0);
+            $myUnitId = (int)Auth::unitId();
+
+            if ($userUnitId !== $myUnitId && $empUnitId !== $myUnitId) {
                 $this->setFlash('danger', 'Anda tidak memiliki otoritas mengubah akun di unit sekolah lain.');
                 $this->redirect(Auth::baseUrl() . '/users/school-accounts');
                 return;
             }
 
-            $forbidden = ['operator_yayasan', 'direktur_pendidikan', 'deputi_pendidikan', 'pembina_yayasan', 'operator_sekolah'];
+            // Jika users.unit_id belum sinkron dengan unit sekolah, sinkronkan
+            if ($userUnitId !== $myUnitId && $empUnitId === $myUnitId) {
+                Database::execute("UPDATE users SET unit_id = ? WHERE id = ?", [$myUnitId, $userId]);
+            }
+
+            $forbidden = ['operator_yayasan', 'direktur_pendidikan', 'deputi_pendidikan', 'pembina_yayasan', 'operator_sekolah', 'direktur_pengadaan', 'direktur_sarpras', 'hrd', 'orang_tua', 'siswa'];
             if (in_array($targetRole['name'], $forbidden)) {
                 $this->setFlash('danger', 'Anda tidak memiliki hak memberikan peran tersebut.');
                 $this->redirect(Auth::baseUrl() . '/users/school-accounts');
@@ -4501,10 +4509,22 @@ class MasterController extends Controller {
             }
         }
 
+        // Cek apakah peran sudah dimiliki pengguna
+        $hasRole = Database::fetch("SELECT 1 FROM user_roles WHERE user_id = ? AND role_id = ?", [$userId, $roleId]);
+        if ($hasRole) {
+            $this->setFlash('warning', "Pengguna telah memiliki peran '{$targetRole['display_name']}'.");
+            $this->redirect(Auth::baseUrl() . '/users/school-accounts');
+            return;
+        }
+
+        // Cek apakah sudah ada peran utama (is_primary = 1)
+        $primaryCount = (int)(Database::fetch("SELECT COUNT(*) as c FROM user_roles WHERE user_id = ? AND is_primary = 1", [$userId])['c'] ?? 0);
+        $isPrimary = ($primaryCount === 0) ? 1 : 0;
+
         Database::execute(
-            "INSERT INTO user_roles (user_id, role_id, is_primary) VALUES (?, ?, 0) 
-             ON DUPLICATE KEY UPDATE role_id = VALUES(role_id)",
-            [$userId, $roleId]
+            "INSERT INTO user_roles (user_id, role_id, is_primary) VALUES (?, ?, ?) 
+             ON DUPLICATE KEY UPDATE is_primary = VALUES(is_primary)",
+            [$userId, $roleId, $isPrimary]
         );
 
         AuditLog::log('ASSIGN_ROLE', 'user_roles', $userId, null, ['role_id' => $roleId, 'role_name' => $targetRole['name']]);
@@ -4528,15 +4548,18 @@ class MasterController extends Controller {
         }
 
         if (!$isYayasan) {
-            $userEmp = Database::fetch("SELECT unit_id FROM employees WHERE user_id = ?", [$userId]);
-            $userUnitId = $targetUser['unit_id'] ?: ($userEmp['unit_id'] ?? 0);
-            if ($userUnitId != Auth::unitId()) {
+            $userEmp = Database::fetch("SELECT unit_id FROM employees WHERE user_id = ? AND is_deleted = 0 ORDER BY id DESC LIMIT 1", [$userId]);
+            $userUnitId = (int)($targetUser['unit_id'] ?? 0);
+            $empUnitId = (int)($userEmp['unit_id'] ?? 0);
+            $myUnitId = (int)Auth::unitId();
+
+            if ($userUnitId !== $myUnitId && $empUnitId !== $myUnitId) {
                 $this->setFlash('danger', 'Anda tidak memiliki otoritas mengubah akun di unit sekolah lain.');
                 $this->redirect(Auth::baseUrl() . '/users/school-accounts');
                 return;
             }
 
-            $forbidden = ['operator_yayasan', 'direktur_pendidikan', 'deputi_pendidikan', 'pembina_yayasan', 'operator_sekolah'];
+            $forbidden = ['operator_yayasan', 'direktur_pendidikan', 'deputi_pendidikan', 'pembina_yayasan', 'operator_sekolah', 'direktur_pengadaan', 'direktur_sarpras', 'hrd', 'orang_tua', 'siswa'];
             if (in_array($targetRole['name'], $forbidden)) {
                 $this->setFlash('danger', 'Anda tidak memiliki hak mencabut peran tersebut.');
                 $this->redirect(Auth::baseUrl() . '/users/school-accounts');
