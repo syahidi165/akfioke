@@ -301,6 +301,15 @@ foreach ($bills as $b) {
                                                     <i class="fa-brands fa-whatsapp"></i>
                                                 </a>
                                             <?php endif; ?>
+                                            <?php if (!empty($b['parent_email'])): ?>
+                                                <span style="color: #0284c7; margin-left: 6px;" title="Email Orang Tua: <?= SecurityHelper::escape($b['parent_email']) ?>">
+                                                    <i class="fa-solid fa-envelope"></i> <?= SecurityHelper::escape($b['parent_email']) ?>
+                                                </span>
+                                            <?php else: ?>
+                                                <span style="color: #dc2626; margin-left: 6px; font-style: italic;" title="Email orang tua belum terdaftar di data siswa">
+                                                    <i class="fa-regular fa-envelope" style="opacity: 0.6;"></i> (Email belum diisi)
+                                                </span>
+                                            <?php endif; ?>
                                         </div>
                                     </td>
 

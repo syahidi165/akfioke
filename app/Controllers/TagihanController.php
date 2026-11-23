@@ -399,7 +399,9 @@ class TagihanController extends Controller {
 
         // Render Kop Surat standar dual logo
         $kopHtml = ExportHelper::renderKop($bill);
-        $letterNo = !empty($bill['tu_reminder_letter_no']) ? $bill['tu_reminder_letter_no'] : ('REM/TU/' . date('Ym') . '/' . sprintf('%04d', $billId));
+        if (empty($letterNo)) {
+            $letterNo = !empty($bill['tu_reminder_letter_no']) ? $bill['tu_reminder_letter_no'] : ('REM/TU/' . date('Ym') . '/' . sprintf('%04d', $bill['id'] ?? 0));
+        }
 
         $html = "
         <html>
@@ -570,6 +572,7 @@ class TagihanController extends Controller {
         }
 
         $letterNo = 'REM/TU/' . date('Ym') . '/' . sprintf('%04d', $billId);
+        $bill['tu_reminder_letter_no'] = $letterNo;
 
         Database::execute(
             "UPDATE bills 
@@ -583,28 +586,58 @@ class TagihanController extends Controller {
         // Kirim email notifikasi jika SMTP tersedia secara aman
         $smtp = $this->getSmtpConfig($unitId);
         $emailSent = false;
-        if ($smtp && !empty($bill['parent_email'])) {
+        $emailError = null;
+        $parentEmail = trim($bill['parent_email'] ?? '');
+
+        if (!empty($smtp) && !empty($parentEmail)) {
             try {
+                @ini_set('memory_limit', '512M');
+                @set_time_limit(120);
+
                 $mail = new PHPMailer(true);
                 $mail->isSMTP();
-                $mail->Host       = $smtp['host'];
+                $mail->Host       = trim($smtp['host']);
                 $mail->SMTPAuth   = true;
-                $mail->Username   = $smtp['username'];
+                $mail->Username   = trim($smtp['username']);
                 $mail->Password   = $smtp['password'];
-                $mail->SMTPSecure = $smtp['encryption'] === 'ssl' ? PHPMailer::ENCRYPTION_SMTPS : PHPMailer::ENCRYPTION_STARTTLS;
-                $mail->Port       = (int)$smtp['port'];
+                $mail->Timeout    = 25;
+                $mail->CharSet    = 'UTF-8';
 
-                $mail->setFrom($smtp['from_email'], $smtp['from_name']);
-                $mail->addAddress($bill['parent_email'], $bill['student_name']);
+                $port = (int)($smtp['port'] ?: 587);
+                $enc  = strtolower(trim($smtp['encryption'] ?? ''));
+                if ($enc === 'ssl' || $port === 465) {
+                    $mail->SMTPSecure = PHPMailer::ENCRYPTION_SMTPS;
+                    $mail->Port       = $port ?: 465;
+                } elseif ($enc === 'tls' || $port === 587) {
+                    $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
+                    $mail->Port       = $port ?: 587;
+                } else {
+                    $mail->SMTPSecure  = false;
+                    $mail->SMTPAutoTLS = false;
+                    $mail->Port        = $port ?: 25;
+                }
+
+                $mail->SMTPOptions = [
+                    'ssl' => [
+                        'verify_peer'       => false,
+                        'verify_peer_name'  => false,
+                        'allow_self_signed' => true,
+                    ]
+                ];
+
+                $fromEmail = !empty($smtp['from_email']) ? trim($smtp['from_email']) : trim($smtp['username']);
+                $fromName  = !empty($smtp['from_name']) ? trim($smtp['from_name']) : ($bill['unit_name'] ?? 'Tata Usaha');
+                $mail->setFrom($fromEmail, $fromName);
+                $mail->addAddress($parentEmail, $bill['student_name']);
                 $mail->isHTML(true);
                 $mail->Subject = "[Reminder Tunggakan - FR 8001B] " . $bill['student_name'] . " - " . $bill['unit_name'];
                 $mail->Body = "
                     <div style='font-family: Arial, sans-serif; line-height: 1.6; max-width: 600px; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;'>
                         <h4 style='color: #0f766e; margin-top: 0;'>Pemberitahuan Tagihan Sekolah (FR 8001B)</h4>
-                        <p>Yth. Orang Tua dari ananda <strong>{$bill['student_name']}</strong>,</p>
-                        <p>Berdasarkan data kami, terdapat kewajiban pembiayaan sekolah yang belum terselesaikan sebesar <strong>" . SecurityHelper::formatRupiah((float)$bill['amount']) . "</strong>.</p>
-                        <p>Dokumen resmi Surat Pemberitahuan Tunggakan (FR 8001B) telah kami lampirkan dalam format PDF pada email ini.</p>
-                        <p>Mohon dapat melakukan konfirmasi atau penyelesaian pembayaran melalui loket Tata Usaha sekolah kami.</p>
+                        <p>Yth. Orang Tua dari ananda <strong>" . htmlspecialchars($bill['student_name']) . "</strong>,</p>
+                        <p>Berdasarkan data keuangan kami, terdapat kewajiban pembiayaan sekolah yang belum diselesaikan sebesar <strong>" . SecurityHelper::formatRupiah((float)$bill['amount']) . "</strong>.</p>
+                        <p>Dokumen resmi Surat Pemberitahuan Tunggakan (FR 8001B) terlampir dalam format PDF pada email ini.</p>
+                        <p>Mohon dapat melakukan konfirmasi atau penyelesaian pembayaran melalui loket Tata Usaha sekolah atau rekening resmi sekolah.</p>
                         <p><em>Jazakumullah Khairan Katsiran.</em></p>
                     </div>";
 
@@ -612,27 +645,37 @@ class TagihanController extends Controller {
                 try {
                     $htmlPdf = $this->generateFR8001BHtml($bill, $letterNo);
                     $pdfBytes = ExportHelper::getPdfBytes($htmlPdf, 'A4', 'portrait');
-                    $cleanNis = preg_replace('/[^a-zA-Z0-9_\-]/', '_', $bill['nis']);
-                    $mail->addStringAttachment($pdfBytes, 'Surat_Pemberitahuan_FR8001B_' . $cleanNis . '.pdf', 'base64', 'application/pdf');
+                    if (!empty($pdfBytes)) {
+                        $cleanNis = preg_replace('/[^a-zA-Z0-9_\-]/', '_', $bill['nis']);
+                        $mail->addStringAttachment($pdfBytes, 'Surat_Pemberitahuan_FR8001B_' . $cleanNis . '.pdf', 'base64', 'application/pdf');
+                    }
                 } catch (\Throwable $pdfEx) {
                     error_log('Gagal membuat lampiran PDF FR8001B: ' . $pdfEx->getMessage());
                 }
 
                 $mail->send();
                 $emailSent = true;
-            } catch (\Exception $e) {
-                // Email error dicatat namun alur sistem tetap sukses
+            } catch (\Throwable $e) {
+                $emailError = !empty($mail->ErrorInfo) ? $mail->ErrorInfo : $e->getMessage();
+                error_log('Gagal mengirim email FR 8001B: ' . $emailError);
             }
         }
 
-        AuditLog::log('SEND_REMINDER_FR8001B', 'bills', $billId, null, ['letter_no' => $letterNo, 'email_sent' => $emailSent]);
-        $msg = 'Surat reminder penagihan FR 8001B berhasil diterbitkan oleh TU (' . $letterNo . ').';
+        AuditLog::log('SEND_REMINDER_FR8001B', 'bills', $billId, null, [
+            'letter_no' => $letterNo, 
+            'email_sent' => $emailSent,
+            'email_error' => $emailError
+        ]);
+
         if ($emailSent) {
-            $msg .= ' Email pemberitahuan juga telah berhasil dikirim ke orang tua.';
+            $this->setFlash('success', "Surat reminder FR 8001B berhasil diterbitkan ({$letterNo}) dan email beserta lampiran PDF berhasil dikirim ke orang tua ({$parentEmail}).");
+        } elseif (empty($parentEmail)) {
+            $this->setFlash('warning', "Surat reminder FR 8001B berhasil diterbitkan ({$letterNo}), namun email TIDAK dikirim karena alamat email orang tua pada siswa ini belum terdaftar di data siswa.");
         } elseif (empty($smtp)) {
-            $msg .= ' (Catatan: Pengiriman email dilewati karena SMTP unit belum dikonfigurasi).';
+            $this->setFlash('warning', "Surat reminder FR 8001B berhasil diterbitkan ({$letterNo}), namun pengiriman email dilewati karena pengaturan SMTP unit belum dikonfigurasi.");
+        } else {
+            $this->setFlash('warning', "Surat reminder FR 8001B berhasil diterbitkan ({$letterNo}), namun EMAIL GAGAL DIKIRIM ke {$parentEmail}. Kendala: " . htmlspecialchars($emailError ?? 'Koneksi gagal'));
         }
-        $this->setFlash('success', $msg);
         $this->redirect(Auth::baseUrl() . '/tagihan/manage');
     }
 
@@ -2057,35 +2100,60 @@ class TagihanController extends Controller {
             try {
                 $mail = new PHPMailer(true);
                 $mail->isSMTP();
-                $mail->Host       = $smtp['host'];
+                $mail->Host       = trim($smtp['host']);
                 $mail->SMTPAuth   = true;
-                $mail->Username   = $smtp['username'];
+                $mail->Username   = trim($smtp['username']);
                 $mail->Password   = $smtp['password'];
-                $mail->SMTPSecure = $smtp['encryption'] === 'ssl' ? PHPMailer::ENCRYPTION_SMTPS : PHPMailer::ENCRYPTION_STARTTLS;
-                $mail->Port       = (int)$smtp['port'];
+                $mail->Timeout    = 25;
+                $mail->CharSet    = 'UTF-8';
 
-                $mail->setFrom($smtp['from_email'], $smtp['from_name']);
-                $mail->addAddress($installment['parent_email'], $installment['student_name']);
+                $port = (int)($smtp['port'] ?: 587);
+                $enc  = strtolower(trim($smtp['encryption'] ?? ''));
+                if ($enc === 'ssl' || $port === 465) {
+                    $mail->SMTPSecure = PHPMailer::ENCRYPTION_SMTPS;
+                    $mail->Port       = $port ?: 465;
+                } elseif ($enc === 'tls' || $port === 587) {
+                    $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
+                    $mail->Port       = $port ?: 587;
+                } else {
+                    $mail->SMTPSecure  = false;
+                    $mail->SMTPAutoTLS = false;
+                    $mail->Port        = $port ?: 25;
+                }
+
+                $mail->SMTPOptions = [
+                    'ssl' => [
+                        'verify_peer'       => false,
+                        'verify_peer_name'  => false,
+                        'allow_self_signed' => true,
+                    ]
+                ];
+
+                $fromEmail = !empty($smtp['from_email']) ? trim($smtp['from_email']) : trim($smtp['username']);
+                $fromName  = !empty($smtp['from_name']) ? trim($smtp['from_name']) : ($installment['unit_name'] ?? 'Tata Usaha');
+                $mail->setFrom($fromEmail, $fromName);
+                $mail->addAddress(trim($installment['parent_email']), $installment['student_name']);
                 $mail->isHTML(true);
                 $mail->Subject = "[Kartu Cicilan Pembayaran SPP] " . $installment['student_name'] . " - " . $installment['unit_name'];
                 $mail->Body = "
                     <div style='font-family: Arial, sans-serif; line-height: 1.6; max-width: 600px; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;'>
                         <h3 style='color: #0f766e;'>Buku & Kartu Kontrol Cicilan Tunggakan</h3>
-                        <p>Yth. Orang Tua dari ananda <strong>{$installment['student_name']}</strong>,</p>
-                        <p>Berikut ringkasan status cicilan pembayaran sekolah berdasarkan kesepakatan <strong>{$installment['agreement_number']}</strong>:</p>
+                        <p>Yth. Orang Tua dari ananda <strong>" . htmlspecialchars($installment['student_name']) . "</strong>,</p>
+                        <p>Berikut ringkasan status cicilan pembayaran sekolah berdasarkan kesepakatan <strong>" . htmlspecialchars($installment['agreement_number']) . "</strong>:</p>
                         <ul>
                             <li>Total Tunggakan Awal: <strong>" . SecurityHelper::formatRupiah((float)$installment['total_debt']) . "</strong></li>
                             <li>Total Telah Dibayar: <strong style='color: #059669;'>" . SecurityHelper::formatRupiah((float)$installment['paid_total']) . "</strong></li>
                             <li>Sisa Saldo Tunggakan: <strong style='color: #b91c1c;'>" . SecurityHelper::formatRupiah((float)$installment['remaining_debt']) . "</strong></li>
-                            <li>Status: <strong>{$installment['status']}</strong></li>
+                            <li>Status: <strong>" . htmlspecialchars($installment['status']) . "</strong></li>
                         </ul>
                         <p>Silakan mengunduh Buku/Kartu Cicilan resmi melalui tautan portal orang tua atau loket Tata Usaha sekolah.</p>
                         <p><em>Jazakumullah Khairan Katsiran.</em></p>
                     </div>";
                 $mail->send();
-                $this->setFlash('success', 'Informasi Kartu Cicilan berhasil dikirim ke email orang tua (' . $installment['parent_email'] . ').');
-            } catch (\Exception $e) {
-                $this->setFlash('danger', 'Gagal mengirim email: ' . $e->getMessage());
+                $this->setFlash('success', 'Informasi Kartu Cicilan berhasil dikirim ke email orang tua (' . htmlspecialchars(trim($installment['parent_email'])) . ').');
+            } catch (\Throwable $e) {
+                $err = !empty($mail->ErrorInfo) ? $mail->ErrorInfo : $e->getMessage();
+                $this->setFlash('danger', 'Gagal mengirim email: ' . htmlspecialchars($err));
             }
         } else {
             $this->setFlash('info', 'Konfigurasi SMTP belum aktif di unit ini.');

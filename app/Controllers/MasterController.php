@@ -4818,23 +4818,46 @@ class MasterController extends Controller {
         $mail = new PHPMailer(true);
         try {
             $mail->isSMTP();
-            $mail->Host       = $unit['smtp_host'];
+            $mail->Host       = trim($unit['smtp_host']);
             $mail->SMTPAuth   = true;
-            $mail->Username   = $unit['smtp_user'];
-            $mail->Password   = SecurityHelper::decrypt($unit['smtp_pass']) ?: '';
-            $mail->SMTPSecure = $unit['smtp_enc'] === 'ssl' ? PHPMailer::ENCRYPTION_SMTPS : PHPMailer::ENCRYPTION_STARTTLS;
-            $mail->Port       = (int)$unit['smtp_port'];
+            $mail->Username   = trim($unit['smtp_user']);
+            $mail->Password   = SecurityHelper::decrypt($unit['smtp_pass']) ?: ($unit['smtp_pass'] ?? '');
+            $mail->Timeout    = 25;
+            $mail->CharSet    = 'UTF-8';
 
-            $mail->setFrom($unit['smtp_user'], $unit['name']);
-            $mail->addAddress($targetEmail);
+            $port = (int)($unit['smtp_port'] ?: 587);
+            $enc  = strtolower(trim($unit['smtp_enc'] ?? ''));
+            if ($enc === 'ssl' || $port === 465) {
+                $mail->SMTPSecure = PHPMailer::ENCRYPTION_SMTPS;
+                $mail->Port       = $port ?: 465;
+            } elseif ($enc === 'tls' || $port === 587) {
+                $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
+                $mail->Port       = $port ?: 587;
+            } else {
+                $mail->SMTPSecure  = false;
+                $mail->SMTPAutoTLS = false;
+                $mail->Port        = $port ?: 25;
+            }
+
+            $mail->SMTPOptions = [
+                'ssl' => [
+                    'verify_peer'       => false,
+                    'verify_peer_name'  => false,
+                    'allow_self_signed' => true,
+                ]
+            ];
+
+            $mail->setFrom(trim($unit['smtp_user']), $unit['name']);
+            $mail->addAddress(trim($targetEmail));
             $mail->isHTML(true);
             $mail->Subject = 'Uji Coba Pengiriman Email SMTP - ' . $unit['name'];
             $mail->Body    = '<h3>Alhamdulillah, Pengiriman Email Berhasil!</h3><p>Server SMTP unit ' . htmlspecialchars($unit['name']) . ' telah terkonfigurasi dengan benar.</p>';
 
             $mail->send();
             $this->setFlash('success', "Email uji coba berhasil dikirim ke: {$targetEmail}");
-        } catch (\Exception $e) {
-            $this->setFlash('error', 'Gagal mengirim email: ' . $mail->ErrorInfo);
+        } catch (\Throwable $e) {
+            $err = !empty($mail->ErrorInfo) ? $mail->ErrorInfo : $e->getMessage();
+            $this->setFlash('error', 'Gagal mengirim email: ' . htmlspecialchars($err));
         }
         $this->redirect(Auth::baseUrl() . '/settings/smtp');
     }
