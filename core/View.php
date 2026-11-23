@@ -48,7 +48,7 @@ class View {
             $hasGrantedPermissions = ($permCount > 0);
         }
 
-        $canSwitchUser = $origIsOperatorYayasan || $isImpersonating || ( (Auth::hasRole('tata_usaha') || Auth::hasRole('operator_sekolah')) && $hasGrantedPermissions );
+        $canSwitchUser = $origIsOperatorYayasan || $isImpersonating || $hasGrantedPermissions;
         $isOperatorYayasanOrImpersonating = $canSwitchUser; // untuk kompatibilitas jika ada view lain yang membaca variabel ini
 
         $switchableUsers = [];

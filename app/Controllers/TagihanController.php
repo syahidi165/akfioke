@@ -364,6 +364,13 @@ class TagihanController extends Controller {
         }
         $this->assertUnitOwnership('bills', $billId, 'unit_id');
 
+        $letterNo = !empty($bill['tu_reminder_letter_no']) ? $bill['tu_reminder_letter_no'] : ('REM/TU/' . date('Ym') . '/' . sprintf('%04d', $billId));
+        $html = $this->generateFR8001BHtml($bill, $letterNo);
+
+        ExportHelper::pdf($html, 'Surat_Reminder_FR8001B_' . $bill['nis'], 'A4', 'portrait', true);
+    }
+
+    private function generateFR8001BHtml(array $bill, string $letterNo): string {
         $formattedAmount = number_format((float)$bill['amount'], 0, ',', '.');
         $bsiAcc = $bill['bank_account'] ?: '1033667414';
         $bsiHolder = $bill['bank_holder'] ?: $bill['unit_name'];
@@ -500,7 +507,7 @@ class TagihanController extends Controller {
         </html>
         ";
 
-        ExportHelper::pdf($html, 'Surat_Reminder_FR8001B_' . $bill['nis'], 'A4', 'portrait', true);
+        return $html;
     }
 
     private function getSmtpConfig(int $unitId): ?array {
@@ -543,10 +550,15 @@ class TagihanController extends Controller {
         $unitId = Auth::unitId();
 
         $bill = Database::fetch(
-            "SELECT b.*, s.nama as student_name, s.nis, s.parent_email, u.name as unit_name 
+            "SELECT b.*, s.nama as student_name, s.nis, s.parent_email, 
+                    c.name as class_name, u.name as unit_name, u.phone as unit_phone, u.bank_name, 
+                    u.bank_account, u.bank_holder, u.kop_title, u.kop_subtitle, u.address, u.email as unit_email,
+                    u.code, u.level, u.npsn, u.akreditasi, u.nomor_akreditasi, u.nomor_izin_operasional, u.logo_path
              FROM bills b 
              JOIN students s ON b.student_id = s.id 
              JOIN units u ON b.unit_id = u.id 
+             LEFT JOIN class_students cs ON s.id = cs.student_id AND cs.status = 'Aktif' 
+             LEFT JOIN classes c ON cs.class_id = c.id 
              WHERE b.id = ? AND b.unit_id = ?",
             [$billId, $unitId]
         );
@@ -591,9 +603,21 @@ class TagihanController extends Controller {
                         <h4 style='color: #0f766e; margin-top: 0;'>Pemberitahuan Tagihan Sekolah (FR 8001B)</h4>
                         <p>Yth. Orang Tua dari ananda <strong>{$bill['student_name']}</strong>,</p>
                         <p>Berdasarkan data kami, terdapat kewajiban pembiayaan sekolah yang belum terselesaikan sebesar <strong>" . SecurityHelper::formatRupiah((float)$bill['amount']) . "</strong>.</p>
+                        <p>Dokumen resmi Surat Pemberitahuan Tunggakan (FR 8001B) telah kami lampirkan dalam format PDF pada email ini.</p>
                         <p>Mohon dapat melakukan konfirmasi atau penyelesaian pembayaran melalui loket Tata Usaha sekolah kami.</p>
                         <p><em>Jazakumullah Khairan Katsiran.</em></p>
                     </div>";
+
+                // Generate dan lampirkan dokumen PDF resmi FR 8001B
+                try {
+                    $htmlPdf = $this->generateFR8001BHtml($bill, $letterNo);
+                    $pdfBytes = ExportHelper::getPdfBytes($htmlPdf, 'A4', 'portrait');
+                    $cleanNis = preg_replace('/[^a-zA-Z0-9_\-]/', '_', $bill['nis']);
+                    $mail->addStringAttachment($pdfBytes, 'Surat_Pemberitahuan_FR8001B_' . $cleanNis . '.pdf', 'base64', 'application/pdf');
+                } catch (\Throwable $pdfEx) {
+                    error_log('Gagal membuat lampiran PDF FR8001B: ' . $pdfEx->getMessage());
+                }
+
                 $mail->send();
                 $emailSent = true;
             } catch (\Exception $e) {
@@ -716,8 +740,58 @@ class TagihanController extends Controller {
     // =========================================================================
     // 4. ALUR KEPALA SEKOLAH (FR 8001C PEMANGGILAN & FR 8001D KESEPAKATAN)
     // =========================================================================
+    public static function ensureSignedColumns(): void {
+        try {
+            $cols = array_column(Database::fetchAll("SHOW COLUMNS FROM bills"), 'Field');
+            if (!in_array('signed_fr8001c_path', $cols, true)) {
+                Database::execute("ALTER TABLE bills ADD COLUMN signed_fr8001c_path VARCHAR(255) NULL AFTER notes");
+            }
+            if (!in_array('signed_fr8001d_path', $cols, true)) {
+                Database::execute("ALTER TABLE bills ADD COLUMN signed_fr8001d_path VARCHAR(255) NULL AFTER signed_fr8001c_path");
+            }
+            if (!in_array('signed_uploaded_at', $cols, true)) {
+                Database::execute("ALTER TABLE bills ADD COLUMN signed_uploaded_at DATETIME NULL AFTER signed_fr8001d_path");
+            }
+            if (!in_array('signed_uploaded_by_level', $cols, true)) {
+                Database::execute("ALTER TABLE bills ADD COLUMN signed_uploaded_by_level VARCHAR(50) NULL AFTER signed_uploaded_at");
+            }
+        } catch (\Throwable $e) {
+            error_log('Gagal memastikan kolom signed bills: ' . $e->getMessage());
+        }
+    }
+
+    private function handleSignedUploads(int $billId, string $level): array {
+        $paths = [];
+        $uploadDir = dirname(__DIR__, 2) . '/public/uploads/tagihan/signed';
+        if (!is_dir($uploadDir)) {
+            @mkdir($uploadDir, 0777, true);
+        }
+
+        $filesToProcess = [
+            'signed_fr8001c' => 'signed_fr8001c_path',
+            'signed_fr8001d' => 'signed_fr8001d_path'
+        ];
+
+        foreach ($filesToProcess as $inputName => $colName) {
+            if (!empty($_FILES[$inputName]['name']) && $_FILES[$inputName]['error'] === UPLOAD_ERR_OK) {
+                $ext = strtolower(pathinfo($_FILES[$inputName]['name'], PATHINFO_EXTENSION));
+                $allowed = ['pdf', 'jpg', 'jpeg', 'png'];
+                if (in_array($ext, $allowed, true)) {
+                    $newFilename = 'signed_' . $inputName . '_' . $billId . '_' . time() . '.' . $ext;
+                    $targetPath = $uploadDir . '/' . $newFilename;
+                    if (move_uploaded_file($_FILES[$inputName]['tmp_name'], $targetPath)) {
+                        $paths[$colName] = 'uploads/tagihan/signed/' . $newFilename;
+                    }
+                }
+            }
+        }
+
+        return $paths;
+    }
+
     public function approvalList(): void {
         $this->requireRole(['kepala_sekolah', 'deputi_pendidikan']);
+        self::ensureSignedColumns();
         $unitId = Auth::unitId();
 
         $bills = Database::fetchAll(
@@ -1161,33 +1235,64 @@ class TagihanController extends Controller {
 
     public function markSelesaiKepsek(): void {
         $this->requireRole('kepala_sekolah');
+        self::ensureSignedColumns();
         $billId = (int)($_POST['bill_id'] ?? 0);
         $unitId = Auth::unitId();
+
+        $signedFiles = $this->handleSignedUploads($billId, 'kepala_sekolah');
+        $setSigned = "";
+        if (!empty($signedFiles)) {
+            $setParts = [];
+            foreach ($signedFiles as $col => $val) {
+                $setParts[] = "$col = " . Database::pdo()->quote($val);
+            }
+            $setParts[] = "signed_uploaded_at = NOW()";
+            $setParts[] = "signed_uploaded_by_level = 'kepala_sekolah'";
+            $setSigned = ", " . implode(', ', $setParts);
+        }
 
         Database::execute(
             "UPDATE bills 
              SET pipeline_stage = 'selesai_kepsek', 
                  pipeline_resolved_at = NOW(), 
-                 pipeline_resolved_level = 'kepala_sekolah' 
+                 pipeline_resolved_level = 'kepala_sekolah'
+                 {$setSigned}
              WHERE id = ? AND unit_id = ?",
             [$billId, $unitId]
         );
 
-        AuditLog::log('MARK_RESOLVED_KEPSEK', 'bills', $billId, null);
-        $this->setFlash('success', 'Penagihan telah ditandai SELESAI di tingkat Kepala Sekolah.');
+        AuditLog::log('MARK_RESOLVED_KEPSEK', 'bills', $billId, null, [
+            'has_c' => !empty($signedFiles['signed_fr8001c_path']),
+            'has_d' => !empty($signedFiles['signed_fr8001d_path'])
+        ]);
+        $this->setFlash('success', 'Penagihan telah ditandai SELESAI di tingkat Kepala Sekolah' . (!empty($signedFiles) ? ' beserta berkas TTD tersimpan.' : '.'));
         $this->redirect(Auth::baseUrl() . '/tagihan/approval');
     }
 
     public function eskalasiDeputi(): void {
         $this->requireRole('kepala_sekolah');
+        self::ensureSignedColumns();
         $billId = (int)($_POST['bill_id'] ?? 0);
         $unitId = Auth::unitId();
         $notes = trim($_POST['escalation_notes'] ?? 'Orang tua tidak juga datang memenuhi panggilan Kepala Sekolah. Dieskalasi ke Deputi Direktur Pendidikan Yayasan.');
 
+        $signedFiles = $this->handleSignedUploads($billId, 'kepala_sekolah');
+        $setSigned = "";
+        if (!empty($signedFiles)) {
+            $setParts = [];
+            foreach ($signedFiles as $col => $val) {
+                $setParts[] = "$col = " . Database::pdo()->quote($val);
+            }
+            $setParts[] = "signed_uploaded_at = NOW()";
+            $setParts[] = "signed_uploaded_by_level = 'kepala_sekolah'";
+            $setSigned = ", " . implode(', ', $setParts);
+        }
+
         Database::execute(
             "UPDATE bills 
              SET pipeline_stage = 'escalated_deputi', 
-                 notes = CONCAT(COALESCE(notes, ''), '\n[Eskalasi ke Yayasan/Deputi]: ', ?) 
+                 notes = CONCAT(COALESCE(notes, ''), '\n[Eskalasi ke Yayasan/Deputi]: ', ?)
+                 {$setSigned}
              WHERE id = ? AND unit_id = ?",
             [$notes, $billId, $unitId]
         );
@@ -1209,8 +1314,12 @@ class TagihanController extends Controller {
             );
         }
 
-        AuditLog::log('ESCALATE_TO_DEPUTI', 'bills', $billId, null, ['notes' => $notes]);
-        $this->setFlash('success', 'Tagihan berhasil dieskalasikan ke Deputi Direktur Pendidikan Yayasan.');
+        AuditLog::log('ESCALATE_TO_DEPUTI', 'bills', $billId, null, [
+            'notes' => $notes,
+            'has_c' => !empty($signedFiles['signed_fr8001c_path']),
+            'has_d' => !empty($signedFiles['signed_fr8001d_path'])
+        ]);
+        $this->setFlash('success', 'Tagihan berhasil dieskalasikan ke Deputi Direktur Pendidikan Yayasan' . (!empty($signedFiles) ? ' beserta berkas TTD tersimpan.' : '.'));
         $this->redirect(Auth::baseUrl() . '/tagihan/approval');
     }
 
@@ -1219,6 +1328,7 @@ class TagihanController extends Controller {
     // =========================================================================
     public function deputiEskalasiList(): void {
         $this->requireRole('deputi_pendidikan');
+        self::ensureSignedColumns();
 
         $bills = Database::fetchAll(
             "SELECT b.*, s.nama as student_name, s.nis, COALESCE(NULLIF(s.father_name, ''), NULLIF(s.mother_name, ''), 'Wali Santri') as parent_name, s.parent_phone, s.parent_email, 
@@ -1562,19 +1672,36 @@ class TagihanController extends Controller {
 
     public function markSelesaiDeputi(): void {
         $this->requireRole('deputi_pendidikan');
+        self::ensureSignedColumns();
         $billId = (int)($_POST['bill_id'] ?? 0);
+
+        $signedFiles = $this->handleSignedUploads($billId, 'deputi_pendidikan');
+        $setSigned = "";
+        if (!empty($signedFiles)) {
+            $setParts = [];
+            foreach ($signedFiles as $col => $val) {
+                $setParts[] = "$col = " . Database::pdo()->quote($val);
+            }
+            $setParts[] = "signed_uploaded_at = NOW()";
+            $setParts[] = "signed_uploaded_by_level = 'deputi_pendidikan'";
+            $setSigned = ", " . implode(', ', $setParts);
+        }
 
         Database::execute(
             "UPDATE bills 
              SET pipeline_stage = 'selesai_deputi', 
                  pipeline_resolved_at = NOW(), 
-                 pipeline_resolved_level = 'deputi_pendidikan' 
+                 pipeline_resolved_level = 'deputi_pendidikan'
+                 {$setSigned}
              WHERE id = ?",
             [$billId]
         );
 
-        AuditLog::log('MARK_RESOLVED_DEPUTI', 'bills', $billId, null);
-        $this->setFlash('success', 'Penagihan telah ditandai SELESAI di tingkat Deputi Direktur Pendidikan Yayasan.');
+        AuditLog::log('MARK_RESOLVED_DEPUTI', 'bills', $billId, null, [
+            'has_c' => !empty($signedFiles['signed_fr8001c_path']),
+            'has_d' => !empty($signedFiles['signed_fr8001d_path'])
+        ]);
+        $this->setFlash('success', 'Penagihan telah ditandai SELESAI di tingkat Deputi Direktur Pendidikan Yayasan' . (!empty($signedFiles) ? ' beserta berkas TTD tersimpan.' : '.'));
         $this->redirect(Auth::baseUrl() . '/tagihan/eskalasi-deputi');
     }
 

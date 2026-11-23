@@ -10,6 +10,7 @@ $shortMonths = [
     5 => 'Mei', 6 => 'Jun', 7 => 'Jul', 8 => 'Agu',
     9 => 'Sep', 10 => 'Okt', 11 => 'Nov', 12 => 'Des'
 ];
+$academicMonths = [7, 8, 9, 10, 11, 12, 1, 2, 3, 4, 5, 6];
 
 $totalSlotsAll = 0;
 $totalApprovedAll = 0;
@@ -143,7 +144,9 @@ $overallPct = $totalSlotsAll > 0 ? round(($totalApprovedAll / $totalSlotsAll) * 
 
             <div class="card-body" style="padding: 16px 20px;">
                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px;">
-                    <?php for ($slot = 1; $slot <= $totalSlots; $slot++): 
+                    <?php 
+                    $slotsList = ($totalSlots === 12) ? $academicMonths : range(1, $totalSlots);
+                    foreach ($slotsList as $slot): 
                         $slotName = match ($totalSlots) {
                             12 => $shortMonths[$slot] ?? "Bln $slot",
                             2  => "Semester $slot",
@@ -205,7 +208,7 @@ $overallPct = $totalSlotsAll > 0 ? round(($totalApprovedAll / $totalSlotsAll) * 
                                 </button>
                             </div>
                         </div>
-                    <?php endfor; ?>
+                    <?php endforeach; ?>
                 </div>
             </div>
         </div>

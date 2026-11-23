@@ -1252,6 +1252,44 @@ class AdministrasiController extends Controller {
         $query .= " ORDER BY m.target_role ASC, m.order_num ASC ";
         $masterItems = Database::fetchAll($query, $params);
 
+        // Ambil pemetaan seluruh deadline yang sudah tersimpan untuk unit & TA ini
+        $savedDeadlines = Database::fetchAll("
+            SELECT * FROM unit_administrasi_deadlines 
+            WHERE unit_id = ? AND academic_year_id = ?
+        ", [$selectedUnitId, $taId]);
+        $deadlinesMap = [];
+        foreach ($savedDeadlines as $dl) {
+            $jId = (int)$dl['jenis_admin_id'];
+            $mNum = (int)($dl['month_num'] ?? 1);
+            $deadlinesMap[$jId][$mNum] = $dl;
+        }
+
+        foreach ($masterItems as &$item) {
+            $jId = (int)$item['id'];
+            $item['deadlines_map'] = $deadlinesMap[$jId] ?? [];
+            if ($item['frequency'] === '2x setahun') {
+                $sem1 = $deadlinesMap[$jId][1] ?? null;
+                $sem2 = $deadlinesMap[$jId][2] ?? null;
+                $item['sem1_due_info'] = $sem1['due_info'] ?? 'Pekan Ujian Semester Ganjil';
+                $item['sem1_datetime'] = $sem1['deadline_datetime'] ?? null;
+                $item['sem2_due_info'] = $sem2['due_info'] ?? 'Pekan Ujian Semester Genap';
+                $item['sem2_datetime'] = $sem2['deadline_datetime'] ?? null;
+            } elseif ($item['frequency'] === 'setiap bulan') {
+                $base = $deadlinesMap[$jId][1] ?? null;
+                $item['monthly_due_info'] = $base['due_info'] ?? ($item['due_info'] ?: 'Tanggal 5 setiap bulan');
+                $cutoffDay = 5;
+                if (!empty($base['deadline_date'])) {
+                    $cutoffDay = (int)date('d', strtotime($base['deadline_date']));
+                }
+                $item['cutoff_day'] = $cutoffDay;
+            } else {
+                $base = $deadlinesMap[$jId][1] ?? null;
+                $item['annual_due_info'] = $base['due_info'] ?? $item['due_info'];
+                $item['annual_datetime'] = $base['deadline_datetime'] ?? null;
+            }
+        }
+        unset($item);
+
         $this->view('administrasi/deadlines', [
             'pageTitle'      => 'Atur Batas Waktu (Deadline) Pengumpulan Administrasi',
             'masterItems'    => $masterItems,
@@ -1270,10 +1308,6 @@ class AdministrasiController extends Controller {
         $userId = Auth::id();
 
         $jenisId = (int)($_POST['jenis_admin_id'] ?? 0);
-        $dueInfo = trim($_POST['due_info'] ?? '');
-        $deadlineDatetime = !empty($_POST['deadline_datetime']) ? date('Y-m-d H:i:s', strtotime($_POST['deadline_datetime'])) : null;
-        $deadlineDate = !empty($_POST['deadline_date']) ? $_POST['deadline_date'] : ($deadlineDatetime ? substr($deadlineDatetime, 0, 10) : null);
-
         $item = Database::fetch("SELECT * FROM master_jenis_administrasi WHERE id = ?", [$jenisId]);
         if (!$item) {
             $this->setFlash('danger', 'Jenis administrasi tidak ditemukan.');
@@ -1299,26 +1333,128 @@ class AdministrasiController extends Controller {
             $targetUnitId = (int)($_POST['unit_id'] ?? $userUnitId);
         }
 
-        if ($jenisId > 0 && !empty($dueInfo)) {
-            Database::execute(
-                "INSERT INTO unit_administrasi_deadlines 
-                    (unit_id, academic_year_id, jenis_admin_id, due_info, deadline_date, deadline_datetime, updated_by_user_id)
-                 VALUES (?, ?, ?, ?, ?, ?, ?)
-                 ON DUPLICATE KEY UPDATE 
+        $freq = $item['frequency'];
+
+        if ($freq === '2x setahun') {
+            $due1 = trim($_POST['due_info_sem1'] ?? 'Pekan Ujian Semester Ganjil');
+            $dt1 = !empty($_POST['deadline_datetime_sem1']) ? date('Y-m-d H:i:s', strtotime($_POST['deadline_datetime_sem1'])) : null;
+            $date1 = $dt1 ? substr($dt1, 0, 10) : null;
+
+            $due2 = trim($_POST['due_info_sem2'] ?? 'Pekan Ujian Semester Genap');
+            $dt2 = !empty($_POST['deadline_datetime_sem2']) ? date('Y-m-d H:i:s', strtotime($_POST['deadline_datetime_sem2'])) : null;
+            $date2 = $dt2 ? substr($dt2, 0, 10) : null;
+
+            // Semester 1 (month_num = 1)
+            Database::execute("
+                INSERT INTO unit_administrasi_deadlines 
+                    (unit_id, academic_year_id, jenis_admin_id, month_num, due_info, deadline_date, deadline_datetime, updated_by_user_id)
+                VALUES (?, ?, ?, 1, ?, ?, ?, ?)
+                ON DUPLICATE KEY UPDATE 
                     due_info = VALUES(due_info), 
                     deadline_date = VALUES(deadline_date), 
                     deadline_datetime = VALUES(deadline_datetime), 
-                    updated_by_user_id = VALUES(updated_by_user_id)",
-                [$targetUnitId, $taId, $jenisId, $dueInfo, $deadlineDate, $deadlineDatetime, $userId]
-            );
+                    updated_by_user_id = VALUES(updated_by_user_id)
+            ", [$targetUnitId, $taId, $jenisId, $due1, $date1, $dt1, $userId]);
 
-            AuditLog::log('UPDATE_UNIT_DEADLINE', 'unit_administrasi_deadlines', $targetUnitId, null, [
-                'jenis_admin_id'    => $jenisId,
-                'due_info'          => $dueInfo,
-                'deadline_date'     => $deadlineDate,
+            // Semester 2 (month_num = 2)
+            Database::execute("
+                INSERT INTO unit_administrasi_deadlines 
+                    (unit_id, academic_year_id, jenis_admin_id, month_num, due_info, deadline_date, deadline_datetime, updated_by_user_id)
+                VALUES (?, ?, ?, 2, ?, ?, ?, ?)
+                ON DUPLICATE KEY UPDATE 
+                    due_info = VALUES(due_info), 
+                    deadline_date = VALUES(deadline_date), 
+                    deadline_datetime = VALUES(deadline_datetime), 
+                    updated_by_user_id = VALUES(updated_by_user_id)
+            ", [$targetUnitId, $taId, $jenisId, $due2, $date2, $dt2, $userId]);
+
+            AuditLog::log('UPDATE_UNIT_DEADLINE_2X', 'unit_administrasi_deadlines', $targetUnitId, null, [
+                'jenis_admin_id' => $jenisId,
+                'sem1_due' => $due1,
+                'sem2_due' => $due2
+            ]);
+
+            $this->setFlash('success', 'Batas waktu Semester 1 (Ganjil) dan Semester 2 (Genap) berhasil disimpan.');
+        } elseif ($freq === 'setiap bulan') {
+            $cutoffDay = max(1, min(31, (int)($_POST['monthly_cutoff_day'] ?? 5)));
+            $dueInfo = trim($_POST['monthly_due_info'] ?? ("Tanggal " . $cutoffDay . " setiap bulan"));
+
+            // Ambil tahun ajaran untuk menghitung tahun kalender setiap bulan
+            $taRow = Database::fetch("SELECT name FROM academic_years WHERE id = ?", [$taId]);
+            $startYear = (int)date('Y');
+            $endYear = $startYear + 1;
+            if ($taRow && preg_match('/(\d{4})\/(\d{4})/', $taRow['name'], $matches)) {
+                $startYear = (int)$matches[1];
+                $endYear = (int)$matches[2];
+            }
+
+            // Simpan master / fallback pada month_num = 1
+            Database::execute("
+                INSERT INTO unit_administrasi_deadlines 
+                    (unit_id, academic_year_id, jenis_admin_id, month_num, due_info, deadline_date, deadline_datetime, updated_by_user_id)
+                VALUES (?, ?, ?, 1, ?, ?, ?, ?)
+                ON DUPLICATE KEY UPDATE 
+                    due_info = VALUES(due_info), 
+                    deadline_date = VALUES(deadline_date), 
+                    deadline_datetime = VALUES(deadline_datetime), 
+                    updated_by_user_id = VALUES(updated_by_user_id)
+            ", [$targetUnitId, $taId, $jenisId, $dueInfo, null, null, $userId]);
+
+            // Simpan deadline spesifik untuk ke-12 bulan tahun ajaran (Juli..Juni)
+            $academicMonths = [
+                7 => $startYear, 8 => $startYear, 9 => $startYear, 10 => $startYear, 11 => $startYear, 12 => $startYear,
+                1 => $endYear, 2 => $endYear, 3 => $endYear, 4 => $endYear, 5 => $endYear, 6 => $endYear
+            ];
+
+            foreach ($academicMonths as $m => $y) {
+                $maxDays = cal_days_in_month(CAL_GREGORIAN, $m, $y);
+                $day = min($cutoffDay, $maxDays);
+                $dDate = sprintf('%04d-%02d-%02d', $y, $m, $day);
+                $dDatetime = $dDate . ' 23:59:59';
+
+                Database::execute("
+                    INSERT INTO unit_administrasi_deadlines 
+                        (unit_id, academic_year_id, jenis_admin_id, month_num, due_info, deadline_date, deadline_datetime, updated_by_user_id)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    ON DUPLICATE KEY UPDATE 
+                        due_info = VALUES(due_info), 
+                        deadline_date = VALUES(deadline_date), 
+                        deadline_datetime = VALUES(deadline_datetime), 
+                        updated_by_user_id = VALUES(updated_by_user_id)
+                ", [$targetUnitId, $taId, $jenisId, $m, $dueInfo, $dDate, $dDatetime, $userId]);
+            }
+
+            AuditLog::log('UPDATE_UNIT_DEADLINE_MONTHLY', 'unit_administrasi_deadlines', $targetUnitId, null, [
+                'jenis_admin_id' => $jenisId,
+                'cutoff_day' => $cutoffDay,
+                'due_info' => $dueInfo
+            ]);
+
+            $this->setFlash('success', 'Batas waktu bulanan (Cutoff Tanggal ' . $cutoffDay . ' setiap bulan) berhasil diterapkan untuk 12 bulan.');
+        } else {
+            // 1x setahun (default)
+            $dueInfo = trim($_POST['due_info'] ?? 'Awal Tahun Ajaran');
+            $deadlineDatetime = !empty($_POST['deadline_datetime']) ? date('Y-m-d H:i:s', strtotime($_POST['deadline_datetime'])) : null;
+            $deadlineDate = $deadlineDatetime ? substr($deadlineDatetime, 0, 10) : (!empty($_POST['deadline_date']) ? $_POST['deadline_date'] : null);
+
+            Database::execute("
+                INSERT INTO unit_administrasi_deadlines 
+                    (unit_id, academic_year_id, jenis_admin_id, month_num, due_info, deadline_date, deadline_datetime, updated_by_user_id)
+                VALUES (?, ?, ?, 1, ?, ?, ?, ?)
+                ON DUPLICATE KEY UPDATE 
+                    due_info = VALUES(due_info), 
+                    deadline_date = VALUES(deadline_date), 
+                    deadline_datetime = VALUES(deadline_datetime), 
+                    updated_by_user_id = VALUES(updated_by_user_id)
+            ", [$targetUnitId, $taId, $jenisId, $dueInfo, $deadlineDate, $deadlineDatetime, $userId]);
+
+            AuditLog::log('UPDATE_UNIT_DEADLINE_ANNUAL', 'unit_administrasi_deadlines', $targetUnitId, null, [
+                'jenis_admin_id' => $jenisId,
+                'due_info' => $dueInfo,
                 'deadline_datetime' => $deadlineDatetime
             ]);
-            $this->setFlash('success', 'Batas waktu administrasi untuk unit berhasil disimpan.');
+
+            $this->setFlash('success', 'Batas waktu administrasi tahunan berhasil disimpan.');
         }
         $redirectUrl = Auth::baseUrl() . '/administrasi/deadlines';
         if (!empty($_POST['unit_id']) && in_array($role, ['deputi_pendidikan', 'direktur_pendidikan', 'operator_yayasan'], true)) {

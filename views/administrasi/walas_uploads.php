@@ -10,6 +10,7 @@ $shortMonths = [
     5 => 'Mei', 6 => 'Jun', 7 => 'Jul', 8 => 'Agu',
     9 => 'Sep', 10 => 'Okt', 11 => 'Nov', 12 => 'Des'
 ];
+$academicMonths = [7, 8, 9, 10, 11, 12, 1, 2, 3, 4, 5, 6];
 ?>
 
 <div class="page-header">
@@ -102,9 +103,9 @@ $shortMonths = [
                 </div>
 
                 <?php if ($freq === 'setiap bulan'): ?>
-                    <!-- Kolom Bulanan: 12 Bulan Grid -->
+                    <!-- Kolom Bulanan: 12 Bulan Grid (Tahun Ajaran: Juli ke Juni) -->
                     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(78px, 1fr)); gap: 8px;">
-                        <?php for ($m = 1; $m <= 12; $m++): 
+                        <?php foreach ($academicMonths as $m): 
                             $up = $itemUploads[$m] ?? null;
                             $isApp = ($up && $up['status'] === 'Disetujui');
                             $isPen = ($up && $up['status'] === 'Menunggu Review');
@@ -147,7 +148,7 @@ $shortMonths = [
                                     <?php endif; ?>
                                 </div>
                             </div>
-                        <?php endfor; ?>
+                        <?php endforeach; ?>
                     </div>
 
                 <?php elseif ($freq === '2x setahun'): ?>

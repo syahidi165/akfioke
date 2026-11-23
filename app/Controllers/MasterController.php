@@ -5197,7 +5197,7 @@ class MasterController extends Controller {
 
         $allUnits = Database::fetchAll("SELECT * FROM units ORDER BY id ASC");
 
-        // Ambil semua akun staf yang berhak didelegasikan izin (Tata Usaha & Operator Sekolah)
+        // Ambil semua akun staf & guru yang berhak didelegasikan izin (TU, Operator, Kepsek, Guru; kecuali orang tua & siswa)
         $eligibleUsers = Database::fetchAll("
             SELECT u.id, u.username, u.full_name, u.email, u.phone, u.unit_id,
                    COALESCE(un.name, 'Lintas Unit') as unit_name,
@@ -5206,7 +5206,7 @@ class MasterController extends Controller {
             JOIN user_roles ur ON u.id = ur.user_id
             JOIN roles r ON ur.role_id = r.id
             LEFT JOIN units un ON u.unit_id = un.id
-            WHERE r.name IN ('tata_usaha', 'operator_sekolah') AND u.is_active = 1
+            WHERE r.name NOT IN ('operator_yayasan', 'orang_tua', 'siswa') AND u.is_active = 1
             GROUP BY u.id, r.name
             ORDER BY un.name ASC, r.name ASC, u.full_name ASC
         ");
@@ -5230,7 +5230,7 @@ class MasterController extends Controller {
             $permMap[$p['user_id']][] = $p;
         }
 
-        // Ambil seluruh user target yang aktif yang bisa diberikan aksesnya (selain operator_yayasan)
+        // Ambil seluruh user target yang aktif yang bisa diberikan aksesnya (staf, kepsek, guru; bukan operator_yayasan, orang_tua, siswa)
         $allTargetUsers = Database::fetchAll("
             SELECT u.id, u.username, u.full_name, u.unit_id,
                    COALESCE(un.name, 'Yayasan / Lintas Unit') as unit_name,
@@ -5239,12 +5239,12 @@ class MasterController extends Controller {
             LEFT JOIN units un ON u.unit_id = un.id
             JOIN user_roles ur ON u.id = ur.user_id AND ur.is_primary = 1
             JOIN roles r ON ur.role_id = r.id
-            WHERE u.is_active = 1 AND r.name != 'operator_yayasan'
+            WHERE u.is_active = 1 AND r.name NOT IN ('operator_yayasan', 'orang_tua', 'siswa')
             ORDER BY un.name ASC, r.display_name ASC, u.full_name ASC
         ");
 
         $this->view('master/switch_permissions', [
-            'pageTitle'      => 'Pengaturan Izin Switch Akun (TU & Operator Sekolah)',
+            'pageTitle'      => 'Pengaturan Izin Switch Akun (TU, Operator, Kepsek & Guru)',
             'eligibleUsers'  => $eligibleUsers,
             'permMap'        => $permMap,
             'allTargetUsers' => $allTargetUsers,

@@ -96,11 +96,11 @@ include __DIR__ . '/sidebar.php';
                     <!-- Filter Kategori Cepat -->
                     <div style="display: flex; gap: 6px; flex-wrap: wrap;">
                         <button type="button" class="btn-quick-cat active" onclick="filterSwitchCat('', this)">Semua (<?= count($switchableUsers ?? []) ?>)</button>
-                        <button type="button" class="btn-quick-cat" onclick="filterSwitchCat('Direktur|Deputi|Yayasan', this)">Pimpinan / Deputi</button>
-                        <button type="button" class="btn-quick-cat" onclick="filterSwitchCat('Kepala Sekolah', this)">Kepala Sekolah</button>
-                        <button type="button" class="btn-quick-cat" onclick="filterSwitchCat('Tata Usaha|TU', this)">Tata Usaha</button>
-                        <button type="button" class="btn-quick-cat" onclick="filterSwitchCat('Guru|Walas', this)">Guru &amp; Walas</button>
-                        <button type="button" class="btn-quick-cat" onclick="filterSwitchCat('Operator', this)">Operator</button>
+                        <button type="button" class="btn-quick-cat" onclick="filterSwitchCat('pimpinan', this)">Pimpinan / Deputi</button>
+                        <button type="button" class="btn-quick-cat" onclick="filterSwitchCat('kepsek', this)">Kepala Sekolah</button>
+                        <button type="button" class="btn-quick-cat" onclick="filterSwitchCat('tu', this)">Tata Usaha</button>
+                        <button type="button" class="btn-quick-cat" onclick="filterSwitchCat('guru', this)">Guru &amp; Walas</button>
+                        <button type="button" class="btn-quick-cat" onclick="filterSwitchCat('operator', this)">Operator</button>
                     </div>
                 </div>
 
@@ -117,8 +117,23 @@ include __DIR__ . '/sidebar.php';
                                 $isCurrent = ($currentUser && (int)$currentUser['id'] === (int)$u['id']);
                                 $roleDisplay = $u['role_display'] ?? 'Pengguna';
                                 $unitName = $u['unit_name'] ?? 'Yayasan';
+                                $roleNameLower = strtolower($u['role_name'] ?? '');
+                                $roleDisplayLower = strtolower($roleDisplay);
+
+                                $catKey = 'lainnya';
+                                if (strpos($roleNameLower, 'direktur') !== false || strpos($roleNameLower, 'deputi') !== false || strpos($roleNameLower, 'pembina') !== false || strpos($roleNameLower, 'yayasan') !== false) {
+                                    $catKey = 'pimpinan';
+                                } elseif (strpos($roleNameLower, 'kepala_sekolah') !== false || strpos($roleDisplayLower, 'kepala sekolah') !== false) {
+                                    $catKey = 'kepsek';
+                                } elseif ($roleNameLower === 'tata_usaha' || strpos($roleDisplayLower, 'tata usaha') !== false) {
+                                    $catKey = 'tu';
+                                } elseif (strpos($roleNameLower, 'operator') !== false || strpos($roleDisplayLower, 'operator') !== false) {
+                                    $catKey = 'operator';
+                                } elseif (strpos($roleNameLower, 'guru') !== false || strpos($roleNameLower, 'walas') !== false || strpos($roleNameLower, 'wali_kelas') !== false || strpos($roleDisplayLower, 'guru') !== false) {
+                                    $catKey = 'guru';
+                                }
                             ?>
-                                <div class="switch-user-row" data-search="<?= strtolower(htmlspecialchars($u['full_name'] . ' ' . $u['username'] . ' ' . $roleDisplay . ' ' . $unitName, ENT_QUOTES, 'UTF-8')) ?>" data-role="<?= strtolower(htmlspecialchars($roleDisplay, ENT_QUOTES, 'UTF-8')) ?>" style="display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; border: 1px solid #e2e8f0; border-radius: 10px; background: <?= $isCurrent ? '#f0fdf4' : '#ffffff' ?>; transition: all 0.15s; gap: 12px;">
+                                <div class="switch-user-row" data-cat="<?= $catKey ?>" data-search="<?= strtolower(htmlspecialchars($u['full_name'] . ' ' . $u['username'] . ' ' . $roleDisplay . ' ' . $unitName, ENT_QUOTES, 'UTF-8')) ?>" data-role="<?= strtolower(htmlspecialchars($roleDisplay, ENT_QUOTES, 'UTF-8')) ?>" style="display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; border: 1px solid #e2e8f0; border-radius: 10px; background: <?= $isCurrent ? '#f0fdf4' : '#ffffff' ?>; transition: all 0.15s; gap: 12px;">
                                     <div style="display: flex; align-items: center; gap: 12px; min-width: 0;">
                                         <div style="width: 38px; height: 38px; border-radius: 50%; background: <?= $isCurrent ? '#16a34a' : '#e0f2fe' ?>; color: <?= $isCurrent ? '#ffffff' : '#0284c7' ?>; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px; flex-shrink: 0;">
                                             <?= strtoupper(substr($u['full_name'] ?: 'U', 0, 1)) ?>
@@ -241,14 +256,10 @@ include __DIR__ . '/sidebar.php';
                 
                 rows.forEach(row => {
                     const searchData = row.getAttribute('data-search') || '';
-                    const roleData = row.getAttribute('data-role') || '';
+                    const catData = row.getAttribute('data-cat') || '';
                     
                     let matchesText = !query || searchData.includes(query);
-                    let matchesCat = true;
-                    if (currentCatFilter) {
-                        const pats = currentCatFilter.split('|');
-                        matchesCat = pats.some(p => searchData.includes(p) || roleData.includes(p));
-                    }
+                    let matchesCat = !currentCatFilter || (catData === currentCatFilter);
 
                     row.style.display = (matchesText && matchesCat) ? 'flex' : 'none';
                 });

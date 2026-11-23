@@ -144,6 +144,21 @@ $baseUrl = Auth::baseUrl();
                                     <?php else: ?>
                                         <span class="badge" style="background: #f1f5f9; color: #64748b; font-size: 11px;">Belum Terjadwal</span>
                                     <?php endif; ?>
+
+                                    <?php if (!empty($b['signed_fr8001c_path']) || !empty($b['signed_fr8001d_path'])): ?>
+                                        <div style="margin-top: 6px; display: flex; gap: 4px; justify-content: center; flex-wrap: wrap;">
+                                            <?php if (!empty($b['signed_fr8001c_path'])): ?>
+                                                <a href="<?= $baseUrl ?>/<?= htmlspecialchars($b['signed_fr8001c_path']) ?>" target="_blank" class="badge" style="background: #e0f2fe; color: #0369a1; text-decoration: none; font-size: 10px; border: 1px solid #bae6fd;" title="Lihat Berkas TTD FR 8001C">
+                                                    <i class="fa-solid fa-file-pdf"></i> TTD 8001C
+                                                </a>
+                                            <?php endif; ?>
+                                            <?php if (!empty($b['signed_fr8001d_path'])): ?>
+                                                <a href="<?= $baseUrl ?>/<?= htmlspecialchars($b['signed_fr8001d_path']) ?>" target="_blank" class="badge" style="background: #ede9fe; color: #6d28d9; text-decoration: none; font-size: 10px; border: 1px solid #ddd6fe;" title="Lihat Berkas TTD FR 8001D">
+                                                    <i class="fa-solid fa-file-signature"></i> TTD 8001D
+                                                </a>
+                                            <?php endif; ?>
+                                        </div>
+                                    <?php endif; ?>
                                 </td>
 
                                 <!-- Aksi Kepala Sekolah -->
@@ -170,14 +185,10 @@ $baseUrl = Auth::baseUrl();
                                             <i class="fa-solid fa-handshake"></i> Kesepakatan
                                         </button>
 
-                                        <!-- Mark Selesai KS -->
-                                        <form action="<?= $baseUrl ?>/tagihan/mark-selesai-kepsek" method="POST" style="display: inline;" onsubmit="return confirm('Tandai penagihan ini SELESAI di Kepala Sekolah?');">
-                                            <?= CSRF::field() ?>
-                                            <input type="hidden" name="bill_id" value="<?= $b['id'] ?>">
-                                            <button type="submit" class="btn btn-outline btn-sm" style="padding: 4px 8px; font-size: 0.75rem; color: #16a34a; border-color: #16a34a;" title="Tandai Selesai di KS">
-                                                <i class="fa-solid fa-check"></i> Selesai
-                                            </button>
-                                        </form>
+                                        <!-- Mark Selesai KS dengan Opsi Upload Form TTD -->
+                                        <button type="button" class="btn btn-outline btn-sm" style="padding: 4px 8px; font-size: 0.75rem; color: #16a34a; border-color: #16a34a;" onclick="openSelesaiKepsekModal(<?= $b['id'] ?>, '<?= SecurityHelper::escape($b['student_name']) ?>')" title="Tandai Selesai di KS & Upload Berkas TTD (Opsional)">
+                                            <i class="fa-solid fa-check"></i> Selesai
+                                        </button>
 
                                         <!-- Eskalasi ke Yayasan / Deputi -->
                                         <button type="button" class="btn btn-outline btn-sm" style="padding: 4px 8px; font-size: 0.75rem; color: #be185d; border-color: #be185d;" onclick="openEskalasiDeputiModal(<?= $b['id'] ?>, '<?= SecurityHelper::escape($b['student_name']) ?>', '<?= SecurityHelper::formatRupiah((float)$b['amount']) ?>')" title="Eskalasi ke Yayasan (Deputi Direktur Pendidikan)">
@@ -339,16 +350,61 @@ $baseUrl = Auth::baseUrl();
     </div>
 </div>
 
-<!-- Modal 3: Eskalasi ke Yayasan (Deputi Direktur Pendidikan) -->
+<!-- Modal 3: Tandai Selesai di KS (Opsi Upload Dokumen TTD FR 8001C & D) -->
+<div id="modalSelesaiKepsek" class="modal-backdrop" style="display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.6); z-index: 9999; align-items: center; justify-content: center; backdrop-filter: blur(2px);">
+    <div style="background: #fff; width: 100%; max-width: 500px; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.15); overflow: hidden; margin: 20px;">
+        <div style="background: #f0fdf4; border-bottom: 1px solid #bbf7d0; padding: 16px 20px; display: flex; justify-content: space-between; align-items: center;">
+            <h4 style="margin: 0; font-size: 1rem; font-weight: 700; color: #15803d; display: flex; align-items: center; gap: 8px;">
+                <i class="fa-solid fa-circle-check"></i> Konfirmasi Selesai Penagihan (Kepala Sekolah)
+            </h4>
+            <button type="button" onclick="closeSelesaiKepsekModal()" style="background: none; border: none; font-size: 1.25rem; cursor: pointer; color: #94a3b8;">&times;</button>
+        </div>
+        <form action="<?= $baseUrl ?>/tagihan/mark-selesai-kepsek" method="POST" enctype="multipart/form-data">
+            <?= CSRF::field() ?>
+            <input type="hidden" name="bill_id" id="selesaiKepsekBillId" value="">
+            <div style="padding: 20px;">
+                <p style="font-size: 0.875rem; color: #334155; margin-top: 0; line-height: 1.5;">
+                    Tandai penagihan santri <strong id="selesaiKepsekStudentName">-</strong> telah selesai disepakati atau diselesaikan di tingkat Kepala Sekolah.
+                </p>
+
+                <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 12px; margin-bottom: 14px;">
+                    <div style="font-size: 0.8125rem; font-weight: 700; color: #0f172a; margin-bottom: 6px;">
+                        <i class="fa-solid fa-cloud-arrow-up" style="color: #0284c7;"></i> Unggah Dokumen Bertanda Tangan (Opsional)
+                    </div>
+                    <div style="font-size: 0.75rem; color: #64748b; margin-bottom: 12px;">
+                        File yang diunggah dapat dilihat dan diunduh kembali sewaktu-waktu oleh pihak sekolah maupun yayasan (Format: PDF/JPG/PNG, max 5MB).
+                    </div>
+
+                    <div class="form-group" style="margin-bottom: 10px;">
+                        <label class="form-label" style="font-size: 0.8125rem; font-weight: 600;">Form FR 8001C (TTD Orang Tua):</label>
+                        <input type="file" name="signed_fr8001c" class="form-control" accept=".pdf,.jpg,.jpeg,.png" style="font-size: 0.8125rem;">
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label class="form-label" style="font-size: 0.8125rem; font-weight: 600;">Form FR 8001D (Kesepakatan TTD Orang Tua):</label>
+                        <input type="file" name="signed_fr8001d" class="form-control" accept=".pdf,.jpg,.jpeg,.png" style="font-size: 0.8125rem;">
+                    </div>
+                </div>
+            </div>
+            <div style="background: #f8fafc; border-top: 1px solid #e2e8f0; padding: 12px 20px; display: flex; justify-content: flex-end; gap: 10px;">
+                <button type="button" class="btn btn-outline" onclick="closeSelesaiKepsekModal()">Batal</button>
+                <button type="submit" class="btn btn-primary" style="background: #16a34a; border-color: #16a34a; font-weight: 600;">
+                    <i class="fa-solid fa-check" style="margin-right: 6px;"></i> Tandai Selesai
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Modal 4: Eskalasi ke Yayasan (Deputi Direktur Pendidikan) -->
 <div id="modalEskalasiDeputi" class="modal-backdrop" style="display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.6); z-index: 9999; align-items: center; justify-content: center; backdrop-filter: blur(2px);">
-    <div style="background: #fff; width: 100%; max-width: 480px; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.15); overflow: hidden; margin: 20px;">
+    <div style="background: #fff; width: 100%; max-width: 500px; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.15); overflow: hidden; margin: 20px;">
         <div style="background: #fdf2f8; border-bottom: 1px solid #fce7f3; padding: 16px 20px; display: flex; justify-content: space-between; align-items: center;">
             <h4 style="margin: 0; font-size: 1rem; font-weight: 700; color: #be185d; display: flex; align-items: center; gap: 8px;">
                 <i class="fa-solid fa-triangle-exclamation"></i> Eskalasi ke Yayasan (Deputi Pendidikan)
             </h4>
             <button type="button" onclick="closeEskalasiDeputiModal()" style="background: none; border: none; font-size: 1.25rem; cursor: pointer; color: #94a3b8;">&times;</button>
         </div>
-        <form action="<?= $baseUrl ?>/tagihan/eskalasi-deputi" method="POST">
+        <form action="<?= $baseUrl ?>/tagihan/eskalasi-deputi" method="POST" enctype="multipart/form-data">
             <?= CSRF::field() ?>
             <input type="hidden" name="bill_id" id="deputiBillId" value="">
             <div style="padding: 20px;">
@@ -359,9 +415,26 @@ $baseUrl = Auth::baseUrl();
                     <div>Santri: <strong id="deputiStudentName">-</strong></div>
                     <div>Total Tagihan: <strong id="deputiAmount" style="color: #be185d;">-</strong></div>
                 </div>
-                <div class="form-group">
+                <div class="form-group" style="margin-bottom: 14px;">
                     <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Alasan Eskalasi ke Yayasan</label>
-                    <textarea name="escalation_notes" class="form-control" rows="3" style="font-size: 0.8125rem;">Orang tua santri tidak juga datang memenuhi panggilan Kepala Sekolah. Mohon tindak lanjut pemanggilan tingkat Yayasan oleh Deputi Direktur Pendidikan.</textarea>
+                    <textarea name="escalation_notes" class="form-control" rows="2" style="font-size: 0.8125rem;">Orang tua santri tidak juga datang memenuhi panggilan Kepala Sekolah. Mohon tindak lanjut pemanggilan tingkat Yayasan oleh Deputi Direktur Pendidikan.</textarea>
+                </div>
+
+                <div style="background: #fdf4ff; border: 1px solid #f5d0fe; border-radius: 6px; padding: 12px;">
+                    <div style="font-size: 0.8125rem; font-weight: 700; color: #86198f; margin-bottom: 4px;">
+                        <i class="fa-solid fa-paperclip"></i> Lampirkan Dokumen TTD Pemanggilan (Opsional)
+                    </div>
+                    <div style="font-size: 0.75rem; color: #701a75; margin-bottom: 10px;">
+                        Bisa melampirkan berkas FR 8001C/D yang telah ditandatangani untuk arsip penagihan yayasan.
+                    </div>
+                    <div class="form-group" style="margin-bottom: 8px;">
+                        <label class="form-label" style="font-size: 0.8125rem; font-weight: 600;">Form FR 8001C (TTD Orang Tua):</label>
+                        <input type="file" name="signed_fr8001c" class="form-control" accept=".pdf,.jpg,.jpeg,.png" style="font-size: 0.8125rem;">
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label class="form-label" style="font-size: 0.8125rem; font-weight: 600;">Form FR 8001D (Kesepakatan TTD Orang Tua):</label>
+                        <input type="file" name="signed_fr8001d" class="form-control" accept=".pdf,.jpg,.jpeg,.png" style="font-size: 0.8125rem;">
+                    </div>
                 </div>
             </div>
             <div style="background: #f8fafc; border-top: 1px solid #e2e8f0; padding: 12px 20px; display: flex; justify-content: flex-end; gap: 10px;">
@@ -388,6 +461,16 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 });
+
+// Modal Selesai Kepsek
+function openSelesaiKepsekModal(billId, studentName) {
+    document.getElementById('selesaiKepsekBillId').value = billId;
+    document.getElementById('selesaiKepsekStudentName').innerText = studentName;
+    document.getElementById('modalSelesaiKepsek').style.display = 'flex';
+}
+function closeSelesaiKepsekModal() {
+    document.getElementById('modalSelesaiKepsek').style.display = 'none';
+}
 
 // Modal Schedule Pemanggilan
 function openScheduleModal(billId, studentName, defDate, defTime, defPlace) {

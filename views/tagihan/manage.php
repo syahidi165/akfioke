@@ -107,15 +107,23 @@ foreach ($bills as $b) {
                 <?= CSRF::field() ?>
 
                 <div class="form-group" style="margin-bottom: 14px;">
-                    <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Pilih Santri <span style="color: #ef4444;">*</span></label>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                        <label class="form-label" style="font-weight: 600; font-size: 0.875rem; margin: 0;">Pilih Santri <span style="color: #ef4444;">*</span></label>
+                        <span style="font-size: 11px; color: var(--text-muted);"><i class="fa-solid fa-magnifying-glass"></i> Cari cepat santri</span>
+                    </div>
+                    <div style="position: relative; margin-bottom: 6px;">
+                        <input type="text" id="searchStudentInput" class="form-control" placeholder="Ketik nama atau NIS santri untuk mencari..." oninput="filterStudentDropdown(this.value)" style="font-size: 0.825rem; padding-left: 32px; border-radius: 6px;">
+                        <i class="fa-solid fa-search" style="position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: #94a3b8; font-size: 12px;"></i>
+                    </div>
                     <select name="student_id" id="selectStudent" class="form-control" required style="width: 100%; font-size: 0.875rem;">
                         <option value="">-- Pilih Santri Aktif --</option>
                         <?php foreach ($students as $st): ?>
-                            <option value="<?= $st['id'] ?>" data-nis="<?= SecurityHelper::escape($st['nis']) ?>" data-class="<?= SecurityHelper::escape($st['class_name'] ?? 'Non-Kelas') ?>" data-parent="<?= SecurityHelper::escape($st['parent_name'] ?? 'Orang Tua') ?>">
+                            <option value="<?= $st['id'] ?>" data-nis="<?= SecurityHelper::escape($st['nis']) ?>" data-nama="<?= SecurityHelper::escape(strtolower($st['nama'])) ?>" data-class="<?= SecurityHelper::escape($st['class_name'] ?? 'Non-Kelas') ?>" data-parent="<?= SecurityHelper::escape($st['parent_name'] ?? 'Orang Tua') ?>">
                                 <?= SecurityHelper::escape($st['nama']) ?> (NIS: <?= SecurityHelper::escape($st['nis']) ?> - <?= SecurityHelper::escape($st['class_name'] ?? 'Tanpa Rombel') ?>)
                             </option>
                         <?php endforeach; ?>
                     </select>
+                    <div id="studentNotFoundAlert" style="display: none; font-size: 11.5px; color: #dc2626; margin-top: 4px;">Santri tidak ditemukan dengan kata kunci tersebut.</div>
                 </div>
 
                 <div class="form-group" style="margin-bottom: 14px;">
@@ -594,5 +602,34 @@ function openImportModal() {
 
 function closeImportModal() {
     document.getElementById('modalImportTagihan').style.display = 'none';
+}
+
+function filterStudentDropdown(query) {
+    const q = (query || '').toLowerCase().trim();
+    const select = document.getElementById('selectStudent');
+    const alertBox = document.getElementById('studentNotFoundAlert');
+    const options = select.querySelectorAll('option');
+    let visibleCount = 0;
+    let firstMatch = null;
+
+    options.forEach(function(opt) {
+        if (!opt.value) return; // skip placeholder
+        const text = opt.textContent.toLowerCase();
+        const nis = (opt.getAttribute('data-nis') || '').toLowerCase();
+        const nama = (opt.getAttribute('data-nama') || '').toLowerCase();
+        const matches = !q || text.includes(q) || nis.includes(q) || nama.includes(q);
+        
+        opt.hidden = !matches;
+        opt.style.display = matches ? '' : 'none';
+        if (matches) {
+            visibleCount++;
+            if (!firstMatch) firstMatch = opt;
+        }
+    });
+
+    if (alertBox) alertBox.style.display = (visibleCount === 0 && q) ? 'block' : 'none';
+    if (q && firstMatch && visibleCount === 1) {
+        select.value = firstMatch.value;
+    }
 }
 </script>

@@ -75,17 +75,30 @@ foreach ($eligibleUsers as $eu) {
 
 <!-- TABEL PENGATURAN IZIN -->
 <div class="card" style="border: 1px solid #cbd5e1; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); margin-bottom: 30px;">
-    <div class="card-header" style="background: #f8fafc; border-bottom: 1px solid #e2e8f0; padding: 16px 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+    <div class="card-header" style="background: #f8fafc; border-bottom: 1px solid #e2e8f0; padding: 16px 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
         <div>
             <h3 style="font-size: 16px; font-weight: 700; margin: 0; color: var(--primary);">
-                <i class="fa-solid fa-list-check"></i> Daftar Staf TU &amp; Operator Sekolah
+                <i class="fa-solid fa-list-check"></i> Daftar Staf, Guru &amp; Pimpinan Sekolah
             </h3>
             <div style="font-size: 12px; color: var(--text-muted); margin-top: 2px;">
-                Tentukan akun siapa saja yang dapat diakses oleh masing-masing staf di bawah ini.
+                Tentukan akun siapa saja yang dapat diakses oleh masing-masing staf/guru di bawah ini (Orang tua & santri dikecualikan).
             </div>
         </div>
-        <div>
-            <input type="text" id="filterStaffTable" placeholder="Cari nama staf atau unit..." oninput="filterStaffTable()" class="form-control" style="font-size: 12.5px; padding: 6px 14px; width: 240px; border-radius: 8px;">
+        <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+            <select id="filterUnitSelect" onchange="filterStaffTable()" class="form-control" style="font-size: 12.5px; padding: 6px 12px; width: 170px; border-radius: 8px;">
+                <option value="">-- Semua Unit --</option>
+                <?php foreach ($allUnits as $u): ?>
+                    <option value="<?= (int)$u['id'] ?>"><?= SecurityHelper::escape($u['name']) ?></option>
+                <?php endforeach; ?>
+            </select>
+            <select id="filterRoleSelect" onchange="filterStaffTable()" class="form-control" style="font-size: 12.5px; padding: 6px 12px; width: 160px; border-radius: 8px;">
+                <option value="">-- Semua Peran --</option>
+                <option value="tu">Tata Usaha</option>
+                <option value="operator">Operator Sekolah</option>
+                <option value="kepsek">Kepala Sekolah</option>
+                <option value="guru">Guru &amp; Waka</option>
+            </select>
+            <input type="text" id="filterStaffTable" placeholder="Cari nama atau username..." oninput="filterStaffTable()" class="form-control" style="font-size: 12.5px; padding: 6px 14px; width: 200px; border-radius: 8px;">
         </div>
     </div>
     <div class="card-body" style="padding: 0;">
@@ -94,9 +107,9 @@ foreach ($eligibleUsers as $eu) {
                 <thead style="background: #f1f5f9;">
                     <tr>
                         <th width="4%" class="text-center">No</th>
-                        <th width="18%">Staf Pengguna</th>
-                        <th width="13%">Peran Sistem</th>
-                        <th width="15%">Unit Satuan</th>
+                        <th width="18%">Pengguna</th>
+                        <th width="14%">Peran Sistem</th>
+                        <th width="14%">Unit Satuan</th>
                         <th width="35%">Akun Target Yang Diizinkan</th>
                         <th width="15%" class="text-center">Aksi Pengaturan</th>
                     </tr>
@@ -106,7 +119,7 @@ foreach ($eligibleUsers as $eu) {
                         <tr>
                             <td colspan="6" class="text-center text-muted" style="padding: 36px 20px;">
                                 <i class="fa-solid fa-user-xmark" style="font-size: 36px; color: #cbd5e1; margin-bottom: 10px; display: block;"></i>
-                                Belum ada akun dengan peran Tata Usaha atau Operator Sekolah yang terdaftar.
+                                Belum ada akun staf atau guru yang memenuhi kriteria terdaftar.
                             </td>
                         </tr>
                     <?php else: ?>
@@ -114,16 +127,46 @@ foreach ($eligibleUsers as $eu) {
                             $uid = (int)$eu['id'];
                             $userPerms = $permMap[$uid] ?? [];
                             $assignedTargetIds = array_column($userPerms, 'target_user_id');
+                            $rName = strtolower($eu['role_name'] ?? '');
+                            $roleCat = 'lainnya';
+                            $roleBadgeBg = '#f1f5f9';
+                            $roleBadgeColor = '#475569';
+                            $roleIcon = 'fa-user';
+
+                            if ($rName === 'tata_usaha') {
+                                $roleCat = 'tu';
+                                $roleBadgeBg = '#e0f2fe';
+                                $roleBadgeColor = '#0369a1';
+                                $roleIcon = 'fa-calculator';
+                            } elseif ($rName === 'operator_sekolah') {
+                                $roleCat = 'operator';
+                                $roleBadgeBg = '#ede9fe';
+                                $roleBadgeColor = '#6d28d9';
+                                $roleIcon = 'fa-user-shield';
+                            } elseif ($rName === 'kepala_sekolah') {
+                                $roleCat = 'kepsek';
+                                $roleBadgeBg = '#fef3c7';
+                                $roleBadgeColor = '#b45309';
+                                $roleIcon = 'fa-user-tie';
+                            } elseif (str_contains($rName, 'guru') || str_contains($rName, 'waka')) {
+                                $roleCat = 'guru';
+                                $roleBadgeBg = '#ecfdf5';
+                                $roleBadgeColor = '#047857';
+                                $roleIcon = 'fa-chalkboard-user';
+                            }
                         ?>
-                            <tr class="staff-row" data-search="<?= strtolower(htmlspecialchars($eu['full_name'] . ' ' . $eu['username'] . ' ' . $eu['unit_name'] . ' ' . $eu['role_display'], ENT_QUOTES, 'UTF-8')) ?>">
+                            <tr class="staff-row" 
+                                data-unit-id="<?= (int)$eu['unit_id'] ?>" 
+                                data-role-cat="<?= $roleCat ?>" 
+                                data-search="<?= strtolower(htmlspecialchars($eu['full_name'] . ' ' . $eu['username'] . ' ' . $eu['unit_name'] . ' ' . $eu['role_display'], ENT_QUOTES, 'UTF-8')) ?>">
                                 <td class="text-center text-muted"><?= $no++ ?></td>
                                 <td>
                                     <strong style="color: var(--text-main); font-size: 13.5px;"><?= SecurityHelper::escape($eu['full_name']) ?></strong>
                                     <div style="font-size: 11px; color: #0284c7; font-family: monospace;">@<?= SecurityHelper::escape($eu['username']) ?></div>
                                 </td>
                                 <td>
-                                    <span class="badge <?= $eu['role_name'] === 'operator_sekolah' ? 'badge-primary' : 'badge-info' ?>" style="font-size: 11px;">
-                                        <i class="fa-solid <?= $eu['role_name'] === 'operator_sekolah' ? 'fa-user-shield' : 'fa-calculator' ?>"></i> 
+                                    <span class="badge" style="background: <?= $roleBadgeBg ?>; color: <?= $roleBadgeColor ?>; font-size: 11px; padding: 3px 8px; border: 1px solid rgba(0,0,0,0.06);">
+                                        <i class="fa-solid <?= $roleIcon ?>"></i> 
                                         <?= SecurityHelper::escape($eu['role_display']) ?>
                                     </span>
                                 </td>
@@ -285,9 +328,19 @@ foreach ($eligibleUsers as $eu) {
 <script>
 function filterStaffTable() {
     const q = (document.getElementById('filterStaffTable')?.value || '').toLowerCase().trim();
+    const unitId = document.getElementById('filterUnitSelect')?.value || '';
+    const roleCat = document.getElementById('filterRoleSelect')?.value || '';
+
     document.querySelectorAll('.staff-row').forEach(row => {
         const text = row.getAttribute('data-search') || '';
-        row.style.display = (!q || text.includes(q)) ? '' : 'none';
+        const rowUnit = row.getAttribute('data-unit-id') || '';
+        const rowRole = row.getAttribute('data-role-cat') || '';
+
+        const matchQ = !q || text.includes(q);
+        const matchUnit = !unitId || rowUnit === unitId;
+        const matchRole = !roleCat || rowRole === roleCat;
+
+        row.style.display = (matchQ && matchUnit && matchRole) ? '' : 'none';
     });
 }
 

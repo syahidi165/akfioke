@@ -105,6 +105,23 @@ class ExportHelper {
     }
 
     /**
+     * Dapatkan binary PDF string menggunakan Dompdf
+     */
+    public static function getPdfBytes(string $htmlContent, string $paperSize = 'A4', string $orientation = 'portrait'): string {
+        $options = new Options();
+        $options->set('isRemoteEnabled', true);
+        $options->set('isHtml5ParserEnabled', true);
+        $options->set('defaultFont', 'Helvetica');
+
+        $dompdf = new Dompdf($options);
+        $dompdf->loadHtml($htmlContent);
+        $dompdf->setPaper($paperSize, $orientation);
+        $dompdf->render();
+
+        return $dompdf->output();
+    }
+
+    /**
      * Template Kop Surat Standar Unit dengan Logo Kustom
      */
     public static function renderKop(array $unit): string {
