@@ -4635,12 +4635,13 @@ class MasterController extends Controller {
     // --- 7. AKUN PENGGUNA SEKOLAH (GURU, KARYAWAN, OPERATOR SEKOLAH) ---
     public function schoolAccounts(): void {
         $this->requireRole(['operator_sekolah', 'operator_yayasan', 'direktur_pendidikan', 'deputi_pendidikan']);
+        self::ensureUserRolesUnitColumn();
         
         $isYayasan = Auth::hasRole('operator_yayasan') || Auth::hasRole('direktur_pendidikan') || Auth::hasRole('deputi_pendidikan');
         $allUnits = Database::fetchAll("SELECT * FROM units ORDER BY id ASC");
         
         // Multi-Unit Isolation:
-        // Jika Operator Sekolah, unit_id dikunci mutlak ke Auth::unitId()
+        // Jika Operator Sekolah, unit_id dikunci mutlak ke Auth::unitId() (termasuk guru lintas unit yang ditugaskan ke unit ini)
         if (!$isYayasan) {
             $unitId = Auth::unitId();
             $unitFilter = $unitId;
@@ -4650,40 +4651,50 @@ class MasterController extends Controller {
             $unitId = $unitFilter ?: Auth::unitId();
         }
 
-        $query = "SELECT u.id, u.username, u.full_name, u.email, u.phone, u.unit_id as user_unit_id, u.is_active, u.last_login_at, 
-                         GROUP_CONCAT(CONCAT(r.id, ':', r.name, ':', r.display_name) SEPARATOR '; ') as role_data,
-                         GROUP_CONCAT(r.display_name SEPARATOR ', ') as role_names,
-                         e.id as employee_id, e.level_posisi, e.nipy,
-                         COALESCE(u_unit.name, e_unit.name) as unit_name,
-                         COALESCE(u.unit_id, e.unit_id) as actual_unit_id
-                  FROM users u 
-                  JOIN user_roles ur ON u.id = ur.user_id 
-                  JOIN roles r ON ur.role_id = r.id 
-                  LEFT JOIN employees e ON u.id = e.user_id 
-                  LEFT JOIN units u_unit ON u.unit_id = u_unit.id
-                  LEFT JOIN units e_unit ON e.unit_id = e_unit.id
-                  WHERE COALESCE(ur.unit_id, 0) = 0 ";
-        
-        $params = [];
-        if ($unitFilter !== null) {
-            $query .= "AND (u.unit_id = ? OR e.unit_id = ?) ";
-            $params[] = $unitFilter;
-            $params[] = $unitFilter;
-        } elseif (!$isYayasan) {
-            $query .= "AND (u.unit_id = ? OR e.unit_id = ?) ";
-            $params[] = $unitId;
-            $params[] = $unitId;
+        if ($isYayasan) {
+            $query = "SELECT u.id, u.username, u.full_name, u.email, u.phone, u.unit_id as user_unit_id, u.is_active, u.last_login_at, 
+                             GROUP_CONCAT(DISTINCT CONCAT(r.id, ':', r.name, ':', r.display_name, ':', COALESCE(ur.unit_id, 0)) ORDER BY ur.is_primary DESC, r.id ASC SEPARATOR '; ') as role_data,
+                             GROUP_CONCAT(DISTINCT r.display_name ORDER BY ur.is_primary DESC, r.id ASC SEPARATOR ', ') as role_names,
+                             e.id as employee_id, e.level_posisi, e.nipy,
+                             COALESCE(u_unit.name, e_unit.name) as unit_name,
+                             COALESCE(u.unit_id, e.unit_id) as actual_unit_id,
+                             0 as is_cross_unit
+                      FROM users u 
+                      JOIN user_roles ur ON u.id = ur.user_id 
+                      JOIN roles r ON ur.role_id = r.id 
+                      LEFT JOIN employees e ON u.id = e.user_id AND e.is_deleted = 0
+                      LEFT JOIN units u_unit ON u.unit_id = u_unit.id
+                      LEFT JOIN units e_unit ON e.unit_id = e_unit.id
+                      WHERE COALESCE(ur.unit_id, 0) = 0 
+                        AND r.name NOT IN ('orang_tua', 'siswa') ";
+            $params = [];
+            if ($unitFilter !== null) {
+                $query .= "AND (u.unit_id = ? OR e.unit_id = ?) ";
+                $params[] = $unitFilter;
+                $params[] = $unitFilter;
+            }
+            $query .= "GROUP BY u.id, u.username, u.full_name, u.email, u.phone, u.unit_id, u.is_active, u.last_login_at, e.id, e.level_posisi, e.nipy, u_unit.name, e_unit.name, e.unit_id ORDER BY actual_unit_id ASC, u.full_name ASC";
+        } else {
+            // Operator Sekolah melihat pegawai unit induk DAN guru lintas unit yang ditugaskan di unit ini (ur.unit_id = $unitId)
+            $query = "SELECT u.id, u.username, u.full_name, u.email, u.phone, u.unit_id as user_unit_id, u.is_active, u.last_login_at, 
+                             GROUP_CONCAT(DISTINCT CONCAT(r.id, ':', r.name, ':', r.display_name, ':', COALESCE(ur.unit_id, 0)) ORDER BY ur.is_primary DESC, r.id ASC SEPARATOR '; ') as role_data,
+                             GROUP_CONCAT(DISTINCT r.display_name ORDER BY ur.is_primary DESC, r.id ASC SEPARATOR ', ') as role_names,
+                             e.id as employee_id, e.level_posisi, e.nipy,
+                             COALESCE(u_unit.name, e_unit.name) as unit_name,
+                             COALESCE(u.unit_id, e.unit_id) as actual_unit_id,
+                             CASE WHEN COALESCE(u.unit_id, e.unit_id, 0) = ? THEN 0 ELSE 1 END as is_cross_unit
+                      FROM users u 
+                      JOIN user_roles ur ON u.id = ur.user_id 
+                      JOIN roles r ON ur.role_id = r.id 
+                      LEFT JOIN employees e ON u.id = e.user_id AND e.is_deleted = 0
+                      LEFT JOIN units u_unit ON u.unit_id = u_unit.id
+                      LEFT JOIN units e_unit ON e.unit_id = e_unit.id
+                      WHERE ((COALESCE(ur.unit_id, 0) = 0 AND (u.unit_id = ? OR e.unit_id = ?)) OR COALESCE(ur.unit_id, 0) = ?)
+                        AND r.name NOT IN ('orang_tua', 'siswa', 'operator_yayasan', 'direktur_pendidikan', 'deputi_pendidikan', 'pembina_yayasan', 'direktur_pengadaan', 'direktur_sarpras', 'hrd')
+                      GROUP BY u.id, u.username, u.full_name, u.email, u.phone, u.unit_id, u.is_active, u.last_login_at, e.id, e.level_posisi, e.nipy, u_unit.name, e_unit.name, e.unit_id
+                      ORDER BY is_cross_unit ASC, u.full_name ASC";
+            $params = [$unitId, $unitId, $unitId, $unitId];
         }
-
-        // Pisahkan akun orang tua dan siswa ke modul khusus
-        $query .= "AND r.name NOT IN ('orang_tua', 'siswa') ";
-
-        // Jangan tampilkan akun yayasan ke Operator Sekolah
-        if (!$isYayasan) {
-            $query .= "AND r.name NOT IN ('operator_yayasan', 'direktur_pendidikan', 'deputi_pendidikan', 'pembina_yayasan', 'direktur_pengadaan', 'direktur_sarpras', 'hrd') ";
-        }
-
-        $query .= "GROUP BY u.id, u.username, u.full_name, u.email, u.phone, u.unit_id, u.is_active, u.last_login_at, e.id, e.level_posisi, e.nipy, u_unit.name, e_unit.name, e.unit_id ORDER BY actual_unit_id ASC, u.full_name ASC";
         $users = Database::fetchAll($query, $params);
 
         // Ambil daftar peran (roles)
@@ -4901,6 +4912,7 @@ class MasterController extends Controller {
 
     public function assignRole(): void {
         $this->requireRole(['operator_sekolah', 'operator_yayasan']);
+        self::ensureUserRolesUnitColumn();
         $isYayasan = Auth::hasRole('operator_yayasan');
         $userId = (int)($_POST['user_id'] ?? 0);
         $roleId = (int)($_POST['role_id'] ?? 0);
@@ -4914,57 +4926,91 @@ class MasterController extends Controller {
             return;
         }
 
+        $targetRoleUnitId = 0;
+        $isCrossUnitAssigned = false;
+
         if (!$isYayasan) {
             $userEmp = Database::fetch("SELECT unit_id FROM employees WHERE user_id = ? AND is_deleted = 0 ORDER BY id DESC LIMIT 1", [$userId]);
             $userUnitId = (int)($targetUser['unit_id'] ?? 0);
             $empUnitId = (int)($userEmp['unit_id'] ?? 0);
             $myUnitId = (int)Auth::unitId();
 
-            if ($userUnitId !== $myUnitId && $empUnitId !== $myUnitId) {
+            $isHomebase = ($userUnitId === $myUnitId || $empUnitId === $myUnitId);
+            if (!$isHomebase) {
+                $isCrossUnitAssigned = (bool)Database::fetch(
+                    "SELECT 1 FROM user_roles WHERE user_id = ? AND unit_id = ? LIMIT 1",
+                    [$userId, $myUnitId]
+                );
+            }
+
+            if (!$isHomebase && !$isCrossUnitAssigned) {
                 $this->setFlash('danger', 'Anda tidak memiliki otoritas mengubah akun di unit sekolah lain.');
                 $this->redirect(Auth::baseUrl() . '/users/school-accounts');
                 return;
             }
 
-            // Jika users.unit_id belum sinkron dengan unit sekolah, sinkronkan
-            if ($userUnitId !== $myUnitId && $empUnitId === $myUnitId) {
-                Database::execute("UPDATE users SET unit_id = ? WHERE id = ?", [$myUnitId, $userId]);
-            }
+            if ($isCrossUnitAssigned) {
+                // Guru lintas unit: peran tambahan diikat khusus ke unit tujuan & tidak boleh level manajerial/operator
+                $forbiddenCross = ['operator_yayasan', 'direktur_pendidikan', 'deputi_pendidikan', 'pembina_yayasan', 'operator_sekolah', 'kepala_sekolah', 'direktur_pengadaan', 'direktur_sarpras', 'hrd', 'orang_tua', 'siswa'];
+                if (in_array($targetRole['name'], $forbiddenCross, true)) {
+                    $this->setFlash('danger', "Peran '{$targetRole['display_name']}' tidak dapat diberikan ke guru lintas unit (hanya peran operasional sekolah).");
+                    $this->redirect(Auth::baseUrl() . '/users/school-accounts');
+                    return;
+                }
+                $targetRoleUnitId = $myUnitId;
+            } else {
+                // Pegawai Unit Induk: jika users.unit_id belum sinkron, sinkronkan
+                if ($userUnitId !== $myUnitId && $empUnitId === $myUnitId) {
+                    Database::execute("UPDATE users SET unit_id = ? WHERE id = ?", [$myUnitId, $userId]);
+                }
 
-            $forbidden = ['operator_yayasan', 'direktur_pendidikan', 'deputi_pendidikan', 'pembina_yayasan', 'operator_sekolah', 'direktur_pengadaan', 'direktur_sarpras', 'hrd', 'orang_tua', 'siswa'];
-            if (in_array($targetRole['name'], $forbidden)) {
-                $this->setFlash('danger', 'Anda tidak memiliki hak memberikan peran tersebut.');
-                $this->redirect(Auth::baseUrl() . '/users/school-accounts');
-                return;
+                $forbidden = ['operator_yayasan', 'direktur_pendidikan', 'deputi_pendidikan', 'pembina_yayasan', 'operator_sekolah', 'direktur_pengadaan', 'direktur_sarpras', 'hrd', 'orang_tua', 'siswa'];
+                if (in_array($targetRole['name'], $forbidden, true)) {
+                    $this->setFlash('danger', 'Anda tidak memiliki hak memberikan peran tersebut.');
+                    $this->redirect(Auth::baseUrl() . '/users/school-accounts');
+                    return;
+                }
             }
         }
 
-        self::ensureUserRolesUnitColumn();
-        // Cek apakah peran sudah dimiliki pengguna pada unit induk
-        $hasRole = Database::fetch("SELECT 1 FROM user_roles WHERE user_id = ? AND role_id = ? AND COALESCE(unit_id, 0) = 0", [$userId, $roleId]);
+        // Cek apakah peran sudah dimiliki pengguna pada konteks unit tersebut
+        $hasRole = Database::fetch(
+            "SELECT 1 FROM user_roles WHERE user_id = ? AND role_id = ? AND COALESCE(unit_id, 0) = ?",
+            [$userId, $roleId, $targetRoleUnitId]
+        );
         if ($hasRole) {
             $this->setFlash('warning', "Pengguna telah memiliki peran '{$targetRole['display_name']}'.");
             $this->redirect(Auth::baseUrl() . '/users/school-accounts');
             return;
         }
 
-        // Cek apakah sudah ada peran utama (is_primary = 1)
-        $primaryCount = (int)(Database::fetch("SELECT COUNT(*) as c FROM user_roles WHERE user_id = ? AND is_primary = 1", [$userId])['c'] ?? 0);
-        $isPrimary = ($primaryCount === 0) ? 1 : 0;
+        // Peran lintas unit selalu is_primary = 0 agar Unit Induk & 1 Rapor AKFI tidak berubah
+        if ($isCrossUnitAssigned) {
+            $isPrimary = 0;
+        } else {
+            $primaryCount = (int)(Database::fetch("SELECT COUNT(*) as c FROM user_roles WHERE user_id = ? AND is_primary = 1", [$userId])['c'] ?? 0);
+            $isPrimary = ($primaryCount === 0) ? 1 : 0;
+        }
 
         Database::execute(
-            "INSERT INTO user_roles (user_id, role_id, unit_id, is_primary) VALUES (?, ?, 0, ?) 
+            "INSERT INTO user_roles (user_id, role_id, unit_id, is_primary) VALUES (?, ?, ?, ?) 
              ON DUPLICATE KEY UPDATE is_primary = VALUES(is_primary)",
-            [$userId, $roleId, $isPrimary]
+            [$userId, $roleId, $targetRoleUnitId, $isPrimary]
         );
 
-        AuditLog::log('ASSIGN_ROLE', 'user_roles', $userId, null, ['role_id' => $roleId, 'role_name' => $targetRole['name']]);
-        $this->setFlash('success', "Peran '{$targetRole['display_name']}' berhasil ditambahkan ke akun {$targetUser['username']}.");
+        AuditLog::log('ASSIGN_ROLE', 'user_roles', $userId, null, [
+            'role_id'   => $roleId,
+            'role_name' => $targetRole['name'],
+            'unit_id'   => $targetRoleUnitId
+        ]);
+        $suffix = $isCrossUnitAssigned ? ' (Lintas Unit)' : '';
+        $this->setFlash('success', "Peran '{$targetRole['display_name']}'{$suffix} berhasil ditambahkan ke akun {$targetUser['username']}.");
         $this->redirect(Auth::baseUrl() . '/users/school-accounts');
     }
 
     public function unassignRole(): void {
         $this->requireRole(['operator_sekolah', 'operator_yayasan']);
+        self::ensureUserRolesUnitColumn();
         $isYayasan = Auth::hasRole('operator_yayasan');
         $userId = (int)($_POST['user_id'] ?? 0);
         $roleId = (int)($_POST['role_id'] ?? 0);
@@ -4978,41 +5024,74 @@ class MasterController extends Controller {
             return;
         }
 
+        $targetRoleUnitId = 0;
+        $isCrossUnitAssigned = false;
+
         if (!$isYayasan) {
             $userEmp = Database::fetch("SELECT unit_id FROM employees WHERE user_id = ? AND is_deleted = 0 ORDER BY id DESC LIMIT 1", [$userId]);
             $userUnitId = (int)($targetUser['unit_id'] ?? 0);
             $empUnitId = (int)($userEmp['unit_id'] ?? 0);
             $myUnitId = (int)Auth::unitId();
 
-            if ($userUnitId !== $myUnitId && $empUnitId !== $myUnitId) {
+            $isHomebase = ($userUnitId === $myUnitId || $empUnitId === $myUnitId);
+            if (!$isHomebase) {
+                $isCrossUnitAssigned = (bool)Database::fetch(
+                    "SELECT 1 FROM user_roles WHERE user_id = ? AND unit_id = ? LIMIT 1",
+                    [$userId, $myUnitId]
+                );
+            }
+
+            if (!$isHomebase && !$isCrossUnitAssigned) {
                 $this->setFlash('danger', 'Anda tidak memiliki otoritas mengubah akun di unit sekolah lain.');
                 $this->redirect(Auth::baseUrl() . '/users/school-accounts');
                 return;
             }
 
             $forbidden = ['operator_yayasan', 'direktur_pendidikan', 'deputi_pendidikan', 'pembina_yayasan', 'operator_sekolah', 'direktur_pengadaan', 'direktur_sarpras', 'hrd', 'orang_tua', 'siswa'];
-            if (in_array($targetRole['name'], $forbidden)) {
+            if ($isCrossUnitAssigned) {
+                $forbidden[] = 'kepala_sekolah';
+                $targetRoleUnitId = $myUnitId;
+            }
+            if (in_array($targetRole['name'], $forbidden, true)) {
                 $this->setFlash('danger', 'Anda tidak memiliki hak mencabut peran tersebut.');
                 $this->redirect(Auth::baseUrl() . '/users/school-accounts');
                 return;
             }
         }
 
-        $roleCount = Database::fetch("SELECT COUNT(*) as cnt FROM user_roles WHERE user_id = ?", [$userId]);
-        if (($roleCount['cnt'] ?? 0) <= 1) {
-            $this->setFlash('warning', 'Peran tidak dapat dicabut karena pengguna wajib memiliki minimal satu peran aktif.');
-            $this->redirect(Auth::baseUrl() . '/users/school-accounts');
-            return;
+        if ($isCrossUnitAssigned) {
+            $unitRoleCount = (int)(Database::fetch("SELECT COUNT(*) as cnt FROM user_roles WHERE user_id = ? AND unit_id = ?", [$userId, $targetRoleUnitId])['cnt'] ?? 0);
+            if ($unitRoleCount <= 1) {
+                $this->setFlash('warning', 'Peran lintas unit terakhir tidak dapat dicabut oleh Operator Sekolah (kelola melalui Operator Yayasan di menu Lintas Unit).');
+                $this->redirect(Auth::baseUrl() . '/users/school-accounts');
+                return;
+            }
+        } else {
+            $roleCount = Database::fetch("SELECT COUNT(*) as cnt FROM user_roles WHERE user_id = ?", [$userId]);
+            if (($roleCount['cnt'] ?? 0) <= 1) {
+                $this->setFlash('warning', 'Peran tidak dapat dicabut karena pengguna wajib memiliki minimal satu peran aktif.');
+                $this->redirect(Auth::baseUrl() . '/users/school-accounts');
+                return;
+            }
         }
 
-        Database::execute("DELETE FROM user_roles WHERE user_id = ? AND role_id = ? AND COALESCE(unit_id, 0) = 0", [$userId, $roleId]);
+        Database::execute(
+            "DELETE FROM user_roles WHERE user_id = ? AND role_id = ? AND COALESCE(unit_id, 0) = ?",
+            [$userId, $roleId, $targetRoleUnitId]
+        );
 
-        $hasPrimary = Database::fetch("SELECT role_id FROM user_roles WHERE user_id = ? AND is_primary = 1", [$userId]);
-        if (!$hasPrimary) {
-            Database::execute("UPDATE user_roles SET is_primary = 1 WHERE user_id = ? LIMIT 1", [$userId]);
+        if (!$isCrossUnitAssigned) {
+            $hasPrimary = Database::fetch("SELECT role_id FROM user_roles WHERE user_id = ? AND is_primary = 1", [$userId]);
+            if (!$hasPrimary) {
+                Database::execute("UPDATE user_roles SET is_primary = 1 WHERE user_id = ? ORDER BY COALESCE(unit_id, 0) ASC LIMIT 1", [$userId]);
+            }
         }
 
-        AuditLog::log('UNASSIGN_ROLE', 'user_roles', $userId, null, ['role_id' => $roleId, 'role_name' => $targetRole['name']]);
+        AuditLog::log('UNASSIGN_ROLE', 'user_roles', $userId, null, [
+            'role_id'   => $roleId,
+            'role_name' => $targetRole['name'],
+            'unit_id'   => $targetRoleUnitId
+        ]);
         $this->setFlash('success', "Peran '{$targetRole['display_name']}' berhasil dicabut dari akun {$targetUser['username']}.");
         $this->redirect(Auth::baseUrl() . '/users/school-accounts');
     }

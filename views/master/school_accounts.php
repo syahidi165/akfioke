@@ -237,16 +237,24 @@ if ($isYayasan) {
                                 <?php endif; ?>
                             </td>
                             <td>
-                                <span class="badge badge-info" style="font-size: 11px;">
-                                    <?= SecurityHelper::escape($u['unit_name'] ?: 'Unit ' . $u['actual_unit_id']) ?>
-                                </span>
+                                <?php if (!empty($u['is_cross_unit'])): ?>
+                                    <span class="badge" style="background: #fef3c7; color: #b45309; border: 1px solid #fcd34d; font-size: 11px;" title="Pegawai terdaftar sebagai Guru Lintas Unit">
+                                        <i class="fa-solid fa-shuffle" style="font-size: 10px;"></i> Lintas Unit
+                                    </span>
+                                    <div style="font-size: 10.5px; color: #64748b; margin-top: 2px;">
+                                        Induk: <?= SecurityHelper::escape($u['unit_name'] ?: 'Unit ' . $u['actual_unit_id']) ?>
+                                    </div>
+                                <?php else: ?>
+                                    <span class="badge badge-info" style="font-size: 11px;">
+                                        <?= SecurityHelper::escape($u['unit_name'] ?: 'Unit ' . $u['actual_unit_id']) ?>
+                                    </span>
+                                <?php endif; ?>
                             </td>
                             <td>
                                 <div style="display: flex; flex-wrap: wrap; gap: 4px; align-items: center;">
                                     <?php 
-                                        $roleItems = explode('; ', $u['role_data'] ?? '');
+                                        $roleItems = array_values(array_filter(explode('; ', $u['role_data'] ?? '')));
                                         foreach ($roleItems as $ri):
-                                            if (empty($ri)) continue;
                                             $parts = explode(':', $ri);
                                             $rId = $parts[0] ?? '';
                                             $rName = $parts[1] ?? '';
@@ -262,7 +270,7 @@ if ($isYayasan) {
                                                 $canUnassign = false;
                                                 if ($isYayasan) {
                                                     $canUnassign = true;
-                                                } elseif (!$isOpSekolah && !in_array($rName, ['operator_yayasan', 'direktur_pendidikan', 'deputi_pendidikan', 'pembina_yayasan'])) {
+                                                } elseif (!$isOpSekolah && !in_array($rName, ['operator_yayasan', 'direktur_pendidikan', 'deputi_pendidikan', 'pembina_yayasan']) && (empty($u['is_cross_unit']) || $rName !== 'kepala_sekolah')) {
                                                     $canUnassign = true;
                                                 }
                                             ?>
@@ -284,6 +292,7 @@ if ($isYayasan) {
                                             data-user-id="<?= (int)$u['id'] ?>"
                                             data-username="<?= htmlspecialchars($u['username'] ?? '', ENT_QUOTES, 'UTF-8') ?>"
                                             data-fullname="<?= htmlspecialchars($u['full_name'] ?? '', ENT_QUOTES, 'UTF-8') ?>"
+                                            data-cross-unit="<?= !empty($u['is_cross_unit']) ? '1' : '0' ?>"
                                             onclick="openAssignRoleModalFromBtn(this)" 
                                             title="Tambah Peran untuk pengguna ini">
                                         <i class="fa-solid fa-plus"></i> Peran
@@ -315,30 +324,34 @@ if ($isYayasan) {
                                         </form>
                                     <?php endif; ?>
 
-                                    <!-- Edit Akun -->
-                                    <button type="button" class="btn btn-outline btn-sm" data-user="<?= htmlspecialchars(json_encode($u, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP), ENT_QUOTES, 'UTF-8') ?>" onclick="openEditAccountModal(JSON.parse(this.getAttribute('data-user')))" title="Edit Akun Pengguna">
-                                        <i class="fa-solid fa-pen-to-square"></i>
-                                    </button>
-
-                                    <!-- Reset Password -->
-                                    <form method="POST" action="<?= $baseUrl ?>/users/school-accounts/save" onsubmit="return confirm('Reset kata sandi akun <?= SecurityHelper::escape($u['username']) ?> ke password123?')">
-                                        <?= CSRF::inputField() ?>
-                                        <input type="hidden" name="id" value="<?= $u['id'] ?>">
-                                        <input type="hidden" name="action" value="reset_password">
-                                        <button type="submit" class="btn btn-warning btn-sm" title="Reset Password ke password123">
-                                            <i class="fa-solid fa-key"></i>
+                                    <?php if (!$isYayasan && !empty($u['is_cross_unit'])): ?>
+                                        <span class="text-muted" style="font-size: 11px;" title="Akun induk dikelola oleh Unit Induk / Operator Yayasan">Akun Unit Induk</span>
+                                    <?php else: ?>
+                                        <!-- Edit Akun -->
+                                        <button type="button" class="btn btn-outline btn-sm" data-user="<?= htmlspecialchars(json_encode($u, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP), ENT_QUOTES, 'UTF-8') ?>" onclick="openEditAccountModal(JSON.parse(this.getAttribute('data-user')))" title="Edit Akun Pengguna">
+                                            <i class="fa-solid fa-pen-to-square"></i>
                                         </button>
-                                    </form>
 
-                                    <!-- Toggle Active -->
-                                    <form method="POST" action="<?= $baseUrl ?>/users/school-accounts/save">
-                                        <?= CSRF::inputField() ?>
-                                        <input type="hidden" name="id" value="<?= $u['id'] ?>">
-                                        <input type="hidden" name="action" value="toggle_active">
-                                        <button type="submit" class="btn <?= $u['is_active'] ? 'btn-outline' : 'btn-success' ?> btn-sm" title="<?= $u['is_active'] ? 'Nonaktifkan Akun' : 'Aktifkan Akun' ?>">
-                                            <i class="fa-solid fa-power-off"></i>
-                                        </button>
-                                    </form>
+                                        <!-- Reset Password -->
+                                        <form method="POST" action="<?= $baseUrl ?>/users/school-accounts/save" onsubmit="return confirm('Reset kata sandi akun <?= SecurityHelper::escape($u['username']) ?> ke password123?')">
+                                            <?= CSRF::inputField() ?>
+                                            <input type="hidden" name="id" value="<?= $u['id'] ?>">
+                                            <input type="hidden" name="action" value="reset_password">
+                                            <button type="submit" class="btn btn-warning btn-sm" title="Reset Password ke password123">
+                                                <i class="fa-solid fa-key"></i>
+                                            </button>
+                                        </form>
+
+                                        <!-- Toggle Active -->
+                                        <form method="POST" action="<?= $baseUrl ?>/users/school-accounts/save">
+                                            <?= CSRF::inputField() ?>
+                                            <input type="hidden" name="id" value="<?= $u['id'] ?>">
+                                            <input type="hidden" name="action" value="toggle_active">
+                                            <button type="submit" class="btn <?= $u['is_active'] ? 'btn-outline' : 'btn-success' ?> btn-sm" title="<?= $u['is_active'] ? 'Nonaktifkan Akun' : 'Aktifkan Akun' ?>">
+                                                <i class="fa-solid fa-power-off"></i>
+                                            </button>
+                                        </form>
+                                    <?php endif; ?>
 
                                     <?php if ($isYayasan): ?>
                                         <!-- Hapus Akun (Khusus Operator Yayasan) -->
@@ -744,12 +757,16 @@ if ($isYayasan) {
                 Pengguna: <strong id="assign_user_info" style="color: var(--primary);">-</strong>
             </div>
 
+            <div id="assign_cross_unit_notice" style="display: none; margin-bottom: 12px; font-size: 12px; background: #fffbeb; border: 1px solid #fcd34d; color: #92400e; padding: 8px 10px; border-radius: 6px; line-height: 1.4;">
+                <i class="fa-solid fa-shuffle"></i> <strong>Guru Lintas Unit:</strong> Peran operasional yang ditambahkan akan berlaku khusus di unit sekolah ini saja tanpa mengubah Unit Induk / Rapor AKFI pegawainya.
+            </div>
+
             <div style="margin-bottom: 16px;">
                 <label style="display: block; font-weight: 600; font-size: 13px; margin-bottom: 4px;">Pilih Peran yang Ingin Ditambahkan <span style="color:red;">*</span></label>
-                <select name="role_id" class="form-control" required style="width: 100%; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px;">
+                <select name="role_id" id="assign_role_select" class="form-control" required style="width: 100%; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px;">
                     <option value="">-- Pilih Peran --</option>
                     <?php foreach ($roles as $r): ?>
-                        <option value="<?= $r['id'] ?>"><?= SecurityHelper::escape($r['display_name']) ?> (<?= $r['name'] ?>)</option>
+                        <option value="<?= $r['id'] ?>" data-role-name="<?= SecurityHelper::escape($r['name']) ?>"><?= SecurityHelper::escape($r['display_name']) ?> (<?= $r['name'] ?>)</option>
                     <?php endforeach; ?>
                 </select>
             </div>
@@ -891,11 +908,24 @@ function openAssignRoleModalFromBtn(btn) {
     const userId = btn.getAttribute('data-user-id');
     const username = btn.getAttribute('data-username') || '';
     const fullName = btn.getAttribute('data-fullname') || '';
-    openAssignRoleModal(userId, username, fullName);
+    const isCrossUnit = btn.getAttribute('data-cross-unit') === '1';
+    openAssignRoleModal(userId, username, fullName, isCrossUnit);
 }
-function openAssignRoleModal(userId, username, fullName) {
+function openAssignRoleModal(userId, username, fullName, isCrossUnit = false) {
     document.getElementById('assign_user_id').value = userId;
     document.getElementById('assign_user_info').textContent = fullName + ' (' + username + ')';
+    const notice = document.getElementById('assign_cross_unit_notice');
+    if (notice) notice.style.display = isCrossUnit ? 'block' : 'none';
+    const sel = document.getElementById('assign_role_select');
+    if (sel) {
+        sel.value = '';
+        Array.from(sel.options).forEach(opt => {
+            const rName = opt.getAttribute('data-role-name') || '';
+            const hideOpt = isCrossUnit && rName === 'kepala_sekolah';
+            opt.hidden = hideOpt;
+            opt.disabled = hideOpt;
+        });
+    }
     let m = document.getElementById('modalAssignRole');
     if (m) m.style.display = 'flex';
 }

@@ -87,25 +87,45 @@ include __DIR__ . '/sidebar.php';
                 </div>
 
                 <!-- Search & Filters -->
-                <div style="padding: 16px 24px; border-bottom: 1px solid var(--border-color, #e2e8f0); background: #f8fafc;">
-                    <div style="position: relative; margin-bottom: 12px;">
-                        <i class="fa-solid fa-magnifying-glass" style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: #94a3b8; font-size: 14px;"></i>
-                        <input type="text" id="switchUserSearch" placeholder="Ketik nama pengguna, username, peranan/jabatan, atau nama unit sekolah..." style="width: 100%; padding: 10px 14px 10px 38px; border: 1.5px solid #cbd5e1; border-radius: 10px; font-size: 13px; outline: none; transition: all 0.15s;" onfocus="this.style.borderColor='#0284c7'; this.style.boxShadow='0 0 0 3px rgba(2,132,199,0.15)'" onblur="this.style.borderColor='#cbd5e1'; this.style.boxShadow='none'" oninput="filterSwitchUsers()">
+                <div style="padding: 14px 24px; border-bottom: 1px solid var(--border-color, #e2e8f0); background: #f8fafc;">
+                    <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 10px;">
+                        <div style="position: relative; flex: 1;">
+                            <i class="fa-solid fa-magnifying-glass" style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: #94a3b8; font-size: 14px;"></i>
+                            <input type="text" id="switchUserSearch" placeholder="Ketik nama pengguna, username, seluruh peran, atau nama unit..." style="width: 100%; padding: 9px 14px 9px 38px; border: 1.5px solid #cbd5e1; border-radius: 10px; font-size: 13px; outline: none; transition: all 0.15s;" onfocus="this.style.borderColor='#0284c7'; this.style.boxShadow='0 0 0 3px rgba(2,132,199,0.15)'" onblur="this.style.borderColor='#cbd5e1'; this.style.boxShadow='none'" oninput="filterSwitchUsers()">
+                        </div>
+                        <span id="switchVisibleCount" class="badge badge-info" style="font-size: 11px; padding: 5px 10px; white-space: nowrap;">
+                            <?= count($switchableUsers ?? []) ?> Akun
+                        </span>
                     </div>
 
-                    <!-- Filter Kategori Cepat -->
-                    <div style="display: flex; gap: 6px; flex-wrap: wrap;">
-                        <button type="button" class="btn-quick-cat active" onclick="filterSwitchCat('', this)">Semua (<?= count($switchableUsers ?? []) ?>)</button>
+                    <!-- Baris 1: Klasifikasi Unit Sekolah & Lintas Unit -->
+                    <div style="display: flex; gap: 5px; flex-wrap: wrap; align-items: center; margin-bottom: 7px;">
+                        <span style="font-size: 10.5px; font-weight: 700; color: #64748b; text-transform: uppercase; margin-right: 4px;"><i class="fa-solid fa-school"></i> Unit:</span>
+                        <button type="button" class="btn-quick-unit active" onclick="filterSwitchUnit('', this)">Semua Unit</button>
+                        <button type="button" class="btn-quick-unit" onclick="filterSwitchUnit('yayasan', this)">Yayasan</button>
+                        <?php foreach ($globalUnits ?? [] as $gu): ?>
+                            <button type="button" class="btn-quick-unit" onclick="filterSwitchUnit('unit_<?= (int)$gu['id'] ?>', this)"><?= \Core\SecurityHelper::escape($gu['code'] ?: $gu['name']) ?></button>
+                        <?php endforeach; ?>
+                        <button type="button" class="btn-quick-unit" onclick="filterSwitchUnit('cross_unit', this)" style="border-color: #f59e0b; color: #b45309;"><i class="fa-solid fa-shuffle" style="font-size: 10px;"></i> Lintas Unit</button>
+                    </div>
+
+                    <!-- Baris 2: Klasifikasi Seluruh Peran (Tidak Hanya Role Utama) -->
+                    <div style="display: flex; gap: 5px; flex-wrap: wrap; align-items: center;">
+                        <span style="font-size: 10.5px; font-weight: 700; color: #64748b; text-transform: uppercase; margin-right: 4px;"><i class="fa-solid fa-user-tag"></i> Peran:</span>
+                        <button type="button" class="btn-quick-cat active" onclick="filterSwitchCat('', this)">Semua</button>
                         <button type="button" class="btn-quick-cat" onclick="filterSwitchCat('pimpinan', this)">Pimpinan / Deputi</button>
                         <button type="button" class="btn-quick-cat" onclick="filterSwitchCat('kepsek', this)">Kepala Sekolah</button>
-                        <button type="button" class="btn-quick-cat" onclick="filterSwitchCat('tu', this)">Tata Usaha</button>
+                        <button type="button" class="btn-quick-cat" onclick="filterSwitchCat('waka', this)">Waka &amp; Koor</button>
                         <button type="button" class="btn-quick-cat" onclick="filterSwitchCat('guru', this)">Guru &amp; Walas</button>
+                        <button type="button" class="btn-quick-cat" onclick="filterSwitchCat('tu', this)">Tata Usaha</button>
                         <button type="button" class="btn-quick-cat" onclick="filterSwitchCat('operator', this)">Operator</button>
+                        <button type="button" class="btn-quick-cat" onclick="filterSwitchCat('staf', this)">Staf Unit</button>
+                        <button type="button" class="btn-quick-cat" onclick="filterSwitchCat('ortu_siswa', this)">Ortu &amp; Siswa</button>
                     </div>
                 </div>
 
                 <!-- List Users -->
-                <div style="flex: 1; overflow-y: auto; padding: 12px 24px; max-height: calc(85vh - 220px);" id="switchUserList">
+                <div style="flex: 1; overflow-y: auto; padding: 12px 24px; max-height: calc(85vh - 250px);" id="switchUserList">
                     <?php if (empty($switchableUsers)): ?>
                         <div style="text-align: center; padding: 40px; color: #94a3b8;">
                             <i class="fa-solid fa-users-slash" style="font-size: 32px; margin-bottom: 10px; display: block;"></i>
@@ -115,25 +135,90 @@ include __DIR__ . '/sidebar.php';
                         <div style="display: flex; flex-direction: column; gap: 8px;">
                             <?php foreach ($switchableUsers as $u): 
                                 $isCurrent = ($currentUser && (int)$currentUser['id'] === (int)$u['id']);
-                                $roleDisplay = $u['role_display'] ?? 'Pengguna';
-                                $unitName = $u['unit_name'] ?? 'Yayasan';
-                                $roleNameLower = strtolower($u['role_name'] ?? '');
-                                $roleDisplayLower = strtolower($roleDisplay);
+                                $unitName = $u['unit_name'] ?? 'Yayasan / Pusat';
+                                $homeUnitId = (int)($u['home_unit_id'] ?? 0);
+                                $crossUnitNames = trim((string)($u['cross_unit_names'] ?? ''));
 
-                                $catKey = 'lainnya';
-                                if (strpos($roleNameLower, 'direktur') !== false || strpos($roleNameLower, 'deputi') !== false || strpos($roleNameLower, 'pembina') !== false || strpos($roleNameLower, 'yayasan') !== false) {
-                                    $catKey = 'pimpinan';
-                                } elseif (strpos($roleNameLower, 'kepala_sekolah') !== false || strpos($roleDisplayLower, 'kepala sekolah') !== false) {
-                                    $catKey = 'kepsek';
-                                } elseif ($roleNameLower === 'tata_usaha' || strpos($roleDisplayLower, 'tata usaha') !== false) {
-                                    $catKey = 'tu';
-                                } elseif (strpos($roleNameLower, 'operator') !== false || strpos($roleDisplayLower, 'operator') !== false) {
-                                    $catKey = 'operator';
-                                } elseif (strpos($roleNameLower, 'guru') !== false || strpos($roleNameLower, 'walas') !== false || strpos($roleNameLower, 'wali_kelas') !== false || strpos($roleDisplayLower, 'guru') !== false) {
-                                    $catKey = 'guru';
+                                // Parse seluruh role user (Induk maupun Lintas Unit)
+                                $roleEntries = [];
+                                $rawEntries = array_filter(explode(';;', (string)($u['all_role_entries'] ?? '')));
+                                foreach ($rawEntries as $re) {
+                                    $p = explode('|', $re);
+                                    if (!empty($p[0])) {
+                                        $roleEntries[] = [
+                                            'name'    => $p[0],
+                                            'display' => $p[1] ?: $p[0],
+                                            'unit_id' => (int)($p[2] ?? 0),
+                                            'u_code'  => $p[3] ?? ''
+                                        ];
+                                    }
                                 }
+                                if (empty($roleEntries)) {
+                                    $roleEntries[] = [
+                                        'name'    => $u['role_name'] ?? '',
+                                        'display' => $u['role_display'] ?? 'Pengguna',
+                                        'unit_id' => 0,
+                                        'u_code'  => ''
+                                    ];
+                                }
+
+                                // Klasifikasikan SELURUH role milik user agar muncul pada semua tab kategori yang sesuai
+                                $catSet = [];
+                                $searchRoles = [];
+                                foreach ($roleEntries as $re) {
+                                    $rLow = strtolower($re['name']);
+                                    $searchRoles[] = $re['display'] . ($re['u_code'] ? ' ' . $re['u_code'] : '');
+                                    if (in_array($rLow, ['direktur_pendidikan', 'deputi_pendidikan', 'pembina_yayasan', 'direktur_pengadaan', 'direktur_sarpras', 'hrd', 'operator_yayasan'], true)
+                                        || str_contains($rLow, 'direktur') || str_contains($rLow, 'deputi') || str_contains($rLow, 'pembina') || str_contains($rLow, 'yayasan')) {
+                                        $catSet['pimpinan'] = true;
+                                    }
+                                    if ($rLow === 'kepala_sekolah' || str_contains($rLow, 'kepala_sekolah')) {
+                                        $catSet['kepsek'] = true;
+                                    }
+                                    if (in_array($rLow, ['waka_kurikulum', 'waka_kesiswaan', 'koor_tahfidz', 'guru_supervisor', 'tutor_siswa', 'tutor_sebaya'], true)) {
+                                        $catSet['waka'] = true;
+                                    }
+                                    if (str_contains($rLow, 'guru') || str_contains($rLow, 'walas') || str_contains($rLow, 'wali_kelas') || $rLow === 'panitia_lomba') {
+                                        $catSet['guru'] = true;
+                                    }
+                                    if ($rLow === 'tata_usaha') {
+                                        $catSet['tu'] = true;
+                                    }
+                                    if (str_contains($rLow, 'operator') && $rLow !== 'operator_yayasan') {
+                                        $catSet['operator'] = true;
+                                    }
+                                    if (in_array($rLow, ['sarpras', 'cleaning_service', 'security'], true)) {
+                                        $catSet['staf'] = true;
+                                    }
+                                    if (in_array($rLow, ['orang_tua', 'siswa'], true)) {
+                                        $catSet['ortu_siswa'] = true;
+                                    }
+                                }
+                                if (empty($catSet)) {
+                                    $catSet['lainnya'] = true;
+                                }
+                                $catsAttr = implode(' ', array_keys($catSet));
+
+                                // Bangun token Unit: unit induk + semua unit lintas unit + penanda yayasan/cross_unit
+                                $unitTokens = [];
+                                if ($homeUnitId > 0) {
+                                    $unitTokens['unit_' . $homeUnitId] = true;
+                                } else {
+                                    $unitTokens['yayasan'] = true;
+                                }
+                                if (!empty($catSet['pimpinan'])) {
+                                    $unitTokens['yayasan'] = true;
+                                }
+                                $crossIds = array_filter(explode(',', (string)($u['cross_unit_ids'] ?? '')));
+                                foreach ($crossIds as $cUid) {
+                                    $unitTokens['unit_' . (int)$cUid] = true;
+                                    $unitTokens['cross_unit'] = true;
+                                }
+                                $unitsAttr = implode(' ', array_keys($unitTokens));
+
+                                $searchBlob = strtolower($u['full_name'] . ' ' . $u['username'] . ' ' . implode(' ', $searchRoles) . ' ' . $unitName . ' ' . $crossUnitNames);
                             ?>
-                                <div class="switch-user-row" data-cat="<?= $catKey ?>" data-search="<?= strtolower(htmlspecialchars($u['full_name'] . ' ' . $u['username'] . ' ' . $roleDisplay . ' ' . $unitName, ENT_QUOTES, 'UTF-8')) ?>" data-role="<?= strtolower(htmlspecialchars($roleDisplay, ENT_QUOTES, 'UTF-8')) ?>" style="display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; border: 1px solid #e2e8f0; border-radius: 10px; background: <?= $isCurrent ? '#f0fdf4' : '#ffffff' ?>; transition: all 0.15s; gap: 12px;">
+                                <div class="switch-user-row" data-cats="<?= htmlspecialchars($catsAttr, ENT_QUOTES, 'UTF-8') ?>" data-units="<?= htmlspecialchars($unitsAttr, ENT_QUOTES, 'UTF-8') ?>" data-search="<?= htmlspecialchars($searchBlob, ENT_QUOTES, 'UTF-8') ?>" style="display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; border: 1px solid #e2e8f0; border-radius: 10px; background: <?= $isCurrent ? '#f0fdf4' : '#ffffff' ?>; transition: all 0.15s; gap: 12px;">
                                     <div style="display: flex; align-items: center; gap: 12px; min-width: 0;">
                                         <div style="width: 38px; height: 38px; border-radius: 50%; background: <?= $isCurrent ? '#16a34a' : '#e0f2fe' ?>; color: <?= $isCurrent ? '#ffffff' : '#0284c7' ?>; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px; flex-shrink: 0;">
                                             <?= strtoupper(substr($u['full_name'] ?: 'U', 0, 1)) ?>
@@ -145,12 +230,21 @@ include __DIR__ . '/sidebar.php';
                                                     <span class="badge badge-success" style="font-size: 10px; margin-left: 4px; padding: 2px 6px;">Sedang Aktif</span>
                                                 <?php endif; ?>
                                             </div>
-                                            <div style="display: flex; align-items: center; gap: 6px; font-size: 11px; color: #64748b; margin-top: 2px; flex-wrap: wrap;">
+                                            <div style="display: flex; align-items: center; gap: 5px; font-size: 11px; color: #64748b; margin-top: 3px; flex-wrap: wrap;">
                                                 <span style="font-family: monospace; color: #0284c7; font-weight: 600;">@<?= \Core\SecurityHelper::escape($u['username']) ?></span>
                                                 <span>&bull;</span>
-                                                <span class="badge badge-secondary" style="font-size: 10.5px; padding: 2px 6px;"><?= \Core\SecurityHelper::escape($roleDisplay) ?></span>
-                                                <span>&bull;</span>
-                                                <span style="color: #64748b;"><i class="fa-solid fa-school" style="font-size: 9.5px; margin-right: 2px;"></i><?= \Core\SecurityHelper::escape($unitName) ?></span>
+                                                <span style="color: #475569; font-weight: 600;"><i class="fa-solid fa-school" style="font-size: 9.5px; margin-right: 2px;"></i><?= \Core\SecurityHelper::escape($unitName) ?></span>
+                                                <?php foreach ($roleEntries as $idxR => $re): ?>
+                                                    <?php if ($re['unit_id'] > 0): ?>
+                                                        <span class="badge" style="font-size: 10px; padding: 2px 6px; background: #fef3c7; color: #b45309; border: 1px solid #fcd34d;" title="Penugasan Lintas Unit">
+                                                            <?= \Core\SecurityHelper::escape($re['display']) ?> [<?= \Core\SecurityHelper::escape($re['u_code'] ?: 'Lintas') ?>]
+                                                        </span>
+                                                    <?php else: ?>
+                                                        <span class="badge badge-secondary" style="font-size: 10px; padding: 2px 6px; <?= $idxR === 0 ? 'background:#e0f2fe; color:#0369a1; border:1px solid #bae6fd;' : '' ?>">
+                                                            <?= \Core\SecurityHelper::escape($re['display']) ?>
+                                                        </span>
+                                                    <?php endif; ?>
+                                                <?php endforeach; ?>
                                             </div>
                                         </div>
                                     </div>
@@ -194,7 +288,7 @@ include __DIR__ . '/sidebar.php';
                 from { transform: scale(0.95); opacity: 0; }
                 to { transform: scale(1); opacity: 1; }
             }
-            .btn-quick-cat {
+            .btn-quick-cat, .btn-quick-unit {
                 background: #ffffff;
                 border: 1px solid #cbd5e1;
                 color: #475569;
@@ -205,7 +299,7 @@ include __DIR__ . '/sidebar.php';
                 cursor: pointer;
                 transition: all 0.15s;
             }
-            .btn-quick-cat:hover {
+            .btn-quick-cat:hover, .btn-quick-unit:hover {
                 border-color: #0284c7;
                 color: #0284c7;
             }
@@ -213,6 +307,11 @@ include __DIR__ . '/sidebar.php';
                 background: #0284c7;
                 border-color: #0284c7;
                 color: #ffffff;
+            }
+            .btn-quick-unit.active {
+                background: #0f766e !important;
+                border-color: #0f766e !important;
+                color: #ffffff !important;
             }
             .switch-user-row:hover {
                 border-color: #38bdf8 !important;
@@ -222,6 +321,7 @@ include __DIR__ . '/sidebar.php';
 
         <script>
             let currentCatFilter = '';
+            let currentUnitFilter = '';
 
             function openSwitchUserModal() {
                 const modal = document.getElementById('switchUserModal');
@@ -243,8 +343,15 @@ include __DIR__ . '/sidebar.php';
                 }
             }
 
+            function filterSwitchUnit(unitToken, btn) {
+                currentUnitFilter = (unitToken || '').toLowerCase();
+                document.querySelectorAll('.btn-quick-unit').forEach(b => b.classList.remove('active'));
+                if (btn) btn.classList.add('active');
+                filterSwitchUsers();
+            }
+
             function filterSwitchCat(pattern, btn) {
-                currentCatFilter = pattern.toLowerCase();
+                currentCatFilter = (pattern || '').toLowerCase();
                 document.querySelectorAll('.btn-quick-cat').forEach(b => b.classList.remove('active'));
                 if (btn) btn.classList.add('active');
                 filterSwitchUsers();
@@ -253,16 +360,24 @@ include __DIR__ . '/sidebar.php';
             function filterSwitchUsers() {
                 const query = (document.getElementById('switchUserSearch')?.value || '').toLowerCase().trim();
                 const rows = document.querySelectorAll('.switch-user-row');
-                
+                let visibleCount = 0;
+
                 rows.forEach(row => {
                     const searchData = row.getAttribute('data-search') || '';
-                    const catData = row.getAttribute('data-cat') || '';
-                    
-                    let matchesText = !query || searchData.includes(query);
-                    let matchesCat = !currentCatFilter || (catData === currentCatFilter);
+                    const cats = (row.getAttribute('data-cats') || '').split(/\s+/);
+                    const units = (row.getAttribute('data-units') || '').split(/\s+/);
 
-                    row.style.display = (matchesText && matchesCat) ? 'flex' : 'none';
+                    const matchesText = !query || searchData.includes(query);
+                    const matchesCat = !currentCatFilter || cats.includes(currentCatFilter);
+                    const matchesUnit = !currentUnitFilter || units.includes(currentUnitFilter);
+
+                    const show = matchesText && matchesCat && matchesUnit;
+                    row.style.display = show ? 'flex' : 'none';
+                    if (show) visibleCount++;
                 });
+
+                const countEl = document.getElementById('switchVisibleCount');
+                if (countEl) countEl.textContent = visibleCount + ' Akun';
             }
 
             document.addEventListener('keydown', function(e) {

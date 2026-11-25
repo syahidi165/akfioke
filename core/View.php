@@ -54,31 +54,44 @@ class View {
         $switchableUsers = [];
         if ($canSwitchUser) {
             try {
+                \App\Controllers\MasterController::ensureUserRolesUnitColumn();
+                $selectCols = "
+                    u.id, u.username, u.full_name, u.email,
+                    COALESCE(u.unit_id, e.unit_id, 0) as home_unit_id,
+                    COALESCE(un.name, 'Yayasan / Pusat') as unit_name,
+                    (SELECT r1.display_name FROM roles r1 JOIN user_roles ur1 ON r1.id = ur1.role_id WHERE ur1.user_id = u.id ORDER BY ur1.is_primary DESC, r1.id ASC LIMIT 1) as role_display,
+                    (SELECT r1.name FROM roles r1 JOIN user_roles ur1 ON r1.id = ur1.role_id WHERE ur1.user_id = u.id ORDER BY ur1.is_primary DESC, r1.id ASC LIMIT 1) as role_name,
+                    GROUP_CONCAT(DISTINCT r.name ORDER BY COALESCE(ur.unit_id, 0) ASC, ur.is_primary DESC, r.id ASC SEPARATOR ',') as all_role_names,
+                    GROUP_CONCAT(DISTINCT CONCAT(r.name, '|', r.display_name, '|', COALESCE(ur.unit_id, 0), '|', COALESCE(ur_un.code, '')) ORDER BY COALESCE(ur.unit_id, 0) ASC, ur.is_primary DESC, r.id ASC SEPARATOR ';;') as all_role_entries,
+                    GROUP_CONCAT(DISTINCT CASE WHEN COALESCE(ur.unit_id, 0) > 0 THEN ur.unit_id END ORDER BY ur.unit_id ASC SEPARATOR ',') as cross_unit_ids,
+                    GROUP_CONCAT(DISTINCT CASE WHEN COALESCE(ur.unit_id, 0) > 0 THEN ur_un.name END ORDER BY ur_un.id ASC SEPARATOR ', ') as cross_unit_names
+                ";
+
                 if ($origIsOperatorYayasan) {
                     $switchableUsers = Database::fetchAll("
-                        SELECT u.id, u.username, u.full_name, u.email,
-                               COALESCE(un.name, 'Yayasan / Lintas Unit') as unit_name,
-                               (SELECT r.display_name FROM roles r JOIN user_roles ur ON r.id = ur.role_id WHERE ur.user_id = u.id ORDER BY ur.is_primary DESC, r.id ASC LIMIT 1) as role_display,
-                               (SELECT r.name FROM roles r JOIN user_roles ur ON r.id = ur.role_id WHERE ur.user_id = u.id ORDER BY ur.is_primary DESC, r.id ASC LIMIT 1) as role_name
+                        SELECT {$selectCols}
                         FROM users u
                         LEFT JOIN employees e ON u.id = e.user_id AND e.is_deleted = 0
                         LEFT JOIN units un ON COALESCE(u.unit_id, e.unit_id) = un.id
+                        LEFT JOIN user_roles ur ON u.id = ur.user_id
+                        LEFT JOIN roles r ON ur.role_id = r.id
+                        LEFT JOIN units ur_un ON ur.unit_id = ur_un.id
                         WHERE u.is_active = 1
-                        GROUP BY u.id, u.username, u.full_name, u.email, un.name
+                        GROUP BY u.id, u.username, u.full_name, u.email, un.id, un.name, u.unit_id, e.unit_id
                         ORDER BY un.name ASC, role_display ASC, u.full_name ASC
                     ");
                 } else {
                     $switchableUsers = Database::fetchAll("
-                        SELECT u.id, u.username, u.full_name, u.email,
-                               COALESCE(un.name, 'Yayasan / Lintas Unit') as unit_name,
-                               (SELECT r.display_name FROM roles r JOIN user_roles ur ON r.id = ur.role_id WHERE ur.user_id = u.id ORDER BY ur.is_primary DESC, r.id ASC LIMIT 1) as role_display,
-                               (SELECT r.name FROM roles r JOIN user_roles ur ON r.id = ur.role_id WHERE ur.user_id = u.id ORDER BY ur.is_primary DESC, r.id ASC LIMIT 1) as role_name
+                        SELECT {$selectCols}
                         FROM users u
                         JOIN user_switch_permissions usp ON u.id = usp.target_user_id
                         LEFT JOIN employees e ON u.id = e.user_id AND e.is_deleted = 0
                         LEFT JOIN units un ON COALESCE(u.unit_id, e.unit_id) = un.id
+                        LEFT JOIN user_roles ur ON u.id = ur.user_id
+                        LEFT JOIN roles r ON ur.role_id = r.id
+                        LEFT JOIN units ur_un ON ur.unit_id = ur_un.id
                         WHERE usp.user_id = ? AND u.is_active = 1
-                        GROUP BY u.id, u.username, u.full_name, u.email, un.name
+                        GROUP BY u.id, u.username, u.full_name, u.email, un.id, un.name, u.unit_id, e.unit_id
                         ORDER BY un.name ASC, role_display ASC, u.full_name ASC
                     ", [$origUserId]);
                 }
