@@ -598,25 +598,30 @@ foreach ($bills as $b) {
     </div>
 </div>
 
-<!-- Modal Impor Tagihan Excel (FR 8001A) -> Verifikasi Pratinjau -->
+<!-- Modal Impor Tagihan Braja / Excel (FR 8001A) -> Model Timpa & Verifikasi Pratinjau -->
 <div id="modalImportTagihan" class="modal-backdrop" style="display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.6); z-index: 9999; align-items: center; justify-content: center; backdrop-filter: blur(2px);">
-    <div style="background: #fff; width: 100%; max-width: 540px; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.15); overflow: hidden; margin: 20px;">
+    <div style="background: #fff; width: 100%; max-width: 560px; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.15); overflow: hidden; margin: 20px;">
         <div style="background: #f0fdf4; border-bottom: 1px solid #dcfce7; padding: 16px 20px; display: flex; justify-content: space-between; align-items: center;">
             <h4 style="margin: 0; font-size: 1rem; font-weight: 700; color: #166534; display: flex; align-items: center; gap: 8px;">
-                <i class="fa-solid fa-file-excel"></i> Impor Berkas Tagihan Excel (FR 8001A)
+                <i class="fa-solid fa-file-excel"></i> Impor Laporan Braja / FR 8001A (Model Timpa Saldo)
             </h4>
             <button type="button" onclick="closeImportModal()" style="background: none; border: none; font-size: 1.25rem; cursor: pointer; color: #94a3b8;">&times;</button>
         </div>
         <form action="<?= $baseUrl ?>/tagihan/verify-import" method="POST" enctype="multipart/form-data">
             <?= CSRF::field() ?>
             <div style="padding: 20px;">
-                <div style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 6px; padding: 10px 12px; font-size: 0.8125rem; color: #1e3a8a; margin-bottom: 14px; line-height: 1.5;">
-                    <strong><i class="fa-solid fa-circle-info"></i> Sistem Akumulasi Bulanan Otomatis:</strong>
-                    Isi berkas Excel <strong>FR 8001A</strong> hanya dengan tagihan <strong>bulan berjalan saja</strong>. Saat diimpor, sistem memverifikasi kecocokan NIS/Nama terlebih dahulu lalu otomatis <strong>menambahkan (mengakumulasi)</strong> nominal bulan baru ke sisa tunggakan siswa yang sudah ada (termasuk menambah sisa kewajiban pada Buku Cicilan aktif tanpa mengubah pokok kesepakatan awal).
+                <div style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 6px; padding: 10px 12px; font-size: 0.8125rem; color: #1e3a8a; margin-bottom: 14px; line-height: 1.55;">
+                    <strong><i class="fa-solid fa-circle-info"></i> Sinkronisasi Saldo Langsung dari Braja (Model Timpa):</strong>
+                    <ul style="margin: 4px 0 0 18px; padding: 0;">
+                        <li>Dapat langsung mengunggah file mentah ekspor <strong>Braja</strong> (<code>.xlsx</code> / <code>.xls</code> / <code>.csv</code>) ataupun templat <strong>FR 8001A</strong>. Kop, baris <code>TOTAL</code>, serta pos tambahan (<em>Gedung, Seragam, dll.</em>) diproses otomatis.</li>
+                        <li>Unit <strong>KB, TK, SD, SMP, SMA tetap terpisah</strong>: baris siswa milik unit lain dilewati otomatis tanpa dicampur.</li>
+                        <li>Tagihan lama ditimpa saldo terbaru; siswa yang di Braja menjadi <strong>Rp 0</strong> otomatis ditandai <strong>Lunas</strong>.</li>
+                        <li>Jika siswa punya <strong>Buku Cicilan Aktif</strong>, total hutang &amp; sisa cicilan ikut diperbarui otomatis beserta riwayat catatannya.</li>
+                    </ul>
                 </div>
                 <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 14px;">
                     <div class="form-group" style="margin: 0;">
-                        <label class="form-label" style="font-weight: 600; font-size: 0.75rem;">Bulan Tagihan</label>
+                        <label class="form-label" style="font-weight: 600; font-size: 0.75rem;">Periode s/d Bulan</label>
                         <select name="bill_month" class="form-control" style="font-size: 0.8125rem;">
                             <?php $curM = (int)date('n'); $bulanOpts = [1=>'Januari',2=>'Februari',3=>'Maret',4=>'April',5=>'Mei',6=>'Juni',7=>'Juli',8=>'Agustus',9=>'September',10=>'Oktober',11=>'November',12=>'Desember']; foreach ($bulanOpts as $mNum => $mLbl): ?>
                                 <option value="<?= $mNum ?>" <?= ($mNum === $curM) ? 'selected' : '' ?>><?= $mLbl ?></option>
@@ -633,8 +638,8 @@ foreach ($bills as $b) {
                     </div>
                 </div>
                 <div class="form-group">
-                    <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Pilih Berkas Excel (.xlsx) <span style="color: #ef4444;">*</span></label>
-                    <input type="file" name="excel_file" class="form-control" accept=".xlsx" required style="padding: 8px;">
+                    <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Pilih Berkas Braja / Excel (.xlsx, .xls, .csv) <span style="color: #ef4444;">*</span></label>
+                    <input type="file" name="excel_file" class="form-control" accept=".xlsx,.xls,.csv" required style="padding: 8px;">
                 </div>
             </div>
             <div style="background: #f8fafc; border-top: 1px solid #e2e8f0; padding: 12px 20px; display: flex; justify-content: flex-end; gap: 10px;">
@@ -648,24 +653,36 @@ foreach ($bills as $b) {
 </div>
 
 <?php if (!empty($importPreview)):
-    $validRows   = $importPreview['valid'] ?? [];
-    $invalidRows = $importPreview['invalid'] ?? [];
+    $validRows        = $importPreview['valid'] ?? [];
+    $invalidRows      = $importPreview['invalid'] ?? [];
+    $detectedFmt      = (($importPreview['format'] ?? '') === 'braja') ? 'Format Laporan Braja' : 'Format FR 8001A';
+    $skippedZero      = (int)($importPreview['skipped_zero'] ?? 0);
+    $skippedOtherUnit = (int)($importPreview['skipped_other_unit'] ?? 0);
+    $otherBreakdown   = $importPreview['other_unit_breakdown'] ?? [];
 ?>
 <!-- Modal Verifikasi Hasil Pratinjau Impor Tagihan (Valid vs Bermasalah) -->
 <div id="modalVerifyImportBills" class="modal-backdrop" style="display: flex; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.65); z-index: 10000; align-items: center; justify-content: center; backdrop-filter: blur(2px);">
-    <div style="background: #fff; width: 96%; max-width: 960px; max-height: 90vh; display: flex; flex-direction: column; border-radius: 10px; box-shadow: 0 20px 40px rgba(0,0,0,0.2); overflow: hidden; margin: 16px;">
-        <div style="background: #f0fdfa; border-bottom: 1px solid #ccfbf1; padding: 16px 20px; display: flex; justify-content: space-between; align-items: center;">
+    <div style="background: #fff; width: 96%; max-width: 980px; max-height: 90vh; display: flex; flex-direction: column; border-radius: 10px; box-shadow: 0 20px 40px rgba(0,0,0,0.2); overflow: hidden; margin: 16px;">
+        <div style="background: #f0fdfa; border-bottom: 1px solid #ccfbf1; padding: 16px 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
             <div>
                 <h4 style="margin: 0; font-size: 1.05rem; font-weight: 700; color: #0f766e;">
-                    <i class="fa-solid fa-clipboard-check" style="margin-right: 6px;"></i> Verifikasi Impor Tagihan: <?= SecurityHelper::escape($importPreview['filename'] ?? 'import.xlsx') ?>
+                    <i class="fa-solid fa-clipboard-check" style="margin-right: 6px;"></i> Verifikasi Sinkronisasi Saldo: <?= SecurityHelper::escape($importPreview['filename'] ?? 'import.xlsx') ?>
                 </h4>
                 <div style="font-size: 0.78rem; color: #475569; margin-top: 2px;">
-                    Periode: Bulan <?= (int)$importPreview['bill_month'] ?>/<?= (int)$importPreview['bill_year'] ?> &bull; Jatuh Tempo: <?= SecurityHelper::escape($importPreview['due_date']) ?>
+                    Terdeteksi: <strong><?= $detectedFmt ?></strong> &bull; Periode: Bulan <?= (int)$importPreview['bill_month'] ?>/<?= (int)$importPreview['bill_year'] ?> &bull; Jatuh Tempo: <?= SecurityHelper::escape($importPreview['due_date']) ?>
                 </div>
             </div>
-            <div style="display: flex; gap: 8px; align-items: center;">
-                <span class="badge" style="background: #dcfce7; color: #15803d; padding: 5px 10px;">Valid: <?= count($validRows) ?></span>
+            <div style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap;">
+                <span class="badge" style="background: #dcfce7; color: #15803d; padding: 5px 10px;">Siap Proses: <?= count($validRows) ?></span>
                 <span class="badge" style="background: #fee2e2; color: #b91c1c; padding: 5px 10px;">Bermasalah: <?= count($invalidRows) ?></span>
+                <?php if ($skippedOtherUnit > 0): ?>
+                    <span class="badge" style="background: #e0f2fe; color: #0369a1; padding: 5px 10px;" title="<?php $parts = []; foreach ($otherBreakdown as $uN => $cU) { $parts[] = $uN . ': ' . $cU; } echo SecurityHelper::escape(implode(', ', $parts)); ?>">
+                        Dilewati Unit Lain: <?= $skippedOtherUnit ?>
+                    </span>
+                <?php endif; ?>
+                <?php if ($skippedZero > 0): ?>
+                    <span class="badge" style="background: #f1f5f9; color: #475569; padding: 5px 10px;">Dilewati Saldo Rp 0: <?= $skippedZero ?></span>
+                <?php endif; ?>
             </div>
         </div>
 
@@ -673,7 +690,7 @@ foreach ($bills as $b) {
             <?= CSRF::field() ?>
             <div style="background: #f8fafc; border-bottom: 1px solid #e2e8f0; padding: 10px 20px; display: flex; gap: 8px;">
                 <button type="button" id="btnVerifyTabValid" onclick="switchVerifyTab('valid')" style="padding: 6px 14px; border-radius: 6px; font-weight: 700; font-size: 0.8125rem; border: 1px solid #0d9488; background: #0d9488; color: #fff; cursor: pointer;">
-                    Data Valid (<?= count($validRows) ?>)
+                    Data Siap Simpan (<?= count($validRows) ?>)
                 </button>
                 <button type="button" id="btnVerifyTabInvalid" onclick="switchVerifyTab('invalid')" style="padding: 6px 14px; border-radius: 6px; font-weight: 700; font-size: 0.8125rem; border: 1px solid #cbd5e1; background: #fff; color: #dc2626; cursor: pointer;">
                     Data Bermasalah (<?= count($invalidRows) ?>)
@@ -683,7 +700,7 @@ foreach ($bills as $b) {
             <div style="padding: 16px 20px; overflow-y: auto; flex: 1;">
                 <div id="verifyPaneValid">
                     <?php if (empty($validRows)): ?>
-                        <div style="text-align: center; padding: 30px; color: #64748b;">Tidak ada baris tagihan valid yang siap disimpan.</div>
+                        <div style="text-align: center; padding: 30px; color: #64748b;">Tidak ada perubahan tagihan atau tagihan baru yang perlu disimpan.</div>
                     <?php else: ?>
                         <table class="table" style="width: 100%; border-collapse: collapse; font-size: 0.8125rem;">
                             <thead>
@@ -692,12 +709,14 @@ foreach ($bills as $b) {
                                     <th style="padding: 8px;">Baris</th>
                                     <th style="padding: 8px;">Santri &amp; NIS</th>
                                     <th style="padding: 8px;">Kelas</th>
-                                    <th style="padding: 8px; text-align: right;">Tagihan Bulan Ini</th>
-                                    <th style="padding: 8px;">Mode Impor &amp; Dampak Akumulasi</th>
+                                    <th style="padding: 8px; text-align: right;">Saldo Braja / File</th>
+                                    <th style="padding: 8px;">Aksi Sinkronisasi &amp; Dampak Buku Cicilan</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                <?php foreach ($validRows as $vIdx => $vr): ?>
+                                <?php foreach ($validRows as $vIdx => $vr):
+                                    $act = $vr['action_type'] ?? 'new';
+                                ?>
                                     <tr style="border-bottom: 1px solid #f1f5f9;">
                                         <td style="text-align: center; padding: 8px;">
                                             <input type="checkbox" name="keep_indices[]" value="<?= (int)$vIdx ?>" class="verify-keep-cb" checked>
@@ -710,18 +729,38 @@ foreach ($bills as $b) {
                                         <td style="padding: 8px;"><?= SecurityHelper::escape($vr['class_name'] ?? '-') ?></td>
                                         <td style="padding: 8px; text-align: right; font-weight: 700; font-family: monospace;">
                                             <?= SecurityHelper::formatRupiah((float)$vr['amount']) ?>
+                                            <?php if (!empty($vr['custom_items'])): ?>
+                                                <div style="font-size: 10px; color: #64748b; font-family: sans-serif; font-weight: 400;">
+                                                    (+<?= count($vr['custom_items']) ?> pos tambahan)
+                                                </div>
+                                            <?php endif; ?>
                                         </td>
                                         <td style="padding: 8px;">
-                                            <?php if (!empty($vr['is_accumulation'])): ?>
+                                            <?php if ($act === 'mark_lunas'): ?>
+                                                <span class="badge" style="background: #dcfce7; color: #15803d; font-size: 11px;">
+                                                    <i class="fa-solid fa-circle-check"></i> Lunas di Braja (Rp 0 &mdash; Sebelumnya <?= SecurityHelper::formatRupiah((float)$vr['existing_amount']) ?>)
+                                                </span>
+                                            <?php elseif ($act === 'overwrite'): ?>
                                                 <span class="badge" style="background: #fef3c7; color: #b45309; font-size: 11px;">
-                                                    Akumulasi: <?= SecurityHelper::formatRupiah((float)$vr['existing_amount']) ?> &rarr; <?= SecurityHelper::formatRupiah((float)$vr['new_total']) ?>
+                                                    Timpa Saldo: <?= SecurityHelper::formatRupiah((float)$vr['existing_amount']) ?> &rarr; <?= SecurityHelper::formatRupiah((float)$vr['new_total']) ?>
                                                 </span>
                                             <?php else: ?>
-                                                <span class="badge" style="background: #dcfce7; color: #15803d; font-size: 11px;">Tagihan Baru</span>
+                                                <span class="badge" style="background: #e0f2fe; color: #0369a1; font-size: 11px;">Tagihan Baru</span>
                                             <?php endif; ?>
-                                            <?php if (!empty($vr['has_installment'])): ?>
-                                                <div style="font-size: 11px; color: #0284c7; margin-top: 3px;">
-                                                    <i class="fa-solid fa-book-bookmark"></i> Menambah Sisa Buku Cicilan (<?= SecurityHelper::escape($vr['agreement_number']) ?>)
+                                            <?php if (!empty($vr['has_installment'])):
+                                                $d = (float)($vr['inst_delta'] ?? 0);
+                                            ?>
+                                                <div style="font-size: 11px; color: #0284c7; margin-top: 4px; line-height: 1.4;">
+                                                    <i class="fa-solid fa-book-bookmark"></i> <strong>Buku Cicilan (<?= SecurityHelper::escape($vr['agreement_number']) ?>):</strong>
+                                                    <?php if ($act === 'mark_lunas'): ?>
+                                                        Otomatis ditandai <strong>Lunas</strong> + catatan otomatis.
+                                                    <?php elseif ($d > 0.5): ?>
+                                                        Hutang baru +<?= SecurityHelper::formatRupiah($d) ?> &rarr; Total Hutang <?= SecurityHelper::formatRupiah((float)$vr['inst_new_total']) ?>, Sisa <?= SecurityHelper::formatRupiah((float)$vr['new_total']) ?> (+ catatan).
+                                                    <?php elseif ($d < -0.5): ?>
+                                                        Saldo turun -<?= SecurityHelper::formatRupiah(abs($d)) ?> &rarr; Sisa <?= SecurityHelper::formatRupiah((float)$vr['new_total']) ?> (+ catatan).
+                                                    <?php else: ?>
+                                                        Saldo cicilan sudah sesuai.
+                                                    <?php endif; ?>
                                                 </div>
                                             <?php endif; ?>
                                         </td>
@@ -736,14 +775,14 @@ foreach ($bills as $b) {
                     <?php if (empty($invalidRows)): ?>
                         <div style="text-align: center; padding: 30px; color: #16a34a;">
                             <i class="fa-solid fa-circle-check" style="font-size: 2rem; display: block; margin-bottom: 8px;"></i>
-                            Seluruh baris Excel valid tanpa masalah.
+                            Seluruh baris sesuai tanpa data bermasalah.
                         </div>
                     <?php else: ?>
                         <table class="table" style="width: 100%; border-collapse: collapse; font-size: 0.8125rem;">
                             <thead>
                                 <tr style="background: #fef2f2; border-bottom: 2px solid #fecaca;">
                                     <th style="padding: 8px;">Baris</th>
-                                    <th style="padding: 8px;">NIS &amp; Nama di Excel</th>
+                                    <th style="padding: 8px;">NIS &amp; Nama di File</th>
                                     <th style="padding: 8px;">Kelas</th>
                                     <th style="padding: 8px; text-align: right;">Nominal Terbaca</th>
                                     <th style="padding: 8px;">Keterangan Masalah</th>
@@ -772,7 +811,7 @@ foreach ($bills as $b) {
                 <button type="submit" name="action" value="cancel" class="btn btn-outline">Batalkan Pratinjau</button>
                 <?php if (!empty($validRows)): ?>
                     <button type="submit" name="action" value="commit" class="btn btn-primary" style="background: #16a34a; border-color: #16a34a; font-weight: 600;">
-                        <i class="fa-solid fa-check-double" style="margin-right: 6px;"></i> Simpan Data Valid Terpilih
+                        <i class="fa-solid fa-check-double" style="margin-right: 6px;"></i> Simpan Perubahan Terpilih
                     </button>
                 <?php endif; ?>
             </div>

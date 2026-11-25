@@ -165,6 +165,11 @@ $baseUrl = Auth::baseUrl();
                                     <div style="font-size: 0.75rem; color: #64748b; margin-top: 2px;">
                                         Tgl Akad: <?= SecurityHelper::formatTanggalIndo($ins['agreement_date']) ?>
                                     </div>
+                                    <?php if (!empty($ins['notes']) && str_contains($ins['notes'], 'Update Impor')): ?>
+                                        <span class="badge" style="font-size: 10px; background: #fef3c7; color: #b45309; margin-top: 3px;" title="Terdapat catatan otomatis pembaruan dari Impor Braja — klik ikon riwayat untuk membaca">
+                                            <i class="fa-solid fa-note-sticky"></i> Ada Update Hutang
+                                        </span>
+                                    <?php endif; ?>
                                 </td>
 
                                 <td style="padding: 10px;">
@@ -176,7 +181,7 @@ $baseUrl = Auth::baseUrl();
                                         <div style="width: <?= $percent ?>%; height: 100%; background: <?= $isLunas ? '#10b981' : '#0284c7' ?>; border-radius: 4px;"></div>
                                     </div>
                                     <div style="font-size: 0.75rem; color: #64748b; margin-top: 3px;">
-                                        Total Awal: <?= SecurityHelper::formatRupiah($totalDebt) ?>
+                                        Total Hutang: <?= SecurityHelper::formatRupiah($totalDebt) ?>
                                     </div>
                                 </td>
 
@@ -272,6 +277,16 @@ $baseUrl = Auth::baseUrl();
                                                 <?php endforeach; ?>
                                             </tbody>
                                         </table>
+                                    <?php endif; ?>
+                                    <?php if (!empty(trim((string)($ins['notes'] ?? '')))): ?>
+                                        <div style="margin-top: 10px; background: #fffbeb; border: 1px solid #fde68a; border-radius: 6px; padding: 10px 12px;">
+                                            <div style="font-weight: 700; font-size: 0.78rem; color: #92400e; margin-bottom: 4px; display: flex; align-items: center; gap: 6px;">
+                                                <i class="fa-solid fa-clock-rotate-left"></i> Catatan Otomatis / Log Pembaruan Cicilan:
+                                            </div>
+                                            <div style="font-size: 0.78rem; color: #78350f; line-height: 1.5;">
+                                                <?= nl2br(SecurityHelper::escape(trim((string)$ins['notes']))) ?>
+                                            </div>
+                                        </div>
                                     <?php endif; ?>
                                 </td>
                             </tr>

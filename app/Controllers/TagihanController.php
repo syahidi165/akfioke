@@ -404,14 +404,25 @@ class TagihanController extends Controller {
         }
 
         $filename = 'Format_FR8001A_Tagihan_' . preg_replace('/[^a-zA-Z0-9]/', '_', $unitName) . '_' . date('Y_m');
-        ExportHelper::xlsx($headers, $rows, $filename, "Format Tagihan Bulanan Akumulatif (FR 8001A) - {$unitName}");
+        ExportHelper::xlsx($headers, $rows, $filename, "Format Tagihan Siswa (FR 8001A) - {$unitName}");
     }
 
     /**
-     * Parsing file Excel FR 8001A dan mencocokkan terhadap master siswa unit serta tunggakan berjalan.
+     * Parsing file laporan Braja (.xlsx/.xls/.csv) atau format FR 8001A (Model Timpa / Sinkronisasi Saldo).
+     * - Mengabaikan kop, judul, baris kosong, dan baris TOTAL.
+     * - Memetakan kolom biaya dinamis (kolom tambahan seperti GEDUNG / SERAGAM masuk ke custom_items).
+     * - Menjaga isolasi unit secara ketat (baris siswa milik unit lain dilewati tanpa dicampur).
      */
-    private function parseImportExcelRows(string $filePath, int $unitId, int $taId): array {
-        $spreadsheet = \PhpOffice\PhpSpreadsheet\IOFactory::load($filePath);
+    private function parseImportExcelRows(string $filePath, int $unitId, int $taId, string $originalFilename = ''): array {
+        $ext = strtolower(pathinfo($originalFilename ?: $filePath, PATHINFO_EXTENSION));
+        if ($ext === 'csv') {
+            $reader = new \PhpOffice\PhpSpreadsheet\Reader\Csv();
+            $sample = (string)@file_get_contents($filePath, false, null, 0, 2048);
+            $reader->setDelimiter(substr_count($sample, ';') > substr_count($sample, ',') ? ';' : ',');
+            $spreadsheet = $reader->load($filePath);
+        } else {
+            $spreadsheet = \PhpOffice\PhpSpreadsheet\IOFactory::load($filePath);
+        }
         $sheet = $spreadsheet->getActiveSheet();
         $rows = $sheet->toArray(null, true, true, true);
 
@@ -429,11 +440,16 @@ class TagihanController extends Controller {
         );
 
         $studentByNis = [];
+        $studentByNisTrimmed = [];
         $studentByName = [];
         foreach ($students as $st) {
             $cleanNis = trim((string)$st['nis']);
             if ($cleanNis !== '') {
                 $studentByNis[$cleanNis] = $st;
+                $trimNis = ltrim($cleanNis, '0');
+                if ($trimNis !== '') {
+                    $studentByNisTrimmed[$trimNis] = $st;
+                }
             }
             $cleanName = strtolower(preg_replace('/\s+/', ' ', trim((string)$st['nama'])));
             if ($cleanName !== '') {
@@ -441,7 +457,33 @@ class TagihanController extends Controller {
             }
         }
 
-        // Ambil tunggakan aktif & buku cicilan aktif per student_id untuk kalkulasi akumulasi preview
+        // Peta siswa unit lain agar file lintas jenjang (misal KB+TK di 1 ekspor Braja) tetap terpisah ketat per unit
+        $otherStudents = Database::fetchAll(
+            "SELECT s.nis, s.nama, u.name as unit_name
+             FROM students s
+             JOIN units u ON s.unit_id = u.id
+             WHERE s.unit_id != ? AND s.status = 'Aktif'",
+            [$unitId]
+        );
+        $otherByNis = [];
+        $otherByNisTrimmed = [];
+        $otherByName = [];
+        foreach ($otherStudents as $os) {
+            $oNis = trim((string)$os['nis']);
+            if ($oNis !== '') {
+                $otherByNis[$oNis] = $os['unit_name'];
+                $oTrim = ltrim($oNis, '0');
+                if ($oTrim !== '') {
+                    $otherByNisTrimmed[$oTrim] = $os['unit_name'];
+                }
+            }
+            $oName = strtolower(preg_replace('/\s+/', ' ', trim((string)$os['nama'])));
+            if ($oName !== '') {
+                $otherByName[$oName] = $os['unit_name'];
+            }
+        }
+
+        // Ambil tunggakan aktif & buku cicilan aktif per student_id untuk kalkulasi Timpa & Skenario A
         $openBills = Database::fetchAll(
             "SELECT id, student_id, amount FROM bills WHERE unit_id = ? AND academic_year_id = ? AND status = 'Tertunggak' ORDER BY id DESC",
             [$unitId, $taId]
@@ -455,99 +497,226 @@ class TagihanController extends Controller {
         }
 
         $activeInsts = Database::fetchAll(
-            "SELECT student_id, agreement_number, total_debt, remaining_debt FROM bill_installments WHERE unit_id = ? AND status = 'Aktif'",
+            "SELECT id, student_id, agreement_number, total_debt, paid_total, remaining_debt FROM bill_installments WHERE unit_id = ? AND status = 'Aktif' ORDER BY id DESC",
             [$unitId]
         );
         $activeInstMap = [];
         foreach ($activeInsts as $ai) {
-            $activeInstMap[(int)$ai['student_id']] = $ai;
+            $sid = (int)$ai['student_id'];
+            if (!isset($activeInstMap[$sid])) {
+                $activeInstMap[$sid] = $ai;
+            }
         }
 
-        // Deteksi apakah ada kolom Kelas (D = Kelas, E = L/P) atau format lama (D = L/P, G..M biaya)
+        // Deteksi format Braja vs FR 8001A
+        $isBraja = false;
         $hasClassCol = false;
         foreach ($rows as $rCheck) {
+            $colA = trim((string)($rCheck['A'] ?? ''));
+            $colB = trim((string)($rCheck['B'] ?? ''));
             $colD = strtolower(trim((string)($rCheck['D'] ?? '')));
+            $colG = strtoupper(trim((string)($rCheck['G'] ?? '')));
+            if (preg_match('/^kelas\s*:/i', $colA)
+                || (strtolower($colA) === 'urut' && strtolower($colB) === 'induk')
+                || str_contains($colG, 'TAGIHAN / JENIS BIAYA')) {
+                $isBraja = true;
+                break;
+            }
             if (str_contains($colD, 'kelas')) {
                 $hasClassCol = true;
-                break;
             }
         }
 
         $valid = [];
         $invalid = [];
+        $skippedZero = 0;
+        $skippedOtherUnit = 0;
+        $otherUnitBreakdown = [];
+
+        $currentClass = '';
+        $brajaCostCols = [];
+        $jumlahColIdx = 0;
 
         foreach ($rows as $rowIndex => $row) {
             $colA = trim((string)($row['A'] ?? ''));
             $nis  = trim((string)($row['B'] ?? ''));
             $namaExcel = trim((string)($row['C'] ?? ''));
 
-            if ($colA === '' || strtolower($colA) === 'no urut' || strtolower($nis) === 'induk' || strtolower($nis) === 'nis' || !is_numeric($colA)) {
-                continue;
+            if ($isBraja) {
+                // Tangkap blok KELAS : ...
+                if (preg_match('/^kelas\s*:\s*(.+)$/i', $colA, $mCls)) {
+                    $currentClass = trim($mCls[1]);
+                    continue;
+                }
+
+                // Tangkap kolom JUMLAH dari baris header NOMOR ...
+                if (strtoupper($colA) === 'NOMOR') {
+                    $jumlahColIdx = 0;
+                    foreach ($row as $colLet => $cellVal) {
+                        if (strtoupper(trim((string)$cellVal)) === 'JUMLAH') {
+                            $jumlahColIdx = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::columnIndexFromString($colLet);
+                        }
+                    }
+                    continue;
+                }
+
+                // Tangkap daftar nama kolom biaya dinamis pada baris sub-header URUT | INDUK ...
+                if (strtolower($colA) === 'urut' && strtolower($nis) === 'induk') {
+                    $brajaCostCols = [];
+                    foreach ($row as $colLet => $cellVal) {
+                        $cIdx = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::columnIndexFromString($colLet);
+                        if ($cIdx < 7) continue; // Kolom biaya dimulai setelah F (HP Ortu)
+                        $lbl = trim((string)$cellVal);
+                        if (strtoupper($lbl) === 'JUMLAH') {
+                            $jumlahColIdx = $cIdx;
+                            continue;
+                        }
+                        if ($jumlahColIdx > 0 && $cIdx >= $jumlahColIdx) {
+                            continue;
+                        }
+                        if ($lbl !== '') {
+                            $brajaCostCols[$colLet] = $lbl;
+                        }
+                    }
+                    continue;
+                }
+
+                // Abaikan baris TOTAL, kop sekolah, judul, dan baris non-siswa
+                $upperA = strtoupper($colA);
+                $upperC = strtoupper($namaExcel);
+                if ($upperA === 'TOTAL' || $upperC === 'TOTAL' || $colA === '' || !is_numeric($colA)) {
+                    continue;
+                }
+            } else {
+                if ($colA === '' || strtolower($colA) === 'no urut' || strtolower($nis) === 'induk' || strtolower($nis) === 'nis' || !is_numeric($colA)) {
+                    continue;
+                }
             }
+
             if ($nis === '' && $namaExcel === '') {
                 continue;
             }
 
-            if (!$hasClassCol) {
-                // Auto-deteksi per baris jika user memakai format baru tanpa row header standar
-                $valD = trim((string)($row['D'] ?? ''));
-                $valE = strtoupper(trim((string)($row['E'] ?? '')));
-                if (!in_array(strtoupper($valD), ['L', 'P', 'LAKI-LAKI', 'PEREMPUAN'], true) && in_array($valE, ['L', 'P'], true)) {
-                    $hasClassCol = true;
+            $bukuPaket = 0.0;
+            $kegiatanSiswa = 0.0;
+            $komite = 0.0;
+            $peningkatanMutu = 0.0;
+            $spp = 0.0;
+            $uangUjian = 0.0;
+            $tunggakanLalu = 0.0;
+            $customMap = [];
+            $excelClass = $currentClass;
+
+            if ($isBraja && !empty($brajaCostCols)) {
+                foreach ($brajaCostCols as $colLet => $headerLbl) {
+                    $val = $this->parseRupiah($row[$colLet] ?? '0');
+                    if ($val <= 0) continue;
+
+                    $lowLbl = strtolower($headerLbl);
+                    if (str_contains($lowLbl, 'buku paket')) {
+                        $bukuPaket += $val;
+                    } elseif (str_contains($lowLbl, 'kegiatan')) {
+                        $kegiatanSiswa += $val;
+                    } elseif (str_contains($lowLbl, 'komite')) {
+                        $komite += $val;
+                    } elseif (str_contains($lowLbl, 'mutu')) {
+                        $peningkatanMutu += $val;
+                    } elseif (str_contains($lowLbl, 'spp')) {
+                        $spp += $val;
+                    } elseif (str_contains($lowLbl, 'ujian')) {
+                        $uangUjian += $val;
+                    } elseif (str_contains($lowLbl, 'tunggakan')) {
+                        $tunggakanLalu += $val;
+                    } else {
+                        $cleanLbl = trim(preg_replace('/\s*(?:PG|TK|KB|SD|SMP|SMA)?\s*TA\.?\s*\d{4}\s*\/\s*\d{4}/i', '', $headerLbl));
+                        if ($cleanLbl === '') $cleanLbl = $headerLbl;
+                        if ($cleanLbl === strtoupper($cleanLbl)) {
+                            $cleanLbl = ucwords(strtolower($cleanLbl));
+                        }
+                        $customMap[$cleanLbl] = ($customMap[$cleanLbl] ?? 0.0) + $val;
+                    }
+                }
+            } else {
+                if (!$hasClassCol) {
+                    $valD = trim((string)($row['D'] ?? ''));
+                    $valE = strtoupper(trim((string)($row['E'] ?? '')));
+                    if (!in_array(strtoupper($valD), ['L', 'P', 'LAKI-LAKI', 'PEREMPUAN'], true) && in_array($valE, ['L', 'P'], true)) {
+                        $hasClassCol = true;
+                    }
+                }
+
+                $colKeys = $hasClassCol
+                    ? ['kelas' => 'D', 'bp' => 'H', 'ks' => 'I', 'km' => 'J', 'pm' => 'K', 'spp' => 'L', 'uj' => 'M', 'tl' => 'N']
+                    : ['kelas' => null, 'bp' => 'G', 'ks' => 'H', 'km' => 'I', 'pm' => 'J', 'spp' => 'K', 'uj' => 'L', 'tl' => 'M'];
+
+                $excelClass      = $colKeys['kelas'] ? trim((string)($row[$colKeys['kelas']] ?? '')) : $currentClass;
+                $bukuPaket       = $this->parseRupiah($row[$colKeys['bp']] ?? '0');
+                $kegiatanSiswa   = $this->parseRupiah($row[$colKeys['ks']] ?? '0');
+                $komite          = $this->parseRupiah($row[$colKeys['km']] ?? '0');
+                $peningkatanMutu = $this->parseRupiah($row[$colKeys['pm']] ?? '0');
+                $spp             = $this->parseRupiah($row[$colKeys['spp']] ?? '0');
+                $uangUjian       = $this->parseRupiah($row[$colKeys['uj']] ?? '0');
+                $tunggakanLalu   = $this->parseRupiah($row[$colKeys['tl']] ?? '0');
+            }
+
+            $customItems = [];
+            $customSum = 0.0;
+            foreach ($customMap as $cName => $cVal) {
+                if ($cVal > 0) {
+                    $customItems[] = ['name' => $cName, 'amount' => $cVal];
+                    $customSum += $cVal;
                 }
             }
 
-            $cOffset = $hasClassCol ? 1 : 0; // Geser 1 kolom ke kanan bila ada kolom Kelas
-            $colKeys = $hasClassCol
-                ? ['kelas' => 'D', 'lp' => 'E', 'bp' => 'H', 'ks' => 'I', 'km' => 'J', 'pm' => 'K', 'spp' => 'L', 'uj' => 'M', 'tl' => 'N']
-                : ['kelas' => null, 'lp' => 'D', 'bp' => 'G', 'ks' => 'H', 'km' => 'I', 'pm' => 'J', 'spp' => 'K', 'uj' => 'L', 'tl' => 'M'];
-
-            $excelClass = $colKeys['kelas'] ? trim((string)($row[$colKeys['kelas']] ?? '')) : '';
-            $bukuPaket       = $this->parseRupiah($row[$colKeys['bp']] ?? '0');
-            $kegiatanSiswa   = $this->parseRupiah($row[$colKeys['ks']] ?? '0');
-            $komite          = $this->parseRupiah($row[$colKeys['km']] ?? '0');
-            $peningkatanMutu = $this->parseRupiah($row[$colKeys['pm']] ?? '0');
-            $spp             = $this->parseRupiah($row[$colKeys['spp']] ?? '0');
-            $uangUjian       = $this->parseRupiah($row[$colKeys['uj']] ?? '0');
-            $tunggakanLalu   = $this->parseRupiah($row[$colKeys['tl']] ?? '0');
-
             $amountSpp    = $spp;
-            $amountNonSpp = $bukuPaket + $kegiatanSiswa + $komite + $peningkatanMutu + $uangUjian + $tunggakanLalu;
+            $amountNonSpp = $bukuPaket + $kegiatanSiswa + $komite + $peningkatanMutu + $uangUjian + $tunggakanLalu + $customSum;
             $totalAmount  = $amountSpp + $amountNonSpp;
 
-            // Cocokkan siswa: prioritas NIS, lalu Nama lengkap
+            // Cocokkan siswa di unit aktif: prioritas exact NIS -> NIS tanpa 0 depan -> Nama lengkap
             $matchedStudent = null;
             $matchNote = 'NIS cocok';
+            $trimNis = ltrim($nis, '0');
+            $normName = strtolower(preg_replace('/\s+/', ' ', $namaExcel));
+
             if ($nis !== '' && isset($studentByNis[$nis])) {
                 $matchedStudent = $studentByNis[$nis];
-            } else {
-                $normName = strtolower(preg_replace('/\s+/', ' ', $namaExcel));
-                if ($normName !== '' && isset($studentByName[$normName])) {
-                    $matchedStudent = $studentByName[$normName];
-                    $matchNote = 'Cocok via Nama (NIS Excel: ' . ($nis ?: '-') . ')';
-                }
+            } elseif ($trimNis !== '' && isset($studentByNisTrimmed[$trimNis])) {
+                $matchedStudent = $studentByNisTrimmed[$trimNis];
+                $matchNote = 'NIS cocok (format angka)';
+            } elseif ($normName !== '' && isset($studentByName[$normName])) {
+                $matchedStudent = $studentByName[$normName];
+                $matchNote = 'Cocok via Nama (NIS file: ' . ($nis ?: '-') . ')';
             }
 
             if (!$matchedStudent) {
+                // Cek apakah siswa milik unit lain (KB/TK/SD/SMP/SMA tetap terpisah)
+                $otherUnitName = null;
+                if ($nis !== '' && isset($otherByNis[$nis])) {
+                    $otherUnitName = $otherByNis[$nis];
+                } elseif ($trimNis !== '' && isset($otherByNisTrimmed[$trimNis])) {
+                    $otherUnitName = $otherByNisTrimmed[$trimNis];
+                } elseif ($normName !== '' && isset($otherByName[$normName])) {
+                    $otherUnitName = $otherByName[$normName];
+                }
+
+                if ($otherUnitName !== null) {
+                    $skippedOtherUnit++;
+                    $otherUnitBreakdown[$otherUnitName] = ($otherUnitBreakdown[$otherUnitName] ?? 0) + 1;
+                    continue;
+                }
+
+                if ($totalAmount <= 0) {
+                    $skippedZero++;
+                    continue;
+                }
+
                 $invalid[] = [
                     'row_num'    => $rowIndex,
                     'nis'        => $nis,
                     'nama'       => $namaExcel,
                     'class_name' => $excelClass ?: '-',
                     'amount'     => $totalAmount,
-                    'reason'     => 'Siswa tidak ditemukan di Master Siswa unit ini (periksa ejaan nama/NIS sesuai Dapodik).'
-                ];
-                continue;
-            }
-
-            if ($totalAmount <= 0) {
-                $invalid[] = [
-                    'row_num'    => $rowIndex,
-                    'nis'        => $matchedStudent['nis'],
-                    'nama'       => $matchedStudent['nama'],
-                    'class_name' => $matchedStudent['class_name'],
-                    'amount'     => 0,
-                    'reason'     => 'Total nominal tagihan bulan berjalan = Rp 0 (tidak ada nominal yang perlu ditambahkan).'
+                    'reason'     => 'Siswa tidak ditemukan di Master Siswa unit ini (periksa ejaan nama/NIS).'
                 ];
                 continue;
             }
@@ -557,131 +726,228 @@ class TagihanController extends Controller {
             $hasOpenBill = isset($openBillMap[$sid]);
             $instInfo = $activeInstMap[$sid] ?? null;
 
-            $valid[] = [
-                'row_num'          => $rowIndex,
-                'student_id'       => $sid,
-                'nis'              => $matchedStudent['nis'],
-                'nama'             => $matchedStudent['nama'],
-                'class_name'       => $matchedStudent['class_name'] ?: ($excelClass ?: 'Non-Kelas'),
-                'gender'           => $matchedStudent['gender'] ?? 'L',
-                'match_note'       => $matchNote,
-                'buku_paket'       => $bukuPaket,
-                'kegiatan_siswa'   => $kegiatanSiswa,
-                'komite'           => $komite,
-                'peningkatan_mutu' => $peningkatanMutu,
-                'spp'              => $spp,
-                'uang_ujian'       => $uangUjian,
-                'tunggakan_lalu'   => $tunggakanLalu,
-                'amount_spp'       => $amountSpp,
-                'amount_non_spp'   => $amountNonSpp,
-                'amount'           => $totalAmount,
-                'is_accumulation'  => $hasOpenBill,
-                'existing_amount'  => $existingAmount,
-                'new_total'        => $existingAmount + $totalAmount,
-                'has_installment'  => (bool)$instInfo,
-                'agreement_number' => $instInfo['agreement_number'] ?? null
-            ];
-        }
+            $oldInstTotal = $instInfo ? (float)$instInfo['total_debt'] : 0.0;
+            $oldInstRemain = $instInfo ? (float)$instInfo['remaining_debt'] : 0.0;
+            $instDelta = $instInfo ? ($totalAmount - $oldInstRemain) : 0.0;
+            $newInstTotal = ($instInfo && $instDelta > 0.5) ? ($oldInstTotal + $instDelta) : $oldInstTotal;
 
-        return ['valid' => $valid, 'invalid' => $invalid];
-    }
-
-    /**
-     * Terapkan baris tagihan valid secara AKUMULATIF:
-     * - Bila siswa punya tunggakan aktif ('Tertunggak'), jumlahkan nominal bulan berjalan ke tagihan tersebut.
-     * - Bila siswa punya Buku Cicilan ('Aktif'), pertahankan anchor (total_debt) dan tambahkan ke remaining_debt.
-     * - Bila belum punya tunggakan aktif, buat tagihan baru.
-     */
-    private function applyBillImportRows(array $validRows, int $unitId, int $taId, int $userId, int $billMonth, int $billYear, string $dueDate): array {
-        $importedCount = 0;
-        $accumulatedCount = 0;
-        $installmentUpdatedCount = 0;
-        $periodLabel = sprintf('%02d/%04d', $billMonth, $billYear);
-
-        foreach ($validRows as $r) {
-            $studentId = (int)$r['student_id'];
-            $addSpp = (float)$r['amount_spp'];
-            $addNonSpp = (float)$r['amount_non_spp'];
-            $addTotal = (float)$r['amount'];
-
-            if ($studentId <= 0 || $addTotal <= 0) {
+            if ($totalAmount <= 0) {
+                if ($hasOpenBill || $instInfo) {
+                    $valid[] = [
+                        'row_num'            => $rowIndex,
+                        'student_id'         => $sid,
+                        'nis'                => $matchedStudent['nis'],
+                        'nama'               => $matchedStudent['nama'],
+                        'class_name'         => $matchedStudent['class_name'] ?: ($excelClass ?: 'Non-Kelas'),
+                        'gender'             => $matchedStudent['gender'] ?? 'L',
+                        'match_note'         => $matchNote,
+                        'action_type'        => 'mark_lunas',
+                        'buku_paket'         => 0.0,
+                        'kegiatan_siswa'     => 0.0,
+                        'komite'             => 0.0,
+                        'peningkatan_mutu'   => 0.0,
+                        'spp'                => 0.0,
+                        'uang_ujian'         => 0.0,
+                        'tunggakan_lalu'     => 0.0,
+                        'custom_items'       => [],
+                        'amount_spp'         => 0.0,
+                        'amount_non_spp'     => 0.0,
+                        'amount'             => 0.0,
+                        'existing_amount'    => $existingAmount,
+                        'new_total'          => 0.0,
+                        'has_installment'    => (bool)$instInfo,
+                        'agreement_number'   => $instInfo['agreement_number'] ?? null,
+                        'inst_old_total'     => $oldInstTotal,
+                        'inst_old_remaining' => $oldInstRemain,
+                        'inst_delta'         => -$oldInstRemain,
+                        'inst_new_total'     => $oldInstTotal
+                    ];
+                } else {
+                    $skippedZero++;
+                }
                 continue;
             }
 
-            $addItems = [
-                'buku_paket'       => (float)$r['buku_paket'],
-                'kegiatan_siswa'   => (float)$r['kegiatan_siswa'],
-                'komite'           => (float)$r['komite'],
-                'peningkatan_mutu' => (float)$r['peningkatan_mutu'],
-                'spp'              => (float)$r['spp'],
-                'uang_ujian'       => (float)$r['uang_ujian'],
-                'tunggakan_lalu'   => (float)$r['tunggakan_lalu'],
-                'custom_items'     => []
+            $valid[] = [
+                'row_num'            => $rowIndex,
+                'student_id'         => $sid,
+                'nis'                => $matchedStudent['nis'],
+                'nama'               => $matchedStudent['nama'],
+                'class_name'         => $matchedStudent['class_name'] ?: ($excelClass ?: 'Non-Kelas'),
+                'gender'             => $matchedStudent['gender'] ?? 'L',
+                'match_note'         => $matchNote,
+                'action_type'        => $hasOpenBill ? 'overwrite' : 'new',
+                'buku_paket'         => $bukuPaket,
+                'kegiatan_siswa'     => $kegiatanSiswa,
+                'komite'             => $komite,
+                'peningkatan_mutu'   => $peningkatanMutu,
+                'spp'                => $spp,
+                'uang_ujian'         => $uangUjian,
+                'tunggakan_lalu'     => $tunggakanLalu,
+                'custom_items'       => $customItems,
+                'amount_spp'         => $amountSpp,
+                'amount_non_spp'     => $amountNonSpp,
+                'amount'             => $totalAmount,
+                'existing_amount'    => $existingAmount,
+                'new_total'          => $totalAmount,
+                'has_installment'    => (bool)$instInfo,
+                'agreement_number'   => $instInfo['agreement_number'] ?? null,
+                'inst_old_total'     => $oldInstTotal,
+                'inst_old_remaining' => $oldInstRemain,
+                'inst_delta'         => $instDelta,
+                'inst_new_total'     => $newInstTotal
+            ];
+        }
+
+        return [
+            'format'               => $isBraja ? 'braja' : 'fr8001a',
+            'valid'                => $valid,
+            'invalid'              => $invalid,
+            'skipped_zero'         => $skippedZero,
+            'skipped_other_unit'   => $skippedOtherUnit,
+            'other_unit_breakdown' => $otherUnitBreakdown
+        ];
+    }
+
+    /**
+     * Terapkan hasil verifikasi impor dengan MODEL TIMPA / SINKRONISASI SALDO:
+     * - Saldo Rp 0 pada siswa yang sebelumnya menunggak -> otomatis ditandai Lunas (+ tutup cicilan aktif bila ada).
+     * - Tagihan tertunggak yang sudah ada -> DITIMPA rincian & totalnya sesuai saldo Braja terbaru.
+     * - Siswa dengan Buku Cicilan Aktif (Skenario A): penambahan hutang (saldoBaru - sisaCicilan) menambah total_debt & remaining_debt + menulis catatan otomatis.
+     */
+    private function applyBillImportRows(array $validRows, int $unitId, int $taId, int $userId, int $billMonth, int $billYear, string $dueDate): array {
+        $importedCount = 0;
+        $overwrittenCount = 0;
+        $lunasCount = 0;
+        $installmentUpdatedCount = 0;
+        $periodLabel = sprintf('%02d/%04d', $billMonth, $billYear);
+        $nowStr = date('d/m/Y H:i');
+
+        foreach ($validRows as $r) {
+            $studentId  = (int)$r['student_id'];
+            $actionType = $r['action_type'] ?? 'new';
+            $newSpp     = (float)($r['amount_spp'] ?? 0);
+            $newNonSpp  = (float)($r['amount_non_spp'] ?? 0);
+            $newTotal   = (float)($r['amount'] ?? 0);
+
+            if ($studentId <= 0) {
+                continue;
+            }
+
+            // 1. Jika saldo Braja terbaru Rp 0 untuk siswa yang masih punya tunggakan/cicilan -> tandai Lunas otomatis
+            if ($actionType === 'mark_lunas' || $newTotal <= 0) {
+                $lunasNote = "\n[{$nowStr}] Sync Impor ({$periodLabel}): Saldo laporan Rp 0 — Otomatis ditandai Lunas.";
+                Database::execute(
+                    "UPDATE bills 
+                     SET status = 'Lunas',
+                         pipeline_stage = 'selesai_tu',
+                         paid_date = CURDATE(),
+                         paid_amount = amount,
+                         pipeline_resolved_at = NOW(),
+                         pipeline_resolved_level = 'tata_usaha',
+                         notes = TRIM(CONCAT(COALESCE(notes, ''), ?))
+                     WHERE unit_id = ? AND academic_year_id = ? AND student_id = ? AND status = 'Tertunggak'",
+                    [$lunasNote, $unitId, $taId, $studentId]
+                );
+                $lunasCount++;
+
+                $activeInst = Database::fetch(
+                    "SELECT id, remaining_debt, notes FROM bill_installments WHERE unit_id = ? AND student_id = ? AND status = 'Aktif' ORDER BY id DESC LIMIT 1",
+                    [$unitId, $studentId]
+                );
+                if ($activeInst) {
+                    $oldRemain = (float)$activeInst['remaining_debt'];
+                    $instNote = "[{$nowStr}] Update Impor ({$periodLabel}): Saldo laporan Rp 0 — Cicilan ditandai LUNAS otomatis (sisa sebelumnya " . SecurityHelper::formatRupiah($oldRemain) . ").";
+                    $combinedNotes = trim((!empty($activeInst['notes']) ? $activeInst['notes'] . "\n" : '') . $instNote);
+                    Database::execute(
+                        "UPDATE bill_installments SET remaining_debt = 0, status = 'Lunas', notes = ? WHERE id = ?",
+                        [$combinedNotes, $activeInst['id']]
+                    );
+                    $installmentUpdatedCount++;
+                }
+                continue;
+            }
+
+            // 2. Bangun rincian biaya (termasuk kolom dinamis seperti Gedung & Seragam di custom_items)
+            $newItems = [
+                'buku_paket'       => (float)($r['buku_paket'] ?? 0),
+                'kegiatan_siswa'   => (float)($r['kegiatan_siswa'] ?? 0),
+                'komite'           => (float)($r['komite'] ?? 0),
+                'peningkatan_mutu' => (float)($r['peningkatan_mutu'] ?? 0),
+                'spp'              => (float)($r['spp'] ?? 0),
+                'uang_ujian'       => (float)($r['uang_ujian'] ?? 0),
+                'tunggakan_lalu'   => (float)($r['tunggakan_lalu'] ?? 0),
+                'custom_items'     => $r['custom_items'] ?? []
             ];
 
             $existing = Database::fetch(
-                "SELECT * FROM bills WHERE unit_id = ? AND academic_year_id = ? AND student_id = ? AND status = 'Tertunggak' ORDER BY id DESC LIMIT 1",
+                "SELECT id, amount, notes FROM bills WHERE unit_id = ? AND academic_year_id = ? AND student_id = ? AND status = 'Tertunggak' ORDER BY id DESC LIMIT 1",
                 [$unitId, $taId, $studentId]
             );
 
             if ($existing) {
-                $oldItems = json_decode($existing['items_detail'] ?? '{}', true) ?: [];
-                $mergedItems = [
-                    'buku_paket'       => (float)($oldItems['buku_paket'] ?? 0) + $addItems['buku_paket'],
-                    'kegiatan_siswa'   => (float)($oldItems['kegiatan_siswa'] ?? 0) + $addItems['kegiatan_siswa'],
-                    'komite'           => (float)($oldItems['komite'] ?? 0) + $addItems['komite'],
-                    'peningkatan_mutu' => (float)($oldItems['peningkatan_mutu'] ?? 0) + $addItems['peningkatan_mutu'],
-                    'spp'              => (float)($oldItems['spp'] ?? 0) + $addItems['spp'],
-                    'uang_ujian'       => (float)($oldItems['uang_ujian'] ?? 0) + $addItems['uang_ujian'],
-                    'tunggakan_lalu'   => (float)($oldItems['tunggakan_lalu'] ?? 0) + $addItems['tunggakan_lalu'],
-                    'custom_items'     => $oldItems['custom_items'] ?? []
-                ];
-
-                $newTotal = (float)$existing['amount'] + $addTotal;
-                $newSpp = (float)$existing['amount_spp'] + $addSpp;
-                $newNonSpp = (float)$existing['amount_non_spp'] + $addNonSpp;
-                $logNote = '[Akumulasi Impor ' . $periodLabel . ': +' . SecurityHelper::formatRupiah($addTotal) . ']';
-                $updatedNotes = trim(($existing['notes'] ? $existing['notes'] . "\n" : '') . $logNote);
+                $oldAmt = (float)$existing['amount'];
+                $logNote = "[{$nowStr}] Sync Timpa Impor ({$periodLabel}): " . SecurityHelper::formatRupiah($oldAmt) . " -> " . SecurityHelper::formatRupiah($newTotal);
+                $updatedNotes = trim((!empty($existing['notes']) ? $existing['notes'] . "\n" : '') . $logNote);
 
                 Database::execute(
                     "UPDATE bills 
                      SET bill_month = ?, bill_year = ?, amount = ?, items_detail = ?, amount_spp = ?, amount_non_spp = ?, due_date = ?, notes = ? 
                      WHERE id = ?",
-                    [$billMonth, $billYear, $newTotal, json_encode($mergedItems), $newSpp, $newNonSpp, $dueDate, $updatedNotes, $existing['id']]
+                    [$billMonth, $billYear, $newTotal, json_encode($newItems), $newSpp, $newNonSpp, $dueDate, $updatedNotes, $existing['id']]
                 );
-                $accumulatedCount++;
+                $overwrittenCount++;
             } else {
-                $logNote = '[Impor Tagihan ' . $periodLabel . ': ' . SecurityHelper::formatRupiah($addTotal) . ']';
+                $logNote = "[{$nowStr}] Impor Tagihan ({$periodLabel}): " . SecurityHelper::formatRupiah($newTotal);
                 Database::execute(
                     "INSERT INTO bills 
                         (unit_id, academic_year_id, student_id, bill_month, bill_year, title, amount, items_detail, amount_spp, amount_non_spp, due_date, status, pipeline_stage, notes, created_by_user_id) 
                      VALUES (?, ?, ?, ?, ?, 'Tagihan Siswa & SPP', ?, ?, ?, ?, ?, 'Tertunggak', 'tu_draft', ?, ?)",
-                    [$unitId, $taId, $studentId, $billMonth, $billYear, $addTotal, json_encode($addItems), $addSpp, $amountNonSpp = $addNonSpp, $dueDate, $logNote, $userId]
+                    [$unitId, $taId, $studentId, $billMonth, $billYear, $newTotal, json_encode($newItems), $newSpp, $newNonSpp, $dueDate, $logNote, $userId]
                 );
                 $importedCount++;
             }
 
-            // Jika siswa memiliki Buku Cicilan aktif: anchor (total_debt) TETAP, sisa tunggakan (remaining_debt) bertambah!
+            // 3. Sinkronisasi Buku Cicilan Aktif (Skenario A: pembayaran cicilan juga tercatat di Braja)
             $activeInst = Database::fetch(
-                "SELECT id, notes FROM bill_installments WHERE unit_id = ? AND student_id = ? AND status = 'Aktif' ORDER BY id DESC LIMIT 1",
+                "SELECT id, total_debt, paid_total, remaining_debt, notes FROM bill_installments WHERE unit_id = ? AND student_id = ? AND status = 'Aktif' ORDER BY id DESC LIMIT 1",
                 [$unitId, $studentId]
             );
             if ($activeInst) {
-                $instNote = '[Tambahan Tunggakan Impor ' . $periodLabel . ': +' . SecurityHelper::formatRupiah($addTotal) . ']';
-                Database::execute(
-                    "UPDATE bill_installments 
-                     SET remaining_debt = remaining_debt + ?,
-                         notes = CONCAT(COALESCE(notes, ''), ?)
-                     WHERE id = ?",
-                    [$addTotal, "\n" . $instNote, $activeInst['id']]
-                );
-                $installmentUpdatedCount++;
+                $oldTotal  = (float)$activeInst['total_debt'];
+                $oldRemain = (float)$activeInst['remaining_debt'];
+                $delta     = $newTotal - $oldRemain;
+
+                if ($delta > 0.5) {
+                    $newInstTotal  = $oldTotal + $delta;
+                    $newInstRemain = $newTotal;
+                    $instNote = "[{$nowStr}] Update Impor ({$periodLabel}): Penambahan hutang +" . SecurityHelper::formatRupiah($delta)
+                              . ". Total hutang diperbarui " . SecurityHelper::formatRupiah($oldTotal) . " -> " . SecurityHelper::formatRupiah($newInstTotal)
+                              . ", sisa hutang " . SecurityHelper::formatRupiah($newInstRemain) . ".";
+                    $combinedNotes = trim((!empty($activeInst['notes']) ? $activeInst['notes'] . "\n" : '') . $instNote);
+                    Database::execute(
+                        "UPDATE bill_installments SET total_debt = ?, remaining_debt = ?, notes = ? WHERE id = ?",
+                        [$newInstTotal, $newInstRemain, $combinedNotes, $activeInst['id']]
+                    );
+                    $installmentUpdatedCount++;
+                } elseif ($delta < -0.5) {
+                    $newInstRemain = $newTotal;
+                    $instNote = "[{$nowStr}] Update Impor ({$periodLabel}): Penyesuaian saldo turun -" . SecurityHelper::formatRupiah(abs($delta))
+                              . " (pembayaran tercatat di Braja). Sisa hutang diperbarui " . SecurityHelper::formatRupiah($oldRemain) . " -> " . SecurityHelper::formatRupiah($newInstRemain) . ".";
+                    $combinedNotes = trim((!empty($activeInst['notes']) ? $activeInst['notes'] . "\n" : '') . $instNote);
+                    Database::execute(
+                        "UPDATE bill_installments SET remaining_debt = ?, notes = ? WHERE id = ?",
+                        [$newInstRemain, $combinedNotes, $activeInst['id']]
+                    );
+                    $installmentUpdatedCount++;
+                }
             }
         }
 
         return [
-            'imported' => $importedCount,
-            'accumulated' => $accumulatedCount,
+            'imported'            => $importedCount,
+            'overwritten'         => $overwrittenCount,
+            'marked_lunas'        => $lunasCount,
             'installment_updated' => $installmentUpdatedCount
         ];
     }
@@ -692,7 +958,7 @@ class TagihanController extends Controller {
         $taId = Auth::academicYearId();
 
         if (empty($_FILES['excel_file']['tmp_name'])) {
-            $this->setFlash('danger', 'Harap pilih berkas Excel (.xlsx) untuk diverifikasi.');
+            $this->setFlash('danger', 'Harap pilih berkas Braja / FR 8001A (.xlsx / .xls / .csv) untuk diverifikasi.');
             $this->redirect(Auth::baseUrl() . '/tagihan/manage');
             return;
         }
@@ -704,21 +970,32 @@ class TagihanController extends Controller {
             $dueDate = date('Y-m-10');
         }
 
+        $origName = (string)($_FILES['excel_file']['name'] ?? 'import.xlsx');
+
         try {
-            $parsed = $this->parseImportExcelRows($_FILES['excel_file']['tmp_name'], $unitId, $taId);
+            $parsed = $this->parseImportExcelRows($_FILES['excel_file']['tmp_name'], $unitId, $taId, $origName);
             $_SESSION['bill_import_preview'] = [
-                'filename'   => $_FILES['excel_file']['name'] ?? 'import.xlsx',
-                'bill_month' => $billMonth,
-                'bill_year'  => $billYear,
-                'due_date'   => $dueDate,
-                'valid'      => $parsed['valid'],
-                'invalid'    => $parsed['invalid']
+                'filename'             => $origName,
+                'format'               => $parsed['format'],
+                'bill_month'           => $billMonth,
+                'bill_year'            => $billYear,
+                'due_date'             => $dueDate,
+                'valid'                => $parsed['valid'],
+                'invalid'              => $parsed['invalid'],
+                'skipped_zero'         => $parsed['skipped_zero'],
+                'skipped_other_unit'   => $parsed['skipped_other_unit'],
+                'other_unit_breakdown' => $parsed['other_unit_breakdown']
             ];
             $vCnt = count($parsed['valid']);
             $iCnt = count($parsed['invalid']);
-            $this->setFlash('info', "Hasil Verifikasi Impor: {$vCnt} baris siap masuk/terakumulasi, {$iCnt} baris masuk tab Data Bermasalah. Silakan periksa sebelum menyimpan.");
+            $fmtLabel = ($parsed['format'] === 'braja') ? 'Format Braja' : 'Format FR 8001A';
+            $extraInfo = '';
+            if ($parsed['skipped_other_unit'] > 0) {
+                $extraInfo .= ", {$parsed['skipped_other_unit']} baris unit lain dilewati otomatis";
+            }
+            $this->setFlash('info', "Verifikasi {$fmtLabel}: {$vCnt} data siap diproses, {$iCnt} bermasalah{$extraInfo}. Silakan tinjau sebelum menyimpan.");
         } catch (\Throwable $e) {
-            $this->setFlash('danger', 'Gagal membaca berkas Excel: ' . $e->getMessage());
+            $this->setFlash('danger', 'Gagal membaca berkas impor: ' . $e->getMessage());
         }
 
         $this->redirect(Auth::baseUrl() . '/tagihan/manage');
@@ -770,11 +1047,11 @@ class TagihanController extends Controller {
         );
         unset($_SESSION['bill_import_preview']);
 
-        AuditLog::log('IMPORT_BILLS_FR8001A', 'bills', $unitId, null, $stats);
+        AuditLog::log('IMPORT_BILLS_SNAPSHOT_SYNC', 'bills', $unitId, null, $stats);
 
-        $msg = "Impor Tagihan Selesai: {$stats['imported']} tagihan baru dibuat, {$stats['accumulated']} tunggakan lama terakumulasi.";
+        $msg = "Sinkronisasi Tagihan Selesai: {$stats['imported']} baru dibuat, {$stats['overwritten']} diperbarui (timpa saldo), {$stats['marked_lunas']} otomatis Lunas.";
         if ($stats['installment_updated'] > 0) {
-            $msg .= " ({$stats['installment_updated']} Buku Cicilan aktif diperbarui sisa tunggakannya tanpa mengubah anchor perjanjian).";
+            $msg .= " ({$stats['installment_updated']} Buku Cicilan aktif diperbarui beserta catatan otomatis).";
         }
         $this->setFlash('success', $msg);
         $this->redirect(Auth::baseUrl() . '/tagihan/manage');
