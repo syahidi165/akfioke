@@ -2287,14 +2287,14 @@ class MasterController extends Controller {
             if ($formerUnitId !== null && $formerUnitId > 0) {
                 Database::execute(
                     "UPDATE classes SET walas_id = NULL 
-                     WHERE unit_id = ? AND (walas_employee_id = ? OR walas_id = ?)",
-                    [$formerUnitId, $employeeId, $employeeId]
+                     WHERE unit_id = ? AND walas_id = ?",
+                    [$formerUnitId, $employeeId]
                 );
             } else {
                 Database::execute(
                     "UPDATE classes SET walas_id = NULL 
-                     WHERE walas_employee_id = ? OR walas_id = ?",
-                    [$employeeId, $employeeId]
+                     WHERE walas_id = ?",
+                    [$employeeId]
                 );
             }
         } catch (\Throwable $e) {
@@ -4031,7 +4031,7 @@ class MasterController extends Controller {
         $assignedWalasCount = 0;
         foreach ($classes as $c) {
             $totalStudentsInClasses += (int)$c['student_count'];
-            if (!empty($c['walas_id'])) {
+            if (!empty($c['walas_name'])) {
                 $assignedWalasCount++;
             }
         }

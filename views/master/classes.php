@@ -152,7 +152,7 @@ function getLevelBadgeStyle(string $lvl): array {
                         </span>
                         
                         <?php if ($canEdit || $isYayasan): ?>
-                            <button type="button" class="btn btn-outline btn-sm" onclick='editClass(<?= json_encode($c) ?>)' title="Edit Nama / Wali Kelas" style="padding: 3px 8px; font-size: 11px;">
+                            <button type="button" class="btn btn-outline btn-sm" data-class="<?= htmlspecialchars(json_encode($c, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP), ENT_QUOTES, 'UTF-8') ?>" onclick="editClassFromBtn(this)" title="Edit Nama / Wali Kelas" style="padding: 3px 8px; font-size: 11px;">
                                 <i class="fa-solid fa-pen-to-square"></i> Edit
                             </button>
                         <?php endif; ?>
@@ -220,10 +220,10 @@ function getLevelBadgeStyle(string $lvl): array {
                             <i class="fa-solid fa-users"></i> Atur Siswa
                         </a>
                         <?php if ($canEdit || $isYayasan): ?>
-                            <button type="button" class="btn btn-outline btn-sm" onclick='editClass(<?= json_encode($c) ?>)' title="Ubah data rombel">
+                            <button type="button" class="btn btn-outline btn-sm" data-class="<?= htmlspecialchars(json_encode($c, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP), ENT_QUOTES, 'UTF-8') ?>" onclick="editClassFromBtn(this)" title="Ubah data rombel">
                                 <i class="fa-solid fa-gear"></i>
                             </button>
-                            <button type="button" class="btn btn-outline btn-sm text-danger" onclick='confirmDeleteClass(<?= (int)$c['id'] ?>, <?= json_encode($c['name']) ?>, <?= (int)$c['student_count'] ?>)' title="Hapus rombel" style="color: #dc2626; border-color: #fca5a5;">
+                            <button type="button" class="btn btn-outline btn-sm text-danger" data-id="<?= (int)$c['id'] ?>" data-name="<?= htmlspecialchars($c['name'] ?? '', ENT_QUOTES, 'UTF-8') ?>" data-count="<?= (int)$c['student_count'] ?>" onclick="confirmDeleteClassFromBtn(this)" title="Hapus rombel" style="color: #dc2626; border-color: #fca5a5;">
                                 <i class="fa-solid fa-trash-can"></i>
                             </button>
                         <?php endif; ?>
@@ -287,10 +287,10 @@ function getLevelBadgeStyle(string $lvl): array {
                                             <i class="fa-solid fa-users"></i>
                                         </a>
                                         <?php if ($canEdit || $isYayasan): ?>
-                                            <button type="button" class="btn btn-outline btn-sm" onclick='editClass(<?= json_encode($c) ?>)' title="Edit Rombel">
+                                            <button type="button" class="btn btn-outline btn-sm" data-class="<?= htmlspecialchars(json_encode($c, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP), ENT_QUOTES, 'UTF-8') ?>" onclick="editClassFromBtn(this)" title="Edit Rombel">
                                                 <i class="fa-solid fa-pen-to-square"></i> Edit
                                             </button>
-                                            <button type="button" class="btn btn-outline btn-sm text-danger" onclick='confirmDeleteClass(<?= (int)$c['id'] ?>, <?= json_encode($c['name']) ?>, <?= (int)$c['student_count'] ?>)' title="Hapus Rombel" style="color: #dc2626; border-color: #fca5a5;">
+                                            <button type="button" class="btn btn-outline btn-sm text-danger" data-id="<?= (int)$c['id'] ?>" data-name="<?= htmlspecialchars($c['name'] ?? '', ENT_QUOTES, 'UTF-8') ?>" data-count="<?= (int)$c['student_count'] ?>" onclick="confirmDeleteClassFromBtn(this)" title="Hapus Rombel" style="color: #dc2626; border-color: #fca5a5;">
                                                 <i class="fa-solid fa-trash-can"></i> Hapus
                                             </button>
                                         <?php endif; ?>
@@ -556,12 +556,33 @@ function openClassModal() {
     document.getElementById('classModal').classList.add('active');
 }
 
+function editClassFromBtn(btn) {
+    try {
+        const raw = btn.getAttribute('data-class') || '{}';
+        editClass(JSON.parse(raw));
+    } catch (e) {
+        alert('Gagal membaca data kelas untuk diedit: ' + e.message);
+    }
+}
+
+function confirmDeleteClassFromBtn(btn) {
+    const id = parseInt(btn.getAttribute('data-id') || '0', 10);
+    const name = btn.getAttribute('data-name') || '';
+    const count = parseInt(btn.getAttribute('data-count') || '0', 10);
+    confirmDeleteClass(id, name, count);
+}
+
 function editClass(c) {
-    document.getElementById('cls_id').value = c.id;
-    document.getElementById('modalClsTitle').innerText = 'Edit Kelas: ' + c.name;
-    document.getElementById('cls_name').value = c.name;
-    document.getElementById('cls_level').value = c.level;
-    document.getElementById('cls_walas_id').value = c.walas_id || '';
+    document.getElementById('cls_id').value = c.id || '0';
+    document.getElementById('modalClsTitle').innerText = 'Edit Kelas: ' + (c.name || '');
+    document.getElementById('cls_name').value = c.name || '';
+    document.getElementById('cls_level').value = c.level || '';
+    const walasSelect = document.getElementById('cls_walas_id');
+    const targetWalasId = (c.walas_id !== null && c.walas_id !== undefined) ? String(c.walas_id) : '';
+    if (walasSelect) {
+        const hasOption = targetWalasId !== '' && Array.from(walasSelect.options).some(opt => opt.value === targetWalasId);
+        walasSelect.value = hasOption ? targetWalasId : '';
+    }
     document.getElementById('classModal').classList.add('active');
 }
 
