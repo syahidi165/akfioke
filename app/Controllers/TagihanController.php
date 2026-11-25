@@ -375,7 +375,7 @@ class TagihanController extends Controller {
         $headers = [
             'No Urut', 'Induk', 'Nama Siswa', 'Kelas', 'L/P', 'Nama Orang Tua/Wali', 'Nomor HP Orang Tua/Wali',
             'Buku Paket (Rp)', 'Kegiatan Siswa (Rp)', 'Komite (Rp)', 'Peningkatan Mutu (Rp)',
-            'SPP (Rp)', 'Uang Ujian (Rp)', 'Tunggakan Tahun Lalu (Rp)', 'JUMLAH (Rp)'
+            'SPP (Rp)', 'Uang Ujian (Rp)', 'Tunggakan Tahun Lalu (Rp)', 'Seragam (Rp)', 'Uang Gedung (Rp)', 'JUMLAH (Rp)'
         ];
 
         $rows = [];
@@ -396,10 +396,12 @@ class TagihanController extends Controller {
                 0, // Kegiatan Siswa
                 0, // Komite
                 0, // Peningkatan Mutu
-                0, // SPP bulan berjalan
+                0, // SPP
                 0, // Uang Ujian
                 0, // Tunggakan Tahun Lalu
-                0  // Total Jumlah bulan berjalan
+                0, // Seragam
+                0, // Uang Gedung
+                0  // Total Jumlah
             ];
         }
 
@@ -511,6 +513,8 @@ class TagihanController extends Controller {
         // Deteksi format Braja vs FR 8001A
         $isBraja = false;
         $hasClassCol = false;
+        $frSeragamCol = null;
+        $frGedungCol = null;
         foreach ($rows as $rCheck) {
             $colA = trim((string)($rCheck['A'] ?? ''));
             $colB = trim((string)($rCheck['B'] ?? ''));
@@ -524,6 +528,16 @@ class TagihanController extends Controller {
             }
             if (str_contains($colD, 'kelas')) {
                 $hasClassCol = true;
+            }
+            if (strtolower($colA) === 'no urut') {
+                foreach ($rCheck as $colLet => $hdrVal) {
+                    $lowHdr = strtolower(trim((string)$hdrVal));
+                    if (str_contains($lowHdr, 'seragam')) {
+                        $frSeragamCol = $colLet;
+                    } elseif (str_contains($lowHdr, 'gedung')) {
+                        $frGedungCol = $colLet;
+                    }
+                }
             }
         }
 
@@ -657,6 +671,15 @@ class TagihanController extends Controller {
                 $spp             = $this->parseRupiah($row[$colKeys['spp']] ?? '0');
                 $uangUjian       = $this->parseRupiah($row[$colKeys['uj']] ?? '0');
                 $tunggakanLalu   = $this->parseRupiah($row[$colKeys['tl']] ?? '0');
+
+                if ($frSeragamCol !== null) {
+                    $vSeragam = $this->parseRupiah($row[$frSeragamCol] ?? '0');
+                    if ($vSeragam > 0) $customMap['Seragam'] = ($customMap['Seragam'] ?? 0.0) + $vSeragam;
+                }
+                if ($frGedungCol !== null) {
+                    $vGedung = $this->parseRupiah($row[$frGedungCol] ?? '0');
+                    if ($vGedung > 0) $customMap['Uang Gedung'] = ($customMap['Uang Gedung'] ?? 0.0) + $vGedung;
+                }
             }
 
             $customItems = [];
