@@ -2761,19 +2761,92 @@ class MasterController extends Controller {
     public function exportStudents(): void {
         $this->requireRole(['operator_sekolah', 'operator_yayasan']);
         $unitId = Auth::hasRole('operator_sekolah') ? Auth::unitId() : (int)($_GET['unit_id'] ?? Auth::unitId());
+        $taId = Auth::academicYearId();
+
+        $unit = Database::fetch("SELECT code, name FROM units WHERE id = ?", [$unitId]);
+        $uCode = preg_replace('/[^a-zA-Z0-9_-]/', '', (string)($unit['code'] ?? 'UNIT'));
 
         $rows = Database::fetchAll(
-            "SELECT s.nis, s.nisn, s.nik, s.no_kk, s.nama, s.gender, s.birthplace, s.birthdate, s.father_name, s.parent_phone, u.name as unit_name, c.name as class_name 
-             FROM students s 
-             JOIN units u ON s.unit_id = u.id 
-             LEFT JOIN class_students cs ON s.id = cs.student_id AND cs.status = 'Aktif' 
-             LEFT JOIN classes c ON cs.class_id = c.id 
-             WHERE s.unit_id = ? AND s.status = 'Aktif' 
-             ORDER BY s.nama ASC",
-            [$unitId]
+            "SELECT s.nama, s.nis, s.nisn, s.nik, s.gender, s.birthplace, s.birthdate,
+                    s.no_kk, s.father_name, s.parent_phone, s.parent_email,
+                    COALESCE(
+                        (SELECT c2.name FROM class_students cs2 JOIN classes c2 ON cs2.class_id = c2.id
+                         WHERE cs2.student_id = s.id AND cs2.status = 'Aktif' AND c2.academic_year_id = ?
+                         ORDER BY cs2.id DESC LIMIT 1),
+                        ''
+                    ) as class_name
+             FROM students s
+             WHERE s.unit_id = ? AND s.status = 'Aktif'
+             ORDER BY class_name ASC, s.nama ASC",
+            [$taId, $unitId]
         );
-        $headers = ['NIS', 'NISN', 'NIK', 'Nomor KK', 'Nama Siswa', 'JK', 'Tempat Lahir', 'Tgl Lahir', 'Nama Ayah/Wali', 'No. HP Ortu', 'Unit', 'Kelas'];
-        ExportHelper::excel('Data_Siswa_' . date('Ymd'), $headers, $rows, 'DATA SISWA YAYASAN ISLAM AL KAHFI BATAM');
+
+        $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+        $sheet->setTitle('Data Siswa');
+
+        // Samakan persis dengan urutan kolom & header templateStudents() agar bisa diedit massal lalu diimpor ulang
+        $headers = [
+            'A1' => 'No',
+            'B1' => 'Nama Lengkap Siswa *',
+            'C1' => 'NIS (Wajib/Unik) *',
+            'D1' => 'NISN (Opsional)',
+            'E1' => 'NIK Siswa (Opsional)',
+            'F1' => 'Jenis Kelamin (L/P) *',
+            'G1' => 'Tempat Lahir',
+            'H1' => 'Tanggal Lahir (YYYY-MM-DD)',
+            'I1' => 'Nomor Kartu Keluarga (No. KK - Username Ortu) *',
+            'J1' => 'Nama Ayah / Wali *',
+            'K1' => 'No. WhatsApp Orang Tua',
+            'L1' => 'Email Orang Tua / Wali',
+            'M1' => 'Kelas Penempatan (Pilih Dropdown)'
+        ];
+        foreach ($headers as $cell => $text) {
+            $sheet->setCellValue($cell, $text);
+        }
+
+        $sheet->getStyle('A1:M1')->applyFromArray([
+            'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
+            'fill' => ['fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, 'startColor' => ['rgb' => '047857']],
+            'alignment' => ['horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER, 'vertical' => \PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER],
+            'borders' => ['allBorders' => ['borderStyle' => \PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN]]
+        ]);
+        $sheet->getRowDimension(1)->setRowHeight(28);
+
+        $strType = \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING;
+        $rowNum = 2;
+        foreach ($rows as $idx => $r) {
+            $sheet->setCellValue("A{$rowNum}", $idx + 1);
+            $sheet->setCellValueExplicit("B{$rowNum}", (string)($r['nama'] ?? ''), $strType);
+            $sheet->setCellValueExplicit("C{$rowNum}", (string)($r['nis'] ?? ''), $strType);
+            $sheet->setCellValueExplicit("D{$rowNum}", (string)($r['nisn'] ?? ''), $strType);
+            $sheet->setCellValueExplicit("E{$rowNum}", (string)($r['nik'] ?? ''), $strType);
+            $sheet->setCellValue("F{$rowNum}", (string)($r['gender'] ?? 'L'));
+            $sheet->setCellValueExplicit("G{$rowNum}", (string)($r['birthplace'] ?? ''), $strType);
+            $sheet->setCellValueExplicit("H{$rowNum}", (string)($r['birthdate'] ?? ''), $strType);
+            $sheet->setCellValueExplicit("I{$rowNum}", (string)($r['no_kk'] ?? ''), $strType);
+            $sheet->setCellValueExplicit("J{$rowNum}", (string)($r['father_name'] ?? ''), $strType);
+            $sheet->setCellValueExplicit("K{$rowNum}", (string)($r['parent_phone'] ?? ''), $strType);
+            $sheet->setCellValueExplicit("L{$rowNum}", (string)($r['parent_email'] ?? ''), $strType);
+            $sheet->setCellValueExplicit("M{$rowNum}", (string)($r['class_name'] ?? ''), $strType);
+            $rowNum++;
+        }
+
+        foreach (range('A', 'M') as $col) {
+            $sheet->getColumnDimension($col)->setAutoSize(true);
+        }
+
+        $filename = 'Data_Siswa_' . $uCode . '_' . date('Ymd') . '.xlsx';
+        if (ob_get_length()) {
+            @ob_end_clean();
+        }
+        header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        header('Content-Disposition: attachment; filename="' . $filename . '"');
+        header('Cache-Control: max-age=0');
+
+        $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
+        $writer->save('php://output');
+        exit;
     }
 
     public function templateStudents(): void {
@@ -3146,29 +3219,62 @@ class MasterController extends Controller {
             ];
         }
 
-        // Existing students NIS, NISN, NIK, Nama in DB to detect duplicates
-        $existingNisRaw = Database::fetchAll("SELECT nis, nama FROM students WHERE nis IS NOT NULL AND nis != ''");
-        $existingNisMap = [];
-        foreach ($existingNisRaw as $r) {
-            $existingNisMap[strtolower(trim($r['nis']))] = $r['nama'];
+        // Peta siswa aktif di unit saat ini untuk deteksi data lama & perbaikan massal (NIS/NISN/NIK/Nama)
+        $unitStudentsRaw = Database::fetchAll(
+            "SELECT s.id, s.parent_user_id, s.nis, s.nisn, s.nik, s.no_kk, s.nama, s.gender,
+                    s.birthplace, s.birthdate, s.father_name, s.parent_phone, s.parent_email,
+                    (SELECT cs2.class_id FROM class_students cs2 WHERE cs2.student_id = s.id AND cs2.academic_year_id = ? AND cs2.status = 'Aktif' ORDER BY cs2.id DESC LIMIT 1) as class_id,
+                    (SELECT c2.name FROM class_students cs2 JOIN classes c2 ON cs2.class_id = c2.id WHERE cs2.student_id = s.id AND cs2.academic_year_id = ? AND cs2.status = 'Aktif' ORDER BY cs2.id DESC LIMIT 1) as class_name
+             FROM students s
+             WHERE s.unit_id = ? AND s.status = 'Aktif'",
+            [$taId, $taId, $unitId]
+        );
+
+        $unitByNis = [];
+        $unitByNisTrim = [];
+        $unitByNisn = [];
+        $unitByNik = [];
+        $unitByName = [];
+        foreach ($unitStudentsRaw as $st) {
+            $uNis = strtolower(trim((string)($st['nis'] ?? '')));
+            if ($uNis !== '') {
+                $unitByNis[$uNis] = $st;
+                $uNisTrim = ltrim($uNis, '0');
+                if ($uNisTrim !== '') {
+                    $unitByNisTrim[$uNisTrim] = $st;
+                }
+            }
+            $uNisn = strtolower(trim((string)($st['nisn'] ?? '')));
+            if ($uNisn !== '') {
+                $unitByNisn[$uNisn] = $st;
+            }
+            $uNik = strtolower(trim((string)($st['nik'] ?? '')));
+            if ($uNik !== '') {
+                $unitByNik[$uNik] = $st;
+            }
+            $uName = strtolower(preg_replace('/\s+/', ' ', trim((string)($st['nama'] ?? ''))));
+            if ($uName !== '') {
+                $unitByName[$uName] = $st;
+            }
         }
 
-        $existingNisnRaw = Database::fetchAll("SELECT nisn, nama FROM students WHERE nisn IS NOT NULL AND nisn != ''");
-        $existingNisnMap = [];
-        foreach ($existingNisnRaw as $r) {
-            $existingNisnMap[strtolower(trim($r['nisn']))] = $r['nama'];
-        }
-
-        $existingNikRaw = Database::fetchAll("SELECT nik, nama FROM students WHERE nik IS NOT NULL AND nik != ''");
-        $existingNikMap = [];
-        foreach ($existingNikRaw as $r) {
-            $existingNikMap[strtolower(trim($r['nik']))] = $r['nama'];
-        }
-
-        $existingNamaRaw = Database::fetchAll("SELECT LOWER(TRIM(nama)) as n_key, nama, nis FROM students WHERE unit_id = ? AND status = 'Aktif'", [$unitId]);
-        $existingNamaMap = [];
-        foreach ($existingNamaRaw as $r) {
-            $existingNamaMap[$r['n_key']] = $r['nis'];
+        // Peta unik global lintas unit untuk memastikan update/insert tidak bentrok dengan siswa lain
+        $globalStudentsRaw = Database::fetchAll("SELECT id, nama, nis, nisn, nik FROM students");
+        $globalNisMap = [];
+        $globalNisnMap = [];
+        $globalNikMap = [];
+        foreach ($globalStudentsRaw as $gs) {
+            $gId = (int)$gs['id'];
+            $gNama = (string)$gs['nama'];
+            if (!empty($gs['nis'])) {
+                $globalNisMap[strtolower(trim((string)$gs['nis']))] = ['id' => $gId, 'nama' => $gNama];
+            }
+            if (!empty($gs['nisn'])) {
+                $globalNisnMap[strtolower(trim((string)$gs['nisn']))] = ['id' => $gId, 'nama' => $gNama];
+            }
+            if (!empty($gs['nik'])) {
+                $globalNikMap[strtolower(trim((string)$gs['nik']))] = ['id' => $gId, 'nama' => $gNama];
+            }
         }
 
         $unit = Database::fetch("SELECT name FROM units WHERE id = ?", [$unitId]);
@@ -3190,101 +3296,145 @@ class MasterController extends Controller {
             return;
         }
 
+        $readCellStr = function(string $coord) use ($sheet): string {
+            $val = $sheet->getCell($coord)->getValue();
+            if ($val === null) return '';
+            if (is_float($val) && floor($val) == $val) {
+                return sprintf('%.0f', $val);
+            }
+            return trim((string)$val);
+        };
+
         $parsedRows = [];
         $fileNamaSeen = [];
         $fileNisSeen = [];
         $fileNisnSeen = [];
         $fileNikSeen = [];
-        $validCount = 0;
+        $fileMatchedIds = [];
+        $newCount = 0;
+        $updateCount = 0;
+        $unchangedCount = 0;
         $invalidCount = 0;
 
         for ($row = 2; $row <= $highestRow; $row++) {
-            $nama = trim((string)$sheet->getCell("B{$row}")->getValue());
-            $nis = trim((string)$sheet->getCell("C{$row}")->getValue());
-            $nisn = trim((string)$sheet->getCell("D{$row}")->getValue());
-            $nik = trim((string)$sheet->getCell("E{$row}")->getValue());
-            $genderRaw = strtoupper(trim((string)$sheet->getCell("F{$row}")->getValue()));
-            $birthplace = trim((string)$sheet->getCell("G{$row}")->getValue());
+            $nama = $readCellStr("B{$row}");
+            $nis = $readCellStr("C{$row}");
+            $nisn = $readCellStr("D{$row}");
+            $nik = $readCellStr("E{$row}");
+            $genderRaw = strtoupper($readCellStr("F{$row}"));
+            $birthplace = $readCellStr("G{$row}");
             $birthdateRaw = trim((string)$sheet->getCell("H{$row}")->getValue());
-            $noKk = trim((string)$sheet->getCell("I{$row}")->getValue());
-            $fatherName = trim((string)$sheet->getCell("J{$row}")->getValue());
-            $parentPhone = trim((string)$sheet->getCell("K{$row}")->getValue());
-            $colLVal = trim((string)$sheet->getCell("L{$row}")->getValue());
-            $colMVal = trim((string)$sheet->getCell("M{$row}")->getValue());
+            $noKk = $readCellStr("I{$row}");
+            $fatherName = $readCellStr("J{$row}");
+            $parentPhone = $readCellStr("K{$row}");
+            $colLVal = $readCellStr("L{$row}");
+            $colMVal = $readCellStr("M{$row}");
 
             // Check if empty row
-            if (empty($nama) && empty($nis) && empty($nik)) {
+            if (empty($nama) && empty($nis) && empty($nik) && empty($nisn)) {
                 continue;
             }
 
+            // Deteksi Smart Matching terhadap siswa aktif unit ini: NIS -> NISN -> NIK -> Nama Lengkap
+            $matchedStudent = null;
+            $matchVia = null;
+            $nisKey = strtolower($nis);
+            $nisTrim = ltrim($nisKey, '0');
+            $nisnKey = strtolower($nisn);
+            $nikKey = strtolower($nik);
+            $namaNorm = strtolower(preg_replace('/\s+/', ' ', $nama));
+
+            if ($nisKey !== '' && isset($unitByNis[$nisKey])) {
+                $matchedStudent = $unitByNis[$nisKey];
+                $matchVia = 'NIS';
+            } elseif ($nisTrim !== '' && isset($unitByNisTrim[$nisTrim])) {
+                $matchedStudent = $unitByNisTrim[$nisTrim];
+                $matchVia = 'NIS (format angka)';
+            } elseif ($nisnKey !== '' && isset($unitByNisn[$nisnKey])) {
+                $matchedStudent = $unitByNisn[$nisnKey];
+                $matchVia = 'NISN';
+            } elseif ($nikKey !== '' && isset($unitByNik[$nikKey])) {
+                $matchedStudent = $unitByNik[$nikKey];
+                $matchVia = 'NIK';
+            } elseif ($namaNorm !== '' && isset($unitByName[$namaNorm])) {
+                $matchedStudent = $unitByName[$namaNorm];
+                $matchVia = 'Nama Lengkap';
+            }
+
+            $isUpdate = ($matchedStudent !== null);
+            $matchedId = $isUpdate ? (int)$matchedStudent['id'] : 0;
             $errors = [];
 
-            // 1. Validasi & Cek Duplikasi Nama
-            if (empty($nama)) {
-                $errors[] = "Nama santri wajib diisi.";
-            } else {
-                $namaKey = strtolower($nama);
-                if (isset($fileNamaSeen[$namaKey])) {
-                    $errors[] = "Nama santri '{$nama}' duplikat di dalam berkas Excel (baris {$fileNamaSeen[$namaKey]}).";
+            if ($isUpdate) {
+                if (isset($fileMatchedIds[$matchedId])) {
+                    $errors[] = "Santri '{$matchedStudent['nama']}' (NIS: {$matchedStudent['nis']}) muncul lebih dari 1x di berkas Excel (baris {$fileMatchedIds[$matchedId]}).";
                 } else {
-                    $fileNamaSeen[$namaKey] = $row;
-                }
-
-                if (isset($existingNamaMap[$namaKey])) {
-                    $errors[] = "Nama santri '{$nama}' sudah terdaftar aktif di unit ini (NIS: {$existingNamaMap[$namaKey]}).";
+                    $fileMatchedIds[$matchedId] = $row;
                 }
             }
 
-            // 2. Validasi & Cek Duplikasi NIS
-            if (empty($nis)) {
+            // 1. Validasi Nama
+            if (!$isUpdate && empty($nama)) {
+                $errors[] = "Nama santri wajib diisi.";
+            } elseif (!empty($nama)) {
+                if (isset($fileNamaSeen[$namaNorm])) {
+                    $errors[] = "Nama santri '{$nama}' duplikat di dalam berkas Excel (baris {$fileNamaSeen[$namaNorm]}).";
+                } else {
+                    $fileNamaSeen[$namaNorm] = $row;
+                }
+                if ($isUpdate && isset($unitByName[$namaNorm]) && (int)$unitByName[$namaNorm]['id'] !== $matchedId) {
+                    $errors[] = "Nama '{$nama}' sudah digunakan oleh santri lain di unit ini (NIS: {$unitByName[$namaNorm]['nis']}).";
+                }
+            }
+
+            // 2. Validasi NIS
+            if (!$isUpdate && empty($nis)) {
                 $errors[] = "NIS wajib diisi.";
-            } else {
-                $nisKey = strtolower($nis);
+            } elseif (!empty($nis)) {
                 if (isset($fileNisSeen[$nisKey])) {
                     $errors[] = "NIS '{$nis}' duplikat di dalam berkas Excel (baris {$fileNisSeen[$nisKey]}).";
                 } else {
                     $fileNisSeen[$nisKey] = $row;
                 }
-
-                if (isset($existingNisMap[$nisKey])) {
-                    $errors[] = "NIS '{$nis}' sudah terdaftar untuk santri: {$existingNisMap[$nisKey]}.";
+                if (isset($globalNisMap[$nisKey]) && $globalNisMap[$nisKey]['id'] !== $matchedId) {
+                    $errors[] = "NIS '{$nis}' sudah terdaftar untuk santri lain: {$globalNisMap[$nisKey]['nama']}.";
                 }
             }
 
-            // 2b. Cek Duplikasi NISN (jika diisi)
+            // 2b. Validasi NISN (jika diisi)
             if (!empty($nisn)) {
-                $nisnKey = strtolower($nisn);
                 if (isset($fileNisnSeen[$nisnKey])) {
                     $errors[] = "NISN '{$nisn}' duplikat di dalam berkas Excel (baris {$fileNisnSeen[$nisnKey]}).";
                 } else {
                     $fileNisnSeen[$nisnKey] = $row;
                 }
-
-                if (isset($existingNisnMap[$nisnKey])) {
-                    $errors[] = "NISN '{$nisn}' sudah terdaftar untuk santri: {$existingNisnMap[$nisnKey]}.";
+                if (isset($globalNisnMap[$nisnKey]) && $globalNisnMap[$nisnKey]['id'] !== $matchedId) {
+                    $errors[] = "NISN '{$nisn}' sudah terdaftar untuk santri lain: {$globalNisnMap[$nisnKey]['nama']}.";
                 }
             }
 
-            // 2c. Cek Duplikasi NIK (jika diisi)
+            // 2c. Validasi NIK (jika diisi)
             if (!empty($nik)) {
-                $nikKey = strtolower($nik);
                 if (isset($fileNikSeen[$nikKey])) {
                     $errors[] = "NIK '{$nik}' duplikat di dalam berkas Excel (baris {$fileNikSeen[$nikKey]}).";
                 } else {
                     $fileNikSeen[$nikKey] = $row;
                 }
-
-                if (isset($existingNikMap[$nikKey])) {
-                    $errors[] = "NIK '{$nik}' sudah terdaftar untuk santri: {$existingNikMap[$nikKey]}.";
+                if (isset($globalNikMap[$nikKey]) && $globalNikMap[$nikKey]['id'] !== $matchedId) {
+                    $errors[] = "NIK '{$nik}' sudah terdaftar untuk santri lain: {$globalNikMap[$nikKey]['nama']}.";
                 }
             }
 
             // 3. Validasi Jenis Kelamin
-            $gender = 'L';
-            if (empty($genderRaw) || !in_array($genderRaw, ['L', 'P', 'LAKI-LAKI', 'PEREMPUAN'], true)) {
-                $errors[] = "Jenis Kelamin '{$genderRaw}' tidak valid (wajib L atau P).";
-            } else {
-                $gender = str_starts_with($genderRaw, 'P') ? 'P' : 'L';
+            $gender = $isUpdate ? ($matchedStudent['gender'] ?? 'L') : 'L';
+            if (!empty($genderRaw)) {
+                if (!in_array($genderRaw, ['L', 'P', 'LAKI-LAKI', 'PEREMPUAN'], true)) {
+                    $errors[] = "Jenis Kelamin '{$genderRaw}' tidak valid (wajib L atau P).";
+                } else {
+                    $gender = str_starts_with($genderRaw, 'P') ? 'P' : 'L';
+                }
+            } elseif (!$isUpdate) {
+                $errors[] = "Jenis Kelamin wajib diisi (L atau P).";
             }
 
             // 4. Tanggal Lahir
@@ -3344,46 +3494,102 @@ class MasterController extends Controller {
                 }
             }
 
-            if (empty($noKk)) {
-                $noKk = !empty($nis) ? 'KK-' . $nis : 'KK-AUTO';
+            // Hitung diff perubahan untuk baris UPDATE (sel kosong di Excel tidak menimpa data lama)
+            $changes = [];
+            if ($isUpdate) {
+                $compareFields = [
+                    'nama'         => ['label' => 'Nama', 'val' => $nama],
+                    'nis'          => ['label' => 'NIS', 'val' => $nis],
+                    'nisn'         => ['label' => 'NISN', 'val' => $nisn],
+                    'nik'          => ['label' => 'NIK', 'val' => $nik],
+                    'gender'       => ['label' => 'JK', 'val' => !empty($genderRaw) ? $gender : ''],
+                    'birthplace'   => ['label' => 'Tempat Lahir', 'val' => $birthplace],
+                    'birthdate'    => ['label' => 'Tgl Lahir', 'val' => $birthdate ?? ''],
+                    'no_kk'        => ['label' => 'No. KK', 'val' => $noKk],
+                    'father_name'  => ['label' => 'Nama Wali', 'val' => $fatherName],
+                    'parent_phone' => ['label' => 'No. HP', 'val' => $parentPhone],
+                    'parent_email' => ['label' => 'Email Ortu', 'val' => $parentEmail],
+                ];
+                foreach ($compareFields as $fKey => $fMeta) {
+                    $newVal = trim((string)$fMeta['val']);
+                    $oldVal = trim((string)($matchedStudent[$fKey] ?? ''));
+                    if ($newVal !== '' && $newVal !== $oldVal) {
+                        $changes[] = [
+                            'field' => $fKey,
+                            'label' => $fMeta['label'],
+                            'old'   => $oldVal !== '' ? $oldVal : '(kosong)',
+                            'new'   => $newVal
+                        ];
+                    }
+                }
+                $oldClassId = (int)($matchedStudent['class_id'] ?? 0);
+                if ($targetClassId !== null && (int)$targetClassId !== $oldClassId) {
+                    $changes[] = [
+                        'field' => 'class_id',
+                        'label' => 'Kelas',
+                        'old'   => !empty($matchedStudent['class_name']) ? $matchedStudent['class_name'] : '(belum ada)',
+                        'new'   => $targetClassName
+                    ];
+                }
+
+                // Jika siswa lama ditemukan, tanpa error, dan semua kolom identik -> lewati otomatis
+                if (empty($errors) && empty($changes)) {
+                    $unchangedCount++;
+                    continue;
+                }
+            } else {
+                if (empty($noKk)) {
+                    $noKk = !empty($nis) ? 'KK-' . $nis : 'KK-AUTO';
+                }
             }
 
             $isValid = empty($errors);
             if ($isValid) {
-                $validCount++;
+                if ($isUpdate) {
+                    $updateCount++;
+                } else {
+                    $newCount++;
+                }
             } else {
                 $invalidCount++;
             }
 
             $parsedRows[] = [
-                'temp_id'          => $row,
-                'row_num'          => $row,
-                'nama'             => $nama,
-                'nis'              => $nis,
-                'nisn'             => $nisn,
-                'nik'              => $nik,
-                'gender'           => $gender,
-                'birthplace'       => $birthplace,
-                'birthdate'        => $birthdate,
-                'no_kk'            => $noKk,
-                'father_name'      => $fatherName,
-                'parent_phone'     => $parentPhone,
-                'parent_email'     => $parentEmail,
-                'class_id'         => $targetClassId,
-                'class_name'       => $targetClassName,
-                'is_valid'         => $isValid,
-                'errors'           => $errors
+                'temp_id'            => $row,
+                'row_num'            => $row,
+                'action_type'        => $isUpdate ? 'update' : 'insert',
+                'matched_student_id' => $isUpdate ? $matchedId : null,
+                'match_via'          => $matchVia,
+                'changes'            => $changes,
+                'nama'               => $nama !== '' ? $nama : ($matchedStudent['nama'] ?? ''),
+                'nis'                => $nis !== '' ? $nis : ($matchedStudent['nis'] ?? ''),
+                'nisn'               => $nisn,
+                'nik'                => $nik,
+                'gender'             => $gender,
+                'birthplace'         => $birthplace,
+                'birthdate'          => $birthdate,
+                'no_kk'              => $noKk,
+                'father_name'        => $fatherName,
+                'parent_phone'       => $parentPhone,
+                'parent_email'       => $parentEmail,
+                'class_id'           => $targetClassId,
+                'class_name'         => $targetClassName !== '' ? $targetClassName : ($matchedStudent['class_name'] ?? ''),
+                'is_valid'           => $isValid,
+                'errors'             => $errors
             ];
         }
 
         $responseData = [
-            'success'       => true,
-            'unit_id'       => $unitId,
-            'unit_name'     => $unitName,
-            'total_rows'    => count($parsedRows),
-            'valid_count'   => $validCount,
-            'invalid_count' => $invalidCount,
-            'rows'          => $parsedRows
+            'success'         => true,
+            'unit_id'         => $unitId,
+            'unit_name'       => $unitName,
+            'total_rows'      => count($parsedRows),
+            'new_count'       => $newCount,
+            'update_count'    => $updateCount,
+            'unchanged_count' => $unchangedCount,
+            'valid_count'     => $newCount + $updateCount,
+            'invalid_count'   => $invalidCount,
+            'rows'            => $parsedRows
         ];
 
         if ($isAjax) {
@@ -3417,6 +3623,8 @@ class MasterController extends Controller {
         $parentRoleId = $parentRole ? (int)$parentRole['id'] : 18;
 
         $imported = 0;
+        $updated = 0;
+        $parentSynced = 0;
         $skipped = 0;
         $errors = [];
 
@@ -3429,6 +3637,188 @@ class MasterController extends Controller {
                     continue;
                 }
 
+                $actionType = $s['action_type'] ?? 'insert';
+                $matchedStudentId = !empty($s['matched_student_id']) ? (int)$s['matched_student_id'] : 0;
+
+                if ($actionType === 'update' && $matchedStudentId > 0) {
+                    $existing = Database::fetch("SELECT * FROM students WHERE id = ? AND unit_id = ?", [$matchedStudentId, $unitId]);
+                    if (!$existing) {
+                        $skipped++;
+                        $errors[] = "Data siswa lama (ID #{$matchedStudentId}) tidak ditemukan di unit ini.";
+                        continue;
+                    }
+
+                    $nama = trim((string)($s['nama'] ?? ''));
+                    $nis = trim((string)($s['nis'] ?? ''));
+                    $nisn = trim((string)($s['nisn'] ?? ''));
+                    $nik = trim((string)($s['nik'] ?? ''));
+                    $gender = in_array(strtoupper((string)($s['gender'] ?? '')), ['L', 'P'], true) ? strtoupper((string)$s['gender']) : '';
+                    $birthplace = trim((string)($s['birthplace'] ?? ''));
+                    $birthdate = !empty($s['birthdate']) ? trim((string)$s['birthdate']) : '';
+                    $noKk = trim((string)($s['no_kk'] ?? ''));
+                    $fatherName = trim((string)($s['father_name'] ?? ''));
+                    $parentPhone = trim((string)($s['parent_phone'] ?? ''));
+                    $parentEmail = trim((string)($s['parent_email'] ?? ''));
+                    $classId = !empty($s['class_id']) ? (int)$s['class_id'] : 0;
+
+                    // Guard bentrok identitas terhadap siswa lain
+                    if ($nis !== '' && Database::fetch("SELECT id FROM students WHERE nis = ? AND id != ?", [$nis, $matchedStudentId])) {
+                        $skipped++;
+                        $errors[] = "NIS '{$nis}' bentrok dengan siswa lain.";
+                        continue;
+                    }
+                    if ($nisn !== '' && Database::fetch("SELECT id FROM students WHERE nisn = ? AND id != ?", [$nisn, $matchedStudentId])) {
+                        $skipped++;
+                        $errors[] = "NISN '{$nisn}' bentrok dengan siswa lain.";
+                        continue;
+                    }
+                    if ($nik !== '' && Database::fetch("SELECT id FROM students WHERE nik = ? AND id != ?", [$nik, $matchedStudentId])) {
+                        $skipped++;
+                        $errors[] = "NIK '{$nik}' bentrok dengan siswa lain.";
+                        continue;
+                    }
+
+                    $candidateFields = [
+                        'nama'         => $nama,
+                        'nis'          => $nis,
+                        'nisn'         => $nisn,
+                        'nik'          => $nik,
+                        'gender'       => $gender,
+                        'birthplace'   => $birthplace,
+                        'birthdate'    => $birthdate,
+                        'no_kk'        => $noKk,
+                        'father_name'  => $fatherName,
+                        'parent_phone' => $parentPhone,
+                        'parent_email' => $parentEmail,
+                    ];
+
+                    $setCols = [];
+                    $setParams = [];
+                    $oldDiff = [];
+                    $newDiff = [];
+                    foreach ($candidateFields as $col => $newVal) {
+                        $oldVal = trim((string)($existing[$col] ?? ''));
+                        if ($newVal !== '' && $newVal !== $oldVal) {
+                            $setCols[] = "{$col} = ?";
+                            $setParams[] = $newVal;
+                            $oldDiff[$col] = $oldVal;
+                            $newDiff[$col] = $newVal;
+                        }
+                    }
+
+                    if (!empty($setCols)) {
+                        $setParams[] = $matchedStudentId;
+                        Database::execute("UPDATE students SET " . implode(', ', $setCols) . " WHERE id = ?", $setParams);
+                    }
+
+                    // Sinkronisasi Akun Login Orang Tua (users.username = no_kk, phone, email)
+                    $oldKk = trim((string)($existing['no_kk'] ?? ''));
+                    $oldParentId = (int)($existing['parent_user_id'] ?? 0);
+                    $targetParentId = $oldParentId;
+                    $effectiveNama = $nama !== '' ? $nama : (string)$existing['nama'];
+                    $effectivePhone = $parentPhone !== '' ? $parentPhone : (string)($existing['parent_phone'] ?? '');
+                    $effectiveEmail = $parentEmail !== '' ? $parentEmail : (string)($existing['parent_email'] ?? '');
+                    $effectiveFather = $fatherName !== '' ? $fatherName : (string)($existing['father_name'] ?? '');
+
+                    if ($noKk !== '' && $noKk !== $oldKk) {
+                        $existingTargetUser = Database::fetch("SELECT id FROM users WHERE username = ?", [$noKk]);
+                        if ($existingTargetUser) {
+                            // Relink ke akun keluarga dengan No. KK baru (Multi-Child / Sibling Linkage)
+                            $targetParentId = (int)$existingTargetUser['id'];
+                            Database::execute("UPDATE students SET parent_user_id = ? WHERE id = ?", [$targetParentId, $matchedStudentId]);
+                            $parentSynced++;
+                        } elseif ($oldParentId > 0) {
+                            $otherChildren = Database::fetch("SELECT COUNT(*) as c FROM students WHERE parent_user_id = ? AND id != ?", [$oldParentId, $matchedStudentId]);
+                            if ((int)($otherChildren['c'] ?? 0) === 0) {
+                                // Perbarui username akun ortu lama ke No. KK baru tanpa mengubah password
+                                Database::execute("UPDATE users SET username = ? WHERE id = ?", [$noKk, $oldParentId]);
+                                $parentSynced++;
+                            } else {
+                                // Akun lama dipakai anak lain -> buat akun baru untuk No. KK baru
+                                $pHash = password_hash('password123', PASSWORD_DEFAULT);
+                                $pName = $effectiveFather !== '' ? $effectiveFather : ('Orang Tua ' . $effectiveNama);
+                                Database::execute(
+                                    "INSERT INTO users (username, password_hash, full_name, email, phone, unit_id, is_active, force_change_password)
+                                     VALUES (?, ?, ?, ?, ?, ?, 1, 0)",
+                                    [$noKk, $pHash, $pName, $effectiveEmail ?: null, $effectivePhone ?: null, $unitId]
+                                );
+                                $targetParentId = (int)Database::lastInsertId();
+                                Database::execute("INSERT IGNORE INTO user_roles (user_id, role_id, is_primary) VALUES (?, ?, 1)", [$targetParentId, $parentRoleId]);
+                                Database::execute("UPDATE students SET parent_user_id = ? WHERE id = ?", [$targetParentId, $matchedStudentId]);
+                                $parentSynced++;
+                            }
+                        } else {
+                            $pHash = password_hash('password123', PASSWORD_DEFAULT);
+                            $pName = $effectiveFather !== '' ? $effectiveFather : ('Orang Tua ' . $effectiveNama);
+                            Database::execute(
+                                "INSERT INTO users (username, password_hash, full_name, email, phone, unit_id, is_active, force_change_password)
+                                 VALUES (?, ?, ?, ?, ?, ?, 1, 0)",
+                                [$noKk, $pHash, $pName, $effectiveEmail ?: null, $effectivePhone ?: null, $unitId]
+                            );
+                            $targetParentId = (int)Database::lastInsertId();
+                            Database::execute("INSERT IGNORE INTO user_roles (user_id, role_id, is_primary) VALUES (?, ?, 1)", [$targetParentId, $parentRoleId]);
+                            Database::execute("UPDATE students SET parent_user_id = ? WHERE id = ?", [$targetParentId, $matchedStudentId]);
+                            $parentSynced++;
+                        }
+                    }
+
+                    if ($targetParentId > 0) {
+                        $uParent = Database::fetch("SELECT full_name, phone, email FROM users WHERE id = ?", [$targetParentId]);
+                        if ($uParent) {
+                            $uSets = [];
+                            $uParams = [];
+                            if ($parentPhone !== '' && $parentPhone !== trim((string)($uParent['phone'] ?? ''))) {
+                                $uSets[] = "phone = ?";
+                                $uParams[] = $parentPhone;
+                            }
+                            if ($parentEmail !== '' && $parentEmail !== trim((string)($uParent['email'] ?? ''))) {
+                                $uSets[] = "email = ?";
+                                $uParams[] = $parentEmail;
+                            }
+                            $currUName = trim((string)($uParent['full_name'] ?? ''));
+                            if ($fatherName !== '' && ($currUName === '' || str_starts_with($currUName, 'Orang Tua '))) {
+                                $uSets[] = "full_name = ?";
+                                $uParams[] = $fatherName;
+                            }
+                            if (!empty($uSets)) {
+                                $uParams[] = $targetParentId;
+                                Database::execute("UPDATE users SET " . implode(', ', $uSets) . " WHERE id = ?", $uParams);
+                                if ($noKk === '' || $noKk === $oldKk) {
+                                    $parentSynced++;
+                                }
+                            }
+                        }
+                    }
+
+                    // Update penempatan kelas jika dipilih kelas baru pada TA aktif
+                    if ($classId > 0) {
+                        $existingCs = Database::fetch(
+                            "SELECT id, class_id FROM class_students WHERE student_id = ? AND academic_year_id = ? AND status = 'Aktif' ORDER BY id DESC LIMIT 1",
+                            [$matchedStudentId, $taId]
+                        );
+                        if ($existingCs) {
+                            if ((int)$existingCs['class_id'] !== $classId) {
+                                Database::execute("UPDATE class_students SET class_id = ? WHERE id = ?", [$classId, $existingCs['id']]);
+                                $oldDiff['class_id'] = $existingCs['class_id'];
+                                $newDiff['class_id'] = $classId;
+                            }
+                        } else {
+                            Database::execute(
+                                "INSERT INTO class_students (class_id, student_id, academic_year_id, status) VALUES (?, ?, ?, 'Aktif')
+                                 ON DUPLICATE KEY UPDATE class_id = VALUES(class_id), status = 'Aktif'",
+                                [$classId, $matchedStudentId, $taId]
+                            );
+                            $oldDiff['class_id'] = null;
+                            $newDiff['class_id'] = $classId;
+                        }
+                    }
+
+                    AuditLog::log('BULK_UPDATE_STUDENT_IMPORT', 'students', $matchedStudentId, $oldDiff, $newDiff);
+                    $updated++;
+                    continue;
+                }
+
+                // Jalur INSERT Siswa Baru
                 $nama = trim($s['nama'] ?? '');
                 $nis = trim($s['nis'] ?? '');
                 if (empty($nama) || empty($nis)) {
@@ -3543,13 +3933,29 @@ class MasterController extends Controller {
             return;
         }
 
-        $msg = "Alhamdulillah, berhasil memasukkan {$imported} data santri valid ke dalam sistem.";
+        unset($_SESSION['pending_student_import']);
+
+        $parts = [];
+        if ($imported > 0) $parts[] = "{$imported} santri baru ditambahkan";
+        if ($updated > 0) $parts[] = "{$updated} data santri lama diperbarui";
+        if ($parentSynced > 0) $parts[] = "{$parentSynced} akun orang tua disinkronkan";
+        $msg = !empty($parts)
+            ? "Alhamdulillah, " . implode(', ', $parts) . "."
+            : "Tidak ada perubahan data santri yang disimpan.";
         if ($skipped > 0) {
-            $msg .= " ({$skipped} baris data bermasalah/duplikat dilewati).";
+            $msg .= " ({$skipped} baris bermasalah/duplikat dilewati).";
         }
 
         $this->setFlash('success', $msg);
-        echo json_encode(['success' => true, 'message' => $msg, 'imported' => $imported, 'skipped' => $skipped]);
+        echo json_encode([
+            'success'       => true,
+            'message'       => $msg,
+            'imported'      => $imported,
+            'updated'       => $updated,
+            'parent_synced' => $parentSynced,
+            'skipped'       => $skipped,
+            'errors'        => $errors
+        ]);
     }
 
     // --- 6. KELAS & MATA PELAJARAN ---

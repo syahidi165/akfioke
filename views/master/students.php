@@ -58,26 +58,33 @@ $canEdit = Auth::hasAnyRole(['operator_sekolah', 'operator_yayasan']);
 
         <!-- Ringkasan Status & Toolbar Tombol Aksi -->
         <div style="padding: 14px 24px; background: #f8fafc; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; flex-shrink: 0;">
-            <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
-                <div style="background: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; padding: 6px 14px; font-size: 12.5px;">
-                    Total Data: <strong id="vTotalCount" style="color: #0f172a;">0</strong> Santri
+            <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                <div style="background: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; padding: 6px 12px; font-size: 12px;">
+                    Terdeteksi: <strong id="vTotalCount" style="color: #0f172a;">0</strong>
                 </div>
-                <div style="background: #f0fdf4; border: 1px solid #86efac; border-radius: 8px; padding: 6px 14px; font-size: 12.5px; color: #166534;">
-                    <i class="fa-solid fa-circle-check" style="color: #16a34a;"></i> Siap Masuk: <strong id="vValidCount">0</strong>
+                <div style="background: #f0fdf4; border: 1px solid #86efac; border-radius: 8px; padding: 6px 12px; font-size: 12px; color: #166534;">
+                    <i class="fa-solid fa-user-plus" style="color: #16a34a;"></i> Baru: <strong id="vNewCount">0</strong>
                 </div>
-                <div id="vInvalidBadgeBox" style="background: #fef2f2; border: 1px solid #fca5a5; border-radius: 8px; padding: 6px 14px; font-size: 12.5px; color: #991b1b;">
-                    <i class="fa-solid fa-triangle-exclamation" style="color: #dc2626;"></i> Bermasalah / Tidak Sesuai: <strong id="vInvalidCount">0</strong>
+                <div style="background: #fffbeb; border: 1px solid #fcd34d; border-radius: 8px; padding: 6px 12px; font-size: 12px; color: #92400e;">
+                    <i class="fa-solid fa-pen-to-square" style="color: #d97706;"></i> Update Data Lama: <strong id="vUpdateCount">0</strong>
+                </div>
+                <div id="vUnchangedBox" style="display: none; background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 8px; padding: 6px 12px; font-size: 12px; color: #475569;">
+                    <i class="fa-solid fa-equals"></i> Sama/Dilewati: <strong id="vUnchangedCount">0</strong>
+                </div>
+                <div id="vInvalidBadgeBox" style="background: #fef2f2; border: 1px solid #fca5a5; border-radius: 8px; padding: 6px 12px; font-size: 12px; color: #991b1b;">
+                    <i class="fa-solid fa-triangle-exclamation" style="color: #dc2626;"></i> Bermasalah: <strong id="vInvalidCount">0</strong>
                 </div>
             </div>
 
             <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
                 <button type="button" id="btnDropInvalid" class="btn btn-sm btn-outline-danger" onclick="dropAllInvalidRows()" style="display: inline-flex; align-items: center; gap: 6px; font-weight: 600; padding: 6px 12px; font-size: 12px; border-radius: 6px; border: 1px solid #ef4444; color: #ef4444; background: #fff;">
-                    <i class="fa-solid fa-trash-can"></i> Hapus Semua Data Bermasalah
+                    <i class="fa-solid fa-trash-can"></i> Hapus Semua Bermasalah
                 </button>
                 <div class="btn-group" style="display: inline-flex; border: 1px solid #cbd5e1; border-radius: 6px; overflow: hidden;">
-                    <button type="button" class="btn btn-sm" id="btnFilterAll" onclick="filterVerifyRows('all')" style="padding: 5px 12px; font-size: 12px; background: #0284c7; color: #fff; border: none; cursor: pointer;">Semua</button>
-                    <button type="button" class="btn btn-sm" id="btnFilterValid" onclick="filterVerifyRows('valid')" style="padding: 5px 12px; font-size: 12px; background: #fff; color: #475569; border: none; border-left: 1px solid #cbd5e1; cursor: pointer;">Hanya Valid</button>
-                    <button type="button" class="btn btn-sm" id="btnFilterInvalid" onclick="filterVerifyRows('invalid')" style="padding: 5px 12px; font-size: 12px; background: #fff; color: #475569; border: none; border-left: 1px solid #cbd5e1; cursor: pointer;">Bermasalah</button>
+                    <button type="button" class="btn btn-sm" id="btnFilterAll" onclick="filterVerifyRows('all')" style="padding: 5px 10px; font-size: 12px; background: #0284c7; color: #fff; border: none; cursor: pointer;">Semua</button>
+                    <button type="button" class="btn btn-sm" id="btnFilterNew" onclick="filterVerifyRows('new')" style="padding: 5px 10px; font-size: 12px; background: #fff; color: #475569; border: none; border-left: 1px solid #cbd5e1; cursor: pointer;">Baru</button>
+                    <button type="button" class="btn btn-sm" id="btnFilterUpdate" onclick="filterVerifyRows('update')" style="padding: 5px 10px; font-size: 12px; background: #fff; color: #475569; border: none; border-left: 1px solid #cbd5e1; cursor: pointer;">Update Lama</button>
+                    <button type="button" class="btn btn-sm" id="btnFilterInvalid" onclick="filterVerifyRows('invalid')" style="padding: 5px 10px; font-size: 12px; background: #fff; color: #475569; border: none; border-left: 1px solid #cbd5e1; cursor: pointer;">Bermasalah</button>
                 </div>
             </div>
         </div>
@@ -107,14 +114,14 @@ $canEdit = Auth::hasAnyRole(['operator_sekolah', 'operator_yayasan']);
         <div class="modal-footer" style="padding: 16px 24px; background: #f8fafc; border-top: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; flex-shrink: 0;">
             <div style="font-size: 12px; color: #64748b; line-height: 1.4;">
                 <i class="fa-solid fa-circle-info" style="color: #0284c7; margin-right: 4px;"></i>
-                Hanya data santri berstatus <strong>Siap Masuk (Valid)</strong> yang akan disimpan ke database.
+                Siswa <strong>Baru</strong> akan ditambahkan dan siswa <strong>Update Data Lama</strong> akan memperbarui kolom yang berubah (termasuk sinkronisasi akun Ortu).
             </div>
             <div style="display: flex; gap: 10px; align-items: center;">
                 <button type="button" class="btn btn-outline" onclick="closeVerifyModal()" style="padding: 8px 18px; border-radius: 8px;">
                     Batalkan
                 </button>
                 <button type="button" class="btn btn-success" id="btnCommitImport" onclick="commitVerifiedImport()" style="padding: 9px 22px; font-weight: 700; display: inline-flex; align-items: center; gap: 8px; background: #10b981; border-color: #10b981; color: #ffffff; border-radius: 8px; box-shadow: 0 4px 6px -1px rgba(16, 185, 129, 0.25); cursor: pointer;">
-                    <i class="fa-solid fa-cloud-arrow-down"></i> Masukkan Data ke Sistem (<span id="btnCommitCount">0</span> Santri Valid)
+                    <i class="fa-solid fa-cloud-arrow-down"></i> Simpan ke Sistem (<span id="btnCommitCount">0</span> Data Valid)
                 </button>
             </div>
         </div>
@@ -629,6 +636,7 @@ function handleVerifyImport(event, formElement) {
         }
 
         verifiedRows = data.rows || [];
+        window.verifyUnchangedCount = parseInt(data.unchanged_count || 0, 10) || 0;
         if (data.unit_id) {
             verifyUnitId = data.unit_id;
         }
@@ -659,12 +667,18 @@ function filterVerifyRows(type) {
 function renderVerifyTable() {
     const total = verifiedRows.length;
     const validRows = verifiedRows.filter(r => r.is_valid);
+    const newRows = validRows.filter(r => (r.action_type || 'insert') === 'insert');
+    const updateRows = validRows.filter(r => r.action_type === 'update');
     const validCount = validRows.length;
     const invalidCount = total - validCount;
+    const unchangedCount = window.verifyUnchangedCount || 0;
 
     // Update Counter Badges
     const elTotal = document.getElementById('vTotalCount');
-    const elValid = document.getElementById('vValidCount');
+    const elNew = document.getElementById('vNewCount');
+    const elUpdate = document.getElementById('vUpdateCount');
+    const elUnchangedBox = document.getElementById('vUnchangedBox');
+    const elUnchanged = document.getElementById('vUnchangedCount');
     const elInvalid = document.getElementById('vInvalidCount');
     const elCommit = document.getElementById('btnCommitCount');
     const btnCommit = document.getElementById('btnCommitImport');
@@ -672,9 +686,14 @@ function renderVerifyTable() {
     const badgeInvalidBox = document.getElementById('vInvalidBadgeBox');
 
     if (elTotal) elTotal.innerText = total;
-    if (elValid) elValid.innerText = validCount;
+    if (elNew) elNew.innerText = newRows.length;
+    if (elUpdate) elUpdate.innerText = updateRows.length;
+    if (elUnchangedBox && elUnchanged) {
+        elUnchangedBox.style.display = unchangedCount > 0 ? 'block' : 'none';
+        elUnchanged.innerText = unchangedCount;
+    }
     if (elInvalid) elInvalid.innerText = invalidCount;
-    if (elCommit) elCommit.innerText = validCount;
+    if (elCommit) elCommit.innerText = newRows.length + ' Baru, ' + updateRows.length + ' Update';
 
     if (badgeInvalidBox) {
         badgeInvalidBox.style.display = invalidCount > 0 ? 'block' : 'none';
@@ -697,13 +716,16 @@ function renderVerifyTable() {
 
     // Toggle filter buttons UI
     const btnAll = document.getElementById('btnFilterAll');
-    const btnV = document.getElementById('btnFilterValid');
+    const btnNew = document.getElementById('btnFilterNew');
+    const btnUpd = document.getElementById('btnFilterUpdate');
     const btnInv = document.getElementById('btnFilterInvalid');
-    if (btnAll && btnV && btnInv) {
+    if (btnAll && btnNew && btnUpd && btnInv) {
         btnAll.style.background = currentVerifyFilter === 'all' ? '#0284c7' : '#fff';
         btnAll.style.color = currentVerifyFilter === 'all' ? '#fff' : '#475569';
-        btnV.style.background = currentVerifyFilter === 'valid' ? '#10b981' : '#fff';
-        btnV.style.color = currentVerifyFilter === 'valid' ? '#fff' : '#475569';
+        btnNew.style.background = currentVerifyFilter === 'new' ? '#10b981' : '#fff';
+        btnNew.style.color = currentVerifyFilter === 'new' ? '#fff' : '#475569';
+        btnUpd.style.background = currentVerifyFilter === 'update' ? '#d97706' : '#fff';
+        btnUpd.style.color = currentVerifyFilter === 'update' ? '#fff' : '#475569';
         btnInv.style.background = currentVerifyFilter === 'invalid' ? '#ef4444' : '#fff';
         btnInv.style.color = currentVerifyFilter === 'invalid' ? '#fff' : '#475569';
     }
@@ -713,8 +735,10 @@ function renderVerifyTable() {
 
     // Filter list for display
     let displayRows = verifiedRows;
-    if (currentVerifyFilter === 'valid') {
-        displayRows = verifiedRows.filter(r => r.is_valid);
+    if (currentVerifyFilter === 'new') {
+        displayRows = verifiedRows.filter(r => r.is_valid && (r.action_type || 'insert') === 'insert');
+    } else if (currentVerifyFilter === 'update') {
+        displayRows = verifiedRows.filter(r => r.is_valid && r.action_type === 'update');
     } else if (currentVerifyFilter === 'invalid') {
         displayRows = verifiedRows.filter(r => !r.is_valid);
     }
@@ -723,7 +747,7 @@ function renderVerifyTable() {
         if (total === 0) {
             tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; padding: 32px 20px; color: #64748b;">
                 <i class="fa-solid fa-folder-open" style="font-size: 2rem; color: #cbd5e1; margin-bottom: 8px; display: block;"></i>
-                Semua baris pratinjau telah dihapus. Silakan unggah berkas baru jika diperlukan.
+                ${unchangedCount > 0 ? 'Seluruh baris identik dengan data lama (' + unchangedCount + ' santri sama persis, dilewati otomatis).' : 'Semua baris pratinjau telah dihapus. Silakan unggah berkas baru jika diperlukan.'}
             </td></tr>`;
         } else {
             tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; padding: 24px 20px; color: #64748b;">
@@ -735,8 +759,13 @@ function renderVerifyTable() {
 
     let html = '';
     displayRows.forEach((row, index) => {
-        const bgRow = row.is_valid ? (index % 2 === 0 ? '#ffffff' : '#fcfdfd') : '#fff5f5';
-        const borderRow = row.is_valid ? 'border-bottom: 1px solid #f1f5f9;' : 'border-bottom: 1px solid #fed7d7;';
+        const isUpdate = (row.action_type === 'update');
+        const bgRow = !row.is_valid
+            ? '#fff5f5'
+            : (isUpdate ? '#fffbeb' : (index % 2 === 0 ? '#ffffff' : '#fcfdfd'));
+        const borderRow = !row.is_valid
+            ? 'border-bottom: 1px solid #fed7d7;'
+            : (isUpdate ? 'border-bottom: 1px solid #fde68a;' : 'border-bottom: 1px solid #f1f5f9;');
 
         const genderBadge = row.gender === 'P'
             ? '<span class="badge" style="background: #fdf2f8; color: #db2777; border: 1px solid #fbcfe8;">Perempuan</span>'
@@ -748,9 +777,23 @@ function renderVerifyTable() {
 
         let statusCell = '';
         if (row.is_valid) {
-            statusCell = `<span class="badge" style="background: #dcfce7; color: #15803d; border: 1px solid #86efac; padding: 4px 10px; font-weight: 600;">
-                <i class="fa-solid fa-circle-check"></i> Siap Masuk
-            </span>`;
+            if (isUpdate) {
+                const diffList = (row.changes || []).map(ch =>
+                    `<li><strong>${escapeHtml(ch.label)}:</strong> <del style="color:#94a3b8;">${escapeHtml(ch.old)}</del> &rarr; <strong style="color:#92400e;">${escapeHtml(ch.new)}</strong></li>`
+                ).join('');
+                statusCell = `<div>
+                    <span class="badge" style="background: #fef3c7; color: #b45309; border: 1px solid #fcd34d; padding: 3px 8px; margin-bottom: 4px; display: inline-block; font-weight: 700;">
+                        <i class="fa-solid fa-pen-to-square"></i> Update Data Lama (${escapeHtml(row.match_via || 'Cocok')})
+                    </span>
+                    <ul style="margin: 0; padding-left: 14px; text-align: left; font-size: 11px; color: #78350f; line-height: 1.4;">
+                        ${diffList}
+                    </ul>
+                </div>`;
+            } else {
+                statusCell = `<span class="badge" style="background: #dcfce7; color: #15803d; border: 1px solid #86efac; padding: 4px 10px; font-weight: 600;">
+                    <i class="fa-solid fa-user-plus"></i> Siswa Baru
+                </span>`;
+            }
         } else {
             const errList = (row.errors || []).map(err => `<li>${escapeHtml(err)}</li>`).join('');
             statusCell = `<div>
@@ -780,9 +823,7 @@ function renderVerifyTable() {
             </td>
             <td>
                 <div style="font-weight: 600; color: #334155;">${escapeHtml(row.father_name || 'Orang Tua / Wali')}</div>
-                <div style="font-size: 11px; color: #64748b; margin-top: 2px;">
-                    <i class="fa-solid fa-address-card" title="No. KK (Username Ortu)" style="color: #64748b;"></i> KK: <code>${escapeHtml(row.no_kk)}</code>
-                </div>
+                ${row.no_kk ? `<div style="font-size: 11px; color: #64748b; margin-top: 2px;"><i class="fa-solid fa-address-card" title="No. KK (Username Ortu)" style="color: #64748b;"></i> KK: <code>${escapeHtml(row.no_kk)}</code></div>` : ''}
                 ${row.parent_phone ? `<div style="font-size: 11px; color: #166534;"><i class="fa-brands fa-whatsapp" style="color: #16a34a;"></i> ${escapeHtml(row.parent_phone)}</div>` : ''}
                 ${row.parent_email ? `<div style="font-size: 11px; color: #0284c7;"><i class="fa-solid fa-envelope"></i> ${escapeHtml(row.parent_email)}</div>` : ''}
             </td>
@@ -811,7 +852,7 @@ function dropAllInvalidRows() {
     const invalidCount = verifiedRows.filter(r => !r.is_valid).length;
     if (invalidCount === 0) return;
 
-    if (!confirm('Hapus seluruh ' + invalidCount + ' baris data santri yang bermasalah?\n\nHanya data yang valid dan memenuhi syarat yang akan tersisa untuk dimasukkan ke sistem.')) {
+    if (!confirm('Hapus seluruh ' + invalidCount + ' baris data santri yang bermasalah?\n\nHanya data yang valid dan memenuhi syarat yang akan tersisa untuk diproses.')) {
         return;
     }
 
@@ -842,6 +883,7 @@ function closeVerifyModal() {
         modal.classList.remove('show');
     }
     verifiedRows = [];
+    window.verifyUnchangedCount = 0;
 }
 
 function cancelVerifyImport() {
@@ -851,14 +893,16 @@ function cancelVerifyImport() {
 function commitVerifiedImport() {
     const validRows = verifiedRows.filter(r => r.is_valid);
     if (validRows.length === 0) {
-        alert('Tidak ada data santri yang berstatus valid untuk dimasukkan ke dalam sistem.');
+        alert('Tidak ada data santri yang berstatus valid untuk disimpan ke sistem.');
         return;
     }
 
+    const newCount = validRows.filter(r => (r.action_type || 'insert') === 'insert').length;
+    const updCount = validRows.filter(r => r.action_type === 'update').length;
     const invalidCount = verifiedRows.length - validRows.length;
-    let confirmMsg = 'Apakah Anda yakin ingin memasukkan ' + validRows.length + ' data santri yang telah terverifikasi ke dalam sistem database?';
+    let confirmMsg = 'Simpan perubahan ke sistem: ' + newCount + ' santri baru ditambahkan dan ' + updCount + ' data santri lama diperbarui secara massal?';
     if (invalidCount > 0) {
-        confirmMsg += '\n\nPerhatian: ' + invalidCount + ' data yang bermasalah/tidak sesuai tidak akan masuk ke sistem.';
+        confirmMsg += '\n\nPerhatian: ' + invalidCount + ' data bermasalah akan dilewati.';
     }
 
     if (!confirm(confirmMsg)) {
@@ -913,6 +957,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const initialImport = <?= json_encode($pendingImport) ?>;
         if (initialImport && initialImport.rows && initialImport.rows.length > 0) {
             verifiedRows = initialImport.rows;
+            window.verifyUnchangedCount = parseInt(initialImport.unchanged_count || 0, 10) || 0;
             if (initialImport.unit_id) {
                 verifyUnitId = initialImport.unit_id;
             }
