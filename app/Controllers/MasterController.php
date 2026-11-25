@@ -3961,13 +3961,16 @@ class MasterController extends Controller {
     // --- 6. KELAS & MATA PELAJARAN ---
     public function classes(): void {
         $this->requireRole(['operator_sekolah', 'operator_yayasan']);
+        self::ensureUserRolesUnitColumn();
         $unitId = Auth::hasRole('operator_sekolah') ? Auth::unitId() : (int)($_GET['unit_id'] ?? Auth::unitId());
         $taId = Auth::academicYearId();
 
         $classes = Database::fetchAll(
-            "SELECT c.*, e.nama as walas_name, e.contact_phone as walas_phone, e.position as walas_position, COUNT(cs.student_id) as student_count 
+            "SELECT c.*, e.nama as walas_name, e.contact_phone as walas_phone, e.position as walas_position,
+                    CASE WHEN e.id IS NOT NULL AND e.unit_id != c.unit_id THEN 1 ELSE 0 END as walas_is_cross_unit,
+                    COUNT(cs.student_id) as student_count 
              FROM classes c 
-             LEFT JOIN employees e ON c.walas_id = e.id AND e.unit_id = c.unit_id AND e.is_deleted = 0 AND e.status = 'Aktif'
+             LEFT JOIN employees e ON c.walas_id = e.id AND e.is_deleted = 0 AND e.status = 'Aktif'
              LEFT JOIN class_students cs ON c.id = cs.class_id AND cs.status = 'Aktif' 
              WHERE c.unit_id = ? AND c.academic_year_id = ? 
              GROUP BY c.id ORDER BY c.level ASC, c.name ASC",
@@ -3976,45 +3979,57 @@ class MasterController extends Controller {
 
         $teachers = Database::fetchAll(
             "SELECT e.id, e.nama, e.level_posisi, e.position, e.contact_phone,
-                    GROUP_CONCAT(DISTINCT r.display_name ORDER BY ur.is_primary DESC, r.display_name ASC SEPARATOR ', ') as role_names,
-                    MAX(CASE WHEN r.name = 'walas' THEN 1 ELSE 0 END) as has_walas_role
+                    CASE WHEN e.unit_id = ? THEN 0 ELSE 1 END as is_cross_unit,
+                    home_u.name as home_unit_name,
+                    GROUP_CONCAT(DISTINCT CASE WHEN (e.unit_id = ? AND COALESCE(ur.unit_id, 0) = 0) OR ur.unit_id = ? THEN r.display_name END ORDER BY ur.is_primary DESC, r.display_name ASC SEPARATOR ', ') as role_names,
+                    MAX(CASE WHEN r.name = 'walas' AND ((e.unit_id = ? AND COALESCE(ur.unit_id, 0) = 0) OR ur.unit_id = ?) THEN 1 ELSE 0 END) as has_walas_role
              FROM employees e
+             LEFT JOIN units home_u ON e.unit_id = home_u.id
              LEFT JOIN users u ON e.user_id = u.id
              LEFT JOIN user_roles ur ON u.id = ur.user_id
              LEFT JOIN roles r ON ur.role_id = r.id
-             WHERE e.unit_id = ? AND e.is_deleted = 0 AND e.status = 'Aktif'
+             WHERE e.is_deleted = 0 AND e.status = 'Aktif'
                AND (
-                   EXISTS (
-                       SELECT 1 FROM user_roles ur2 
-                       JOIN roles r2 ON ur2.role_id = r2.id 
-                       WHERE ur2.user_id = e.user_id AND r2.name = 'walas'
-                   )
-                   OR e.id IN (
-                       SELECT DISTINCT walas_id FROM classes WHERE unit_id = ? AND walas_id IS NOT NULL
-                   )
-                   OR EXISTS (
-                       SELECT 1 FROM user_roles ur2 
-                       JOIN roles r2 ON ur2.role_id = r2.id 
-                       WHERE ur2.user_id = e.user_id AND r2.name IN (
-                           'guru_kelas', 'guru_mapel', 'guru_diniyah', 'guru_tahfidz', 
-                           'guru_tk', 'guru_mapel_kbtk', 'guru_supervisor', 
-                           'waka_kurikulum', 'waka_kesiswaan', 'koor_tahfidz', 'tutor_siswa', 'tutor_sebaya'
+                   (
+                       e.unit_id = ?
+                       AND (
+                           EXISTS (
+                               SELECT 1 FROM user_roles ur2 
+                               JOIN roles r2 ON ur2.role_id = r2.id 
+                               WHERE ur2.user_id = e.user_id AND COALESCE(ur2.unit_id, 0) = 0 AND r2.name = 'walas'
+                           )
+                           OR e.id IN (
+                               SELECT DISTINCT walas_id FROM classes WHERE unit_id = ? AND walas_id IS NOT NULL
+                           )
+                           OR EXISTS (
+                               SELECT 1 FROM user_roles ur2 
+                               JOIN roles r2 ON ur2.role_id = r2.id 
+                               WHERE ur2.user_id = e.user_id AND COALESCE(ur2.unit_id, 0) = 0 AND r2.name IN (
+                                   'guru_kelas', 'guru_mapel', 'guru_diniyah', 'guru_tahfidz', 
+                                   'guru_tk', 'guru_mapel_kbtk', 'guru_supervisor', 
+                                   'waka_kurikulum', 'waka_kesiswaan', 'koor_tahfidz', 'tutor_siswa', 'tutor_sebaya'
+                               )
+                           )
+                           OR (
+                               (e.position LIKE '%Guru%' OR e.level_posisi LIKE '%Guru%' 
+                                OR e.position LIKE '%Wali%' OR e.level_posisi LIKE '%Wali%' 
+                                OR e.position LIKE '%Walas%' OR e.level_posisi LIKE '%Walas%' 
+                                OR e.position LIKE '%Waka%' OR e.level_posisi LIKE '%Waka%' 
+                                OR e.position LIKE '%Tutor%' OR e.level_posisi LIKE '%Tutor%' 
+                                OR e.position LIKE '%Pengajar%' OR e.level_posisi LIKE '%Pengajar%')
+                               AND e.level_posisi NOT IN ('Direktur Pendidikan', 'Deputi Direktur', 'Kepala Sekolah', 'Tata Usaha Keuangan', 'Cleaning Services', 'Security', 'Operator Sekolah')
+                               AND (e.position IS NULL OR e.position NOT IN ('Direktur Pendidikan', 'Deputi Direktur', 'Kepala Sekolah', 'Tata Usaha Keuangan', 'Cleaning Services', 'Security', 'Operator Sekolah'))
+                           )
                        )
                    )
-                   OR (
-                       (e.position LIKE '%Guru%' OR e.level_posisi LIKE '%Guru%' 
-                        OR e.position LIKE '%Wali%' OR e.level_posisi LIKE '%Wali%' 
-                        OR e.position LIKE '%Walas%' OR e.level_posisi LIKE '%Walas%' 
-                        OR e.position LIKE '%Waka%' OR e.level_posisi LIKE '%Waka%' 
-                        OR e.position LIKE '%Tutor%' OR e.level_posisi LIKE '%Tutor%' 
-                        OR e.position LIKE '%Pengajar%' OR e.level_posisi LIKE '%Pengajar%')
-                       AND e.level_posisi NOT IN ('Direktur Pendidikan', 'Deputi Direktur', 'Kepala Sekolah', 'Tata Usaha Keuangan', 'Cleaning Services', 'Security', 'Operator Sekolah')
-                       AND (e.position IS NULL OR e.position NOT IN ('Direktur Pendidikan', 'Deputi Direktur', 'Kepala Sekolah', 'Tata Usaha Keuangan', 'Cleaning Services', 'Security', 'Operator Sekolah'))
+                   OR EXISTS (
+                       SELECT 1 FROM user_roles urx
+                       WHERE urx.user_id = e.user_id AND urx.unit_id = ?
                    )
                )
-             GROUP BY e.id, e.nama, e.level_posisi, e.position, e.contact_phone
-             ORDER BY e.nama ASC", 
-            [$unitId, $unitId]
+             GROUP BY e.id, e.nama, e.level_posisi, e.position, e.contact_phone, e.unit_id, home_u.name
+             ORDER BY is_cross_unit ASC, has_walas_role DESC, e.nama ASC", 
+            [$unitId, $unitId, $unitId, $unitId, $unitId, $unitId, $unitId, $unitId]
         );
 
         $unit = Database::fetch("SELECT * FROM units WHERE id = ?", [$unitId]);
@@ -4054,6 +4069,7 @@ class MasterController extends Controller {
 
     public function saveClass(): void {
         $this->requireRole(['operator_sekolah', 'operator_yayasan']);
+        self::ensureUserRolesUnitColumn();
         $id = (int)($_POST['id'] ?? 0);
         $name = trim($_POST['name'] ?? '');
         $level = PromotionHelper::normalizeLevel(trim($_POST['level'] ?? ''));
@@ -4061,21 +4077,31 @@ class MasterController extends Controller {
         $unitId = Auth::hasRole('operator_sekolah') ? Auth::unitId() : (int)($_POST['unit_id'] ?? Auth::unitId());
         $taId = Auth::academicYearId();
 
-        // Validasi: pastikan wali kelas berasal dari unit sekolah yang sama
+        // Validasi: pastikan wali kelas berasal dari unit sekolah yang sama ATAU guru lintas unit di unit ini
         if ($walasId) {
-            $validWalas = Database::fetch("SELECT id, user_id FROM employees WHERE id = ? AND unit_id = ? AND is_deleted = 0", [$walasId, $unitId]);
+            $validWalas = Database::fetch(
+                "SELECT e.id, e.user_id, e.unit_id
+                 FROM employees e
+                 WHERE e.id = ? AND e.is_deleted = 0 AND e.status = 'Aktif'
+                   AND (
+                       e.unit_id = ?
+                       OR EXISTS (SELECT 1 FROM user_roles urx WHERE urx.user_id = e.user_id AND urx.unit_id = ?)
+                   )",
+                [$walasId, $unitId, $unitId]
+            );
             if (!$validWalas) {
-                $this->setFlash('danger', 'Validasi Gagal: Guru yang dipilih sebagai wali kelas bukan berasal dari unit sekolah Anda.');
+                $this->setFlash('danger', 'Validasi Gagal: Guru yang dipilih sebagai wali kelas bukan berasal dari unit sekolah Anda atau penugasan lintas unit.');
                 $this->redirect(Auth::baseUrl() . '/classes');
                 return;
             }
-            // Pastikan user akun guru memiliki peran walas (Guru Wali Kelas)
+            // Pastikan user akun guru memiliki peran walas pada konteks unitnya (0 = induk, $unitId = lintas unit)
             if (!empty($validWalas['user_id'])) {
                 $walasRole = Database::fetch("SELECT id FROM roles WHERE name = 'walas'");
                 if ($walasRole) {
+                    $roleUnitId = ((int)$validWalas['unit_id'] === $unitId) ? 0 : $unitId;
                     Database::execute(
-                        "INSERT IGNORE INTO user_roles (user_id, role_id, is_primary) VALUES (?, ?, 0)",
-                        [$validWalas['user_id'], (int)$walasRole['id']]
+                        "INSERT IGNORE INTO user_roles (user_id, role_id, unit_id, is_primary) VALUES (?, ?, ?, 0)",
+                        [$validWalas['user_id'], (int)$walasRole['id'], $roleUnitId]
                     );
                 }
             }

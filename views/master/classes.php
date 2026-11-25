@@ -181,6 +181,9 @@ function getLevelBadgeStyle(string $lvl): array {
                                     <div style="font-size: 10px; text-transform: uppercase; color: var(--text-muted); font-weight: 700;">Wali Kelas</div>
                                     <div style="font-size: 13px; font-weight: 700; color: #1e293b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="<?= SecurityHelper::escape($c['walas_name']) ?>">
                                         <?= SecurityHelper::escape($c['walas_name']) ?>
+                                        <?php if (!empty($c['walas_is_cross_unit'])): ?>
+                                            <span class="badge" style="font-size: 10px; background: #fef3c7; color: #b45309; border: 1px solid #fcd34d; margin-left: 4px; padding: 1px 6px;">Lintas Unit</span>
+                                        <?php endif; ?>
                                     </div>
                                     <?php if (!empty($c['walas_phone'])): ?>
                                         <div style="font-size: 11px; color: #0284c7; margin-top: 1px;">
@@ -380,7 +383,7 @@ function getLevelBadgeStyle(string $lvl): array {
                                         : ($posLabel ?: 'Guru Wali Kelas');
                                 }
                             ?>
-                            <option value="<?= $t['id'] ?>"><?= SecurityHelper::escape($t['nama']) ?><?= !empty($posLabel) ? ' (' . SecurityHelper::escape($posLabel) . ')' : '' ?></option>
+                            <option value="<?= $t['id'] ?>"><?= SecurityHelper::escape($t['nama']) ?><?= !empty($t['is_cross_unit']) ? ' [Lintas Unit]' : '' ?><?= !empty($posLabel) ? ' (' . SecurityHelper::escape($posLabel) . ')' : '' ?></option>
                         <?php endforeach; ?>
                     </select>
                 </div>
