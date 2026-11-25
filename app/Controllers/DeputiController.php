@@ -1019,23 +1019,31 @@ class DeputiController extends Controller {
 
     /**
      * Evaluasi ketercapaian 1 standar KPI Mutu Deputi pada unit tertentu.
-     * Untuk kategori TAHFIZH/TAHFIDZ dan TAHSIN, membaca langsung dari modul Halaqah Tahfidz & Tahsin
-     * (tahfidz_setoran_siswa & tahfidz_exams) dengan fallback ke student_grades.
+     * Untuk kategori TAHFIZH/TAHFIDZ dan TAHSIN (termasuk variasi nama seperti TAHFIDZ AL-QUR'AN / TAHTA),
+     * membaca langsung dari modul Halaqah Tahfidz & Tahsin dengan fallback ke student_grades.
+     * Untuk kategori mapel umum, mendukung pemetaan sinonim dwibahasa serta hitungan siswa unik (anti > 100%).
      */
     public static function evaluateKpiStandard(array $std, int $taId): array {
         \App\Controllers\TahfidzController::ensureTahsinColumns();
         $unitId = (int)($std['unit_id'] ?? 0);
-        $cat = strtoupper(trim($std['kpi_category'] ?? ''));
+        $cat = strtoupper(trim((string)($std['kpi_category'] ?? '')));
         $kkm = (float)($std['kkm_score'] ?? 75.0);
         $targetPct = (float)($std['target_achievement_pct'] ?? 80.0);
 
-        if (in_array($cat, ['TAHFIZH', 'TAHFIDZ'], true)) {
-            $totRow = Database::fetch(
-                "SELECT COUNT(id) as cnt FROM students WHERE unit_id = ? AND status = 'Aktif'",
-                [$unitId]
-            );
-            $tot = (int)($totRow['cnt'] ?? 0);
+        $totRow = Database::fetch(
+            "SELECT COUNT(id) as cnt FROM students WHERE unit_id = ? AND status = 'Aktif'",
+            [$unitId]
+        );
+        $tot = (int)($totRow['cnt'] ?? 0);
 
+        $isTahfidz = ($cat !== '') && (
+            str_contains($cat, 'TAHFIZH') || str_contains($cat, 'TAHFIDZ') || str_contains($cat, 'HAFALAN') || str_contains($cat, 'TAHTA')
+        );
+        $isTahsin = ($cat !== '') && !$isTahfidz && (
+            str_contains($cat, 'TAHSIN') || str_contains($cat, 'TAJWID') || str_contains($cat, 'TILAWAH')
+        );
+
+        if ($isTahfidz) {
             $passRow = Database::fetch(
                 "SELECT COUNT(DISTINCT s.id) as cnt
                  FROM students s
@@ -1059,32 +1067,27 @@ class DeputiController extends Controller {
                                FROM student_grades sg
                                JOIN subjects sub ON sg.subject_id = sub.id
                                WHERE sg.academic_year_id = ? AND sub.unit_id = ?
-                                 AND (sub.deputi_kpi_category IN ('TAHFIZH', 'TAHFIDZ') OR sub.name LIKE '%Tahfidz%' OR sub.name LIKE '%Tahfizh%')
+                                 AND (UPPER(TRIM(COALESCE(sub.deputi_kpi_category, ''))) IN ('TAHFIZH', 'TAHFIDZ', ?) OR sub.name LIKE '%Tahfidz%' OR sub.name LIKE '%Tahfizh%' OR sub.name LIKE '%Hafalan%' OR sub.name LIKE '%Tahta%')
                                GROUP BY sg.student_id
                            ) gtf WHERE gtf.student_id = s.id AND gtf.avg_sc >= ?
                        )
                    )",
-                [$unitId, $taId, $kkm, $taId, $taId, $kkm, $taId, $unitId, $kkm]
+                [$unitId, $taId, $kkm, $taId, $taId, $kkm, $taId, $unitId, $cat, $kkm]
             );
             $pass = (int)($passRow['cnt'] ?? 0);
             $pct = $tot > 0 ? round(($pass / $tot) * 100, 2) : 0.0;
 
             return [
-                'total'     => $tot,
-                'passed'    => $pass,
-                'pct'       => $pct,
-                'is_target' => $pct >= $targetPct,
-                'source'    => 'Modul Halaqah Tahfidz & Ujian'
+                'total'            => $tot,
+                'passed'           => $pass,
+                'pct'              => $pct,
+                'is_target'        => $pct >= $targetPct,
+                'source'           => 'Modul Halaqah Tahfidz & Ujian',
+                'matched_subjects' => []
             ];
         }
 
-        if ($cat === 'TAHSIN') {
-            $totRow = Database::fetch(
-                "SELECT COUNT(id) as cnt FROM students WHERE unit_id = ? AND status = 'Aktif'",
-                [$unitId]
-            );
-            $tot = (int)($totRow['cnt'] ?? 0);
-
+        if ($isTahsin) {
             $passRow = Database::fetch(
                 "SELECT COUNT(DISTINCT s.id) as cnt
                  FROM students s
@@ -1104,53 +1107,97 @@ class DeputiController extends Controller {
                                FROM student_grades sg
                                JOIN subjects sub ON sg.subject_id = sub.id
                                WHERE sg.academic_year_id = ? AND sub.unit_id = ?
-                                 AND (sub.deputi_kpi_category = 'TAHSIN' OR sub.name LIKE '%Tahsin%')
+                                 AND (UPPER(TRIM(COALESCE(sub.deputi_kpi_category, ''))) IN ('TAHSIN', ?) OR sub.name LIKE '%Tahsin%' OR sub.name LIKE '%Tajwid%' OR sub.name LIKE '%Tilawah%')
                                GROUP BY sg.student_id
                            ) gts WHERE gts.student_id = s.id AND gts.avg_sc >= ?
                        )
                    )",
-                [$unitId, $taId, $kkm, $taId, $kkm, $taId, $unitId, $kkm]
+                [$unitId, $taId, $kkm, $taId, $kkm, $taId, $unitId, $cat, $kkm]
             );
             $pass = (int)($passRow['cnt'] ?? 0);
             $pct = $tot > 0 ? round(($pass / $tot) * 100, 2) : 0.0;
 
             return [
-                'total'     => $tot,
-                'passed'    => $pass,
-                'pct'       => $pct,
-                'is_target' => $pct >= $targetPct,
-                'source'    => 'Modul Halaqah Tahsin & Tajwid'
+                'total'            => $tot,
+                'passed'           => $pass,
+                'pct'              => $pct,
+                'is_target'        => $pct >= $targetPct,
+                'source'           => 'Modul Halaqah Tahsin & Tajwid',
+                'matched_subjects' => []
             ];
         }
 
-        // Kategori Mapel Lainnya: Query siswa yang mengambil mata pelajaran dengan kategori ini di unit tersebut
-        $scoreStats = Database::fetch(
-            "SELECT COUNT(DISTINCT s.id) as total_students,
-                    COALESCE(SUM(CASE WHEN mg.avg_score >= ? THEN 1 ELSE 0 END), 0) as passed_students
-             FROM students s
-             JOIN class_students cs ON s.id = cs.student_id AND cs.status = 'Aktif'
-             JOIN classes c ON cs.class_id = c.id AND c.unit_id = ? AND c.academic_year_id = ?
-             JOIN subjects sub ON sub.unit_id = c.unit_id AND (sub.deputi_kpi_category = ? OR sub.name LIKE ?)
-             LEFT JOIN (
-                 SELECT student_id, subject_id, AVG(score) as avg_score 
-                 FROM student_grades 
-                 WHERE academic_year_id = ?
-                 GROUP BY student_id, subject_id
-             ) mg ON mg.student_id = s.id AND mg.subject_id = sub.id
-             WHERE s.unit_id = ? AND s.status = 'Aktif'",
-            [$kkm, $unitId, $taId, $cat, "%{$cat}%", $taId, $unitId]
-        );
+        // Peta sinonim dwibahasa KPI Deputi <-> Nama Mapel unit sekolah
+        $synonymMap = [
+            'MATH'            => ['Matematika', 'MTK', 'Math'],
+            'MATEMATIKA'      => ['Matematika', 'MTK', 'Math'],
+            'SCIENCE'         => ['IPA', 'IPAS', 'Sains', 'Science', 'Ilmu Pengetahuan Alam'],
+            'IPA'             => ['IPA', 'IPAS', 'Sains', 'Science'],
+            'INDONESIAN'      => ['Bahasa Indonesia', 'B. Indonesia', 'B.Indo', 'Indonesian'],
+            'BAHASA INDONESIA'=> ['Bahasa Indonesia', 'B. Indonesia', 'B.Indo', 'Indonesian'],
+            'ENGLISH'         => ['Bahasa Inggris', 'B. Inggris', 'English'],
+            'BAHASA INGGRIS'  => ['Bahasa Inggris', 'B. Inggris', 'English'],
+            'ARABIC'          => ['Bahasa Arab', 'B. Arab', 'Arabic'],
+            'BAHASA ARAB'     => ['Bahasa Arab', 'B. Arab', 'Arabic'],
+            'PHYSIC'          => ['Fisika', 'Physic'],
+            'FISIKA'          => ['Fisika', 'Physic'],
+            'CHEMISTRY'       => ['Kimia', 'Chemistry'],
+            'KIMIA'           => ['Kimia', 'Chemistry'],
+            'BIOLOGY'         => ['Biologi', 'Biology'],
+            'BIOLOGI'         => ['Biologi', 'Biology'],
+            'DINIYAH'         => ['Diniyah', 'Fiqih', 'Fikih', 'Aqidah', 'Akidah', 'Akhlak', 'SKI', 'PAI', 'Pendidikan Agama', 'Hadits', 'Sirah'],
+            'TUHFATUL'        => ['Tuhfatul', 'Tajwid'],
+        ];
 
-        $tot = (int)($scoreStats['total_students'] ?? 0);
-        $pass = (int)($scoreStats['passed_students'] ?? 0);
+        $nameTokens = [];
+        if ($cat !== '') {
+            $nameTokens[] = $cat;
+            foreach ($synonymMap as $key => $syns) {
+                if ($cat === $key || str_contains($cat, $key)) {
+                    foreach ($syns as $sTok) {
+                        $nameTokens[] = $sTok;
+                    }
+                }
+            }
+        }
+        $nameTokens = array_values(array_unique($nameTokens));
+
+        $subSql = "SELECT id, name FROM subjects WHERE unit_id = ? AND (UPPER(TRIM(COALESCE(deputi_kpi_category, ''))) = ?";
+        $subParams = [$unitId, $cat];
+        foreach ($nameTokens as $tok) {
+            $subSql .= " OR name LIKE ?";
+            $subParams[] = '%' . $tok . '%';
+        }
+        $subSql .= ") ORDER BY name ASC";
+        $matchedSubjects = Database::fetchAll($subSql, $subParams);
+
+        $pass = 0;
+        if (!empty($matchedSubjects) && $tot > 0) {
+            $inSubIds = implode(',', array_map('intval', array_column($matchedSubjects, 'id')));
+            $passRow = Database::fetch(
+                "SELECT COUNT(*) as cnt
+                 FROM (
+                     SELECT sg.student_id
+                     FROM student_grades sg
+                     JOIN students s ON sg.student_id = s.id AND s.unit_id = ? AND s.status = 'Aktif'
+                     WHERE sg.academic_year_id = ? AND sg.subject_id IN ({$inSubIds})
+                     GROUP BY sg.student_id
+                     HAVING AVG(sg.score) >= ?
+                 ) t",
+                [$unitId, $taId, $kkm]
+            );
+            $pass = (int)($passRow['cnt'] ?? 0);
+        }
+
         $pct = $tot > 0 ? round(($pass / $tot) * 100, 2) : 0.0;
 
         return [
-            'total'     => $tot,
-            'passed'    => $pass,
-            'pct'       => $pct,
-            'is_target' => $pct >= $targetPct,
-            'source'    => 'Nilai Bulanan Mapel'
+            'total'            => $tot,
+            'passed'           => $pass,
+            'pct'              => $pct,
+            'is_target'        => $pct >= $targetPct,
+            'source'           => 'Nilai Bulanan Mapel',
+            'matched_subjects' => array_column($matchedSubjects, 'name')
         ];
     }
 
@@ -1991,7 +2038,7 @@ class DeputiController extends Controller {
                     $ratioSum += min(100.0, ($eval['pct'] / $targetPct) * 100.0);
                 }
                 $catUpper = strtoupper(trim($std['kpi_category'] ?? ''));
-                if (in_array($catUpper, ['TAHFIZH', 'TAHFIDZ', 'TAHSIN'], true)) {
+                if (str_contains($eval['source'] ?? '', 'Halaqah')) {
                     $tahfidzTahsinSummary[] = "{$catUpper}: {$eval['pct']}%";
                 }
             }

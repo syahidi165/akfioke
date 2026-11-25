@@ -97,6 +97,17 @@ $baseUrl = Auth::baseUrl();
                                     <span style="display: inline-block; margin-top: 3px; font-size: 0.7rem; padding: 2px 6px; border-radius: 4px; background: <?= str_contains($ach['source'], 'Halaqah') ? 'rgba(13, 148, 136, 0.12)' : '#f1f5f9' ?>; color: <?= str_contains($ach['source'], 'Halaqah') ? '#0f766e' : '#64748b' ?>; font-weight: 600;">
                                         <i class="fa-solid <?= str_contains($ach['source'], 'Halaqah') ? 'fa-book-quran' : 'fa-file-lines' ?>" style="margin-right: 3px;"></i><?= SecurityHelper::escape($ach['source']) ?>
                                     </span>
+                                    <?php if (!str_contains($ach['source'], 'Halaqah')): ?>
+                                        <?php if (!empty($ach['matched_subjects'])): ?>
+                                            <div style="font-size: 0.7rem; color: #475569; margin-top: 3px;">
+                                                <i class="fa-solid fa-link" style="color: #0284c7;"></i> Mapel: <?= SecurityHelper::escape(implode(', ', $ach['matched_subjects'])) ?>
+                                            </div>
+                                        <?php else: ?>
+                                            <div style="font-size: 0.7rem; color: #d97706; margin-top: 3px;" title="Operator Sekolah dapat memilih Kategori KPI pada menu Master Mata Pelajaran atau samakan nama mapel unit">
+                                                <i class="fa-solid fa-circle-exclamation"></i> Belum ada mapel cocok di unit ini
+                                            </div>
+                                        <?php endif; ?>
+                                    <?php endif; ?>
                                 <?php endif; ?>
                             </td>
                             <td style="padding: 12px 16px; font-size: 0.8125rem; color: #475569;">
