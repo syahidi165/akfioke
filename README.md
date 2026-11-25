@@ -1,7 +1,7 @@
 # MASEKO / AKFIOKE — Sistem Manajemen Sekolah Terpadu & Penilaian Kinerja (AKFI)
 ### Yayasan Islam Al Kahfi Batam
 
-> *Terakhir diperbarui: 25 November 2026 (Sinkronisasi codebase hingga fitur Penugasan Lintas Unit & 1 Rapor AKFI Opsi 1)*
+> *Terakhir diperbarui: 25 November 2026 (Sinkronisasi codebase hingga Penugasan Lintas Unit & Pembaruan Sistem Penagihan FR-8001A/B/C/D, Impor Akumulasi Bulanan, Buku Cicilan & Backup Offline)*
 
 Aplikasi web enterprise yang dikembangkan khusus untuk **Yayasan Islam Al Kahfi Batam** menggunakan **PHP 8.x Native + MariaDB/MySQL**, dirancang responsif dengan orientasi **Sidebar**, dukungan **Progressive Web App (PWA)**, multi-role switcher, **Delegasi Izin Switch Akun**, filter **Tahun Ajaran & Semester (Opsi B: 1 TA = 2 Semester Juli–Juni)** global, penyimpanan multi-tier (**Hot & Cold Storage NAS**), serta berjalan secara **offline-ready** tanpa ketergantungan CDN eksternal.
 
@@ -87,12 +87,14 @@ Aplikasi web enterprise yang dikembangkan khusus untuk **Yayasan Islam Al Kahfi 
 - **Nilai Bulanan & Ledger:** Input nilai manual/impor Excel oleh Guru Mapel, rekap Ledger Nilai Kelas oleh Wali Kelas (ekspor Excel/PDF), serta cetak Rapor Bulanan dan Rapor Gabungan Santri.
 
 ### 9. Modul Keuangan, Tagihan SPP Multi-Tahap & Buku Cicilan
-- **Input Tagihan (`FR 8001A`):** Mendukung 7 kolom rincian biaya + item kustom, impor Excel, fitur **Pencarian Siswa by Nama/NIS** saat input/kelola tagihan, serta **indikator status email orang tua** di tabel daftar tagihan.
-- **Pengingat `FR 8001B` + Lampiran PDF Otomatis:** Tata Usaha dapat menerbitkan surat `FR 8001B` yang otomatis membuat **PDF resmi FR 8001B** dan mengirimkannya sebagai **lampiran email via PHPMailer SMTP** ke email orang tua (lengkap dengan `SMTPOptions`, deteksi SSL/TLS port `465`/`587`, batas memori/eksekusi aman, dan pesan notifikasi status/error transparan jika email kosong/gagal).
-- **Eskalasi Kepala Sekolah & Deputi (`FR 8001C` & `FR 8001D`) + Upload Dokumen TTD:**
-  - Kepala Sekolah (`/tagihan/approval`) menerbitkan panggilan `FR 8001C` / kesepakatan `FR 8001D`, serta dapat **mengunggah dokumen FR 8001C & FR 8001D yang sudah ditandatangani orang tua (opsional)** saat klik **Selesai** atau **Ke Yayasan** (berkas tersimpan dan dapat dilihat kembali sewaktu-waktu).
-  - Deputi Pendidikan (`/tagihan/eskalasi-deputi`) menangani eskalasi tingkat Yayasan (kop Yayasan) dan juga memiliki **form upload opsional FR 8001C & FR 8001D bertanda tangan orang tua** saat klik **Selesai** yang tersimpan permanen.
-- **Buku & Kartu Cicilan Siswa (`/tagihan/cicilan`):** Kesepakatan `FR 8001D` otomatis masuk ke Buku Cicilan TU lintas tahun ajaran sampai lunas, dapat mencetak Kartu Cicilan PDF dan mengirim email ringkasan cicilan.
+- **Input, Format & Sortir Tagihan (`FR 8001A`, `/tagihan/manage`, `/tagihan/template`):** Mendukung 7 kolom rincian biaya + item kustom, filter tab/pill **Per Kelas** beserta kolom **Kelas**, urutan alfabetis **A–Z per kelas**, filter **Sembunyikan Lunas**, pencarian siswa by Nama/NIS, indikator status email orang tua, perbaikan sinkronisasi gender (`L/P`) pada templat Excel, serta tombol **Backup Offline (.xlsx)** (`/tagihan/backup-offline`) 3 sheet (Tagihan, Buku Cicilan, Riwayat Pembayaran).
+- **Verifikasi Impor Excel & Akumulasi Tagihan Bulanan (`/tagihan/verify-import`, `/tagihan/confirm-import`):** Berkas Excel `FR 8001A` cukup diisi tagihan **bulan berjalan saja**. Sebelum disimpan, modal pratinjau memisahkan baris ke tab **Data Valid** dan **Data Bermasalah**. Saat dikonfirmasi, tagihan baru otomatis **terakumulasi** ke tagihan `Tertunggak` yang masih aktif (dan ikut menambah sisa kewajiban `remaining_debt` pada Buku Cicilan aktif tanpa mengubah pokok kesepakatan awal `total_debt`).
+- **Pengingat `FR 8001B` Satuan & Kirim Massal (`/tagihan/kirim-fr8001b`, `/tagihan/bulk-kirim-fr8001b`):** Mendukung pengiriman satuan maupun **Kirim Massal FR 8001B** ke banyak santri terpilih sekaligus via **PHPMailer SMTP** berlampiran **PDF resmi FR 8001B** (lengkap dengan `SMTPOptions`, auto-deteksi port `465`/`587`, serta laporan jumlah terkirim/kosong/gagal).
+- **Eskalasi Kepala Sekolah & Deputi (`FR 8001C` & `FR 8001D`) + Upload Scan TTD:**
+  - Penandatangan resmi pada cetakan PDF (Kepala Sekolah, Kepala Tata Usaha, Deputi Pendidikan) diambil langsung dari database (`employees`/`units`) berdasarkan `unit_id` agar tetap akurat meskipun operator/admin menggunakan *Switch User*.
+  - Kepala Sekolah (`/tagihan/approval`), Deputi Pendidikan (`/tagihan/eskalasi-deputi`), dan Tata Usaha (`/tagihan/upload-signed-doc`) dapat mengunggah scan **FR 8001C & FR 8001D** bertanda tangan orang tua secara opsional sewaktu-waktu tanpa wajib mengisi nominal cicilan manual.
+  - Cetakan PDF **`FR 8001D`** menggunakan format resmi 2 halaman / 2 dokumen: (1) *Berita Acara Kesepakatan Pembayaran Tunggakan Biaya Sekolah* (`.../BA-KEU/AIS/...`) dan (2) *Surat Pernyataan Komitmen Pembayaran Tunggakan Biaya Sekolah* (No. KTP/NIK, Alamat Domisili, No. HP, Opsi A Lunas / Opsi B Dicicil Angsuran I–IV).
+- **Buku & Kartu Cicilan Siswa (`/tagihan/cicilan`):** Mendukung pelunasan presisi hingga nominal non-kelipatan ribuan (`step="1"`, tombol cepat **Lunasi Pas**), cetak Kartu Cicilan PDF (`/tagihan/cicilan/cetak-kartu`), serta pengiriman email status cicilan (`/tagihan/cicilan/kirim-email`) beserta **lampiran PDF Kartu Cicilan**.
 
 ### 10. Modul Sarpras, Inventaris Aset, PO & Berita Acara Scrap (`F30`)
 - Kategori & master inventaris aset (`/sarpras/assets` dengan impor/ekspor Excel).
@@ -175,7 +177,7 @@ password123
 | **`guru_diniyah`** | `guru.diniyah` | Input nilai mapel diniyah bulanan, perangkat ajar 8 item, *Best Practice*, AKFI pribadi |
 | **`guru_tk`** / **`guru_mapel_kbtk`** | *(role unit TK/KB)* | Pengelolaan nilai, perangkat mengajar & penilaian AKFI khusus Guru KB-TK |
 | **`panitia_lomba`** | `panitia.lomba` | Pencatatan keikutsertaan & kejuaraan lomba resmi (OSN, O2SN, FLS2N, dll.) |
-| **`tata_usaha`** | `tu.sd` | Tagihan `FR 8001A`, reminder `FR 8001B` (PDF + Email SMTP), Buku Cicilan `FR 8001D`, upload dokumen TU, checklist Braja, absensi & kajian pegawai |
+| **`tata_usaha`** | `tu.sd` | Tagihan `FR 8001A` (impor verifikasi & akumulasi bulanan, filter per kelas, backup offline `.xlsx`), reminder satuan/massal `FR 8001B` (PDF + Email SMTP), upload TTD `FR 8001C/D`, Buku Cicilan `FR 8001D` (`Lunasi Pas` + lampiran Kartu PDF), dokumen TU, Braja, absensi & kajian |
 | **`sarpras`** | *(role unit)* | Inventaris aset unit, pengajuan Purchase Order (PO), realisasi aset *auto-stocked*, pengajuan Scrap `F30` |
 | **`security`** | `security.sd` | Checklist keamanan harian (tanggal server), buku patroli pos, buku insiden |
 | **`cleaning_service`** | `cs.sd` | Checklist kebersihan rutin harian, piket bulanan, gotong royong Sabtu |
@@ -194,7 +196,7 @@ Siklus operasional tahunan berjalan dalam **10 langkah berurutan** (rincian mend
 4. **Penjadwalan & Batas Waktu:** Waka Kurikulum menyusun jadwal pelajaran + slot jam (`/jadwal/kelas`), jadwal supervisi (`/supervisi/jadwal`), dan batas waktu administrasi berkala (1x / 2x / bulanan) di `/administrasi/deadlines`. Koordinator Tahfidz & Tutor Sebaya membagi halaqah serta target baris hafalan.
 5. **Unggah Perangkat & Supervisi:** Guru Mapel/Tahfidz/Walas mengunggah dokumen berkala (urutan bulan Juli–Juni) dan *Best Practice*/PTK; Kepala Sekolah melakukan review & approval; Guru Supervisor mengisi rubrik supervisi kelas (`/supervisi/penilaian`).
 6. **Operasional Bulanan:** Guru menginput nilai bulanan; Walas menginput absensi siswa; Guru Tahfidz menginput setoran Mushaf Madinah & mengajukan ujian ke Tutor Siswa; TU menginput absensi & kajian pegawai serta checklist Braja; CS & Security mengisi checklist harian; Sarpras mengelola inventaris, PO, & Scrap `F30`.
-7. **Penagihan SPP & Cicilan:** TU membuat tagihan `FR 8001A` (cari siswa by Nama/NIS), mengirim reminder `FR 8001B` (PDF + Email SMTP otomatis), atau eskalasi ke Kepala Sekolah (`/tagihan/approval`) dan Deputi (`/tagihan/eskalasi-deputi`). Kepala Sekolah & Deputi dapat melampirkan file scan **FR 8001C & FR 8001D bertanda tangan orang tua** saat menyelesaikan/mengeskalasi penagihan, sementara kesepakatan cicilan otomatis masuk ke `/tagihan/cicilan`.
+7. **Penagihan SPP, Impor Akumulasi & Cicilan:** TU membuat tagihan `FR 8001A` (atau mengimpor tagihan bulan berjalan via pratinjau verifikasi yang terakumulasi otomatis ke tunggakan aktif), mengirim reminder `FR 8001B` satuan maupun **Kirim Massal** berlampiran PDF, serta mengunduh **Backup Offline (.xlsx)**. TU, Kepala Sekolah (`/tagihan/approval`), dan Deputi (`/tagihan/eskalasi-deputi`) dapat mengunggah scan **FR 8001C & FR 8001D (2 halaman: Berita Acara & Surat Pernyataan)** bertanda tangan orang tua kapan saja, sementara cicilan dikelola hingga pelunasan pas di `/tagihan/cicilan` (dengan lampiran PDF Kartu Cicilan di email).
 8. **Survei Kepuasan:** Orang Tua mengisi kuesioner 53 butir, Santri mengisi survei belajar, dan Dewan Guru mengisi survei kepemimpinan Kepala Sekolah.
 9. **Penilaian & Pengesahan AKFI:** Pegawai mengajukan **Bagian A saja** di `/akfi/pribadi` $\rightarrow$ Atasan/Kepala Sekolah menilai Sikap (**Bagian B** tanpa kolom realisasi aktual) & Absensi (**Bagian C**) $\rightarrow$ Deputi menilai sikap KS $\rightarrow$ Direktur Pendidikan/HRD mengesahkan `Final` di `/akfi/approval-hr` dan menilai Rapor Deputi.
 10. **Tutup Tahun Ajaran & Arsip Cold Storage:** Operator Yayasan mencadangkan Full Backup ZIP/SQL (`/backup`) dan mentransfer arsip berkas tahun ajaran lampau ke NAS Cold Storage (`/master/academic-years`).
@@ -229,7 +231,7 @@ akfioke/
 │   │   ├── SpmbController.php              # Target kuota, pendaftaran & konversi santri baru
 │   │   ├── SupervisiController.php         # Jadwal & rubrik supervisi kelas (aturan indikator 12)
 │   │   ├── SurveyController.php            # Survei ortu 53 butir, guru ke Kepsek & siswa
-│   │   ├── TagihanController.php           # Tagihan FR 8001A, email+PDF FR 8001B, upload TTD C/D, Buku Cicilan
+│   │   ├── TagihanController.php           # Tagihan FR 8001A (verifikasi & akumulasi), FR 8001B massal, FR 8001C/D, Buku Cicilan & Backup Offline
 │   │   └── TahfidzController.php           # Kalkulator Madinah, setoran CRUD, antrean ujian & Syahadah PDF
 │   └── Services/
 │       ├── AcademicYearArchiveService.php  # Transfer arsip TA ke Cold Storage NAS & snapshot DB

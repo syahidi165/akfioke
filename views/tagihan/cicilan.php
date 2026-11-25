@@ -21,7 +21,10 @@ $baseUrl = Auth::baseUrl();
                 Penerimaan pembayaran angsuran cicilan orang tua yang telah disetujui Kepala Sekolah atau Deputi Direktur Pendidikan. <strong>Data cicilan tetap tersimpan melintasi tahun ajaran baru hingga lunas</strong>.
             </p>
         </div>
-        <div>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+            <a href="<?= $baseUrl ?>/tagihan/backup-offline" class="btn btn-outline" style="color: #0369a1; border-color: #0369a1; font-weight: 600;">
+                <i class="fa-solid fa-download" style="margin-right: 6px;"></i> Backup Offline (.xlsx)
+            </a>
             <a href="<?= $baseUrl ?>/tagihan/manage" class="btn btn-outline" style="color: #0f766e; border-color: #0f766e; font-weight: 600;">
                 <i class="fa-solid fa-arrow-left" style="margin-right: 6px;"></i> Kembali ke Input Tagihan (FR 8001A)
             </a>
@@ -219,6 +222,17 @@ $baseUrl = Auth::baseUrl();
                                         <button type="button" class="btn btn-outline btn-sm" style="padding: 4px 6px; font-size: 0.75rem; color: #475569;" onclick="toggleHistory(<?= $ins['id'] ?>)" title="Lihat Histori Angsuran">
                                             <i class="fa-solid fa-clock-rotate-left"></i>
                                         </button>
+
+                                        <?php if (!empty($ins['signed_fr8001c_path'])): ?>
+                                            <a href="<?= $baseUrl ?>/<?= htmlspecialchars($ins['signed_fr8001c_path']) ?>" target="_blank" class="btn btn-outline btn-sm" style="padding: 4px 6px; font-size: 0.72rem; color: #0369a1; border-color: #bae6fd;" title="Lihat Scan TTD FR 8001C">
+                                                <i class="fa-solid fa-file-pdf"></i> 8001C
+                                            </a>
+                                        <?php endif; ?>
+                                        <?php if (!empty($ins['signed_fr8001d_path'])): ?>
+                                            <a href="<?= $baseUrl ?>/<?= htmlspecialchars($ins['signed_fr8001d_path']) ?>" target="_blank" class="btn btn-outline btn-sm" style="padding: 4px 6px; font-size: 0.72rem; color: #6d28d9; border-color: #ddd6fe;" title="Lihat Scan TTD Perjanjian FR 8001D">
+                                                <i class="fa-solid fa-file-signature"></i> 8001D
+                                            </a>
+                                        <?php endif; ?>
                                     </div>
                                 </td>
                             </tr>
@@ -293,7 +307,13 @@ $baseUrl = Auth::baseUrl();
 
                 <div class="form-group" style="margin-bottom: 14px;">
                     <label class="form-label" style="font-size: 0.8125rem; font-weight: 600;">Jumlah yang Dibayarkan (Rp) <span style="color: #ef4444;">*</span></label>
-                    <input type="number" step="1000" name="amount" id="payAmountInput" class="form-control" placeholder="Contoh: 500000" required style="font-size: 1rem; font-weight: 700; color: #047857;">
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                        <input type="number" step="1" min="1" name="amount" id="payAmountInput" class="form-control" placeholder="Contoh: 500000" required style="font-size: 1rem; font-weight: 700; color: #047857; flex: 1;">
+                        <button type="button" class="btn btn-outline btn-sm" onclick="fillFullRemaining()" style="white-space: nowrap; color: #059669; border-color: #059669; font-weight: 700; padding: 8px 10px;" title="Isi angka pas sesuai sisa tunggakan untuk pelunasan">
+                            <i class="fa-solid fa-check-double"></i> Lunasi Pas
+                        </button>
+                    </div>
+                    <div style="font-size: 11px; color: #64748b; margin-top: 4px;">Bisa input nominal persis hingga angka satuan (misal untuk cicilan terakhir).</div>
                 </div>
 
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px;">
@@ -358,14 +378,22 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 // Modal Pembayaran
+let currentRemainingDebt = 0;
 function openPaymentModal(installmentId, agreementNo, studentName, remainingDebt) {
+    currentRemainingDebt = Math.round(parseFloat(remainingDebt) || 0);
     document.getElementById('payInstallmentId').value = installmentId;
     document.getElementById('payAgreementNo').innerText = agreementNo;
     document.getElementById('payStudentName').innerText = studentName;
-    document.getElementById('payRemainingText').innerText = 'Rp ' + remainingDebt.toLocaleString('id-ID');
-    document.getElementById('payAmountInput').value = remainingDebt > 500000 ? 500000 : remainingDebt;
-    document.getElementById('payAmountInput').max = remainingDebt;
+    document.getElementById('payRemainingText').innerText = 'Rp ' + currentRemainingDebt.toLocaleString('id-ID');
+    const amtInput = document.getElementById('payAmountInput');
+    amtInput.max = currentRemainingDebt;
+    amtInput.value = currentRemainingDebt > 500000 ? 500000 : currentRemainingDebt;
     document.getElementById('modalPayment').style.display = 'flex';
+}
+function fillFullRemaining() {
+    if (currentRemainingDebt > 0) {
+        document.getElementById('payAmountInput').value = currentRemainingDebt;
+    }
 }
 function closePaymentModal() {
     document.getElementById('modalPayment').style.display = 'none';

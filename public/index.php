@@ -274,13 +274,18 @@ Router::post('/attendance/students/save', [AbsensiController::class, 'saveStuden
 // 11. Keuangan & Tagihan SPP Siswa (FR 8001A Multi-Kolom, FR 8001B Reminder TU, FR 8001C/D Kepsek & Deputi, Buku Cicilan TU)
 Router::get('/tagihan/manage', [TagihanController::class, 'manage']);
 Router::get('/tagihan/template', [TagihanController::class, 'downloadTemplate']);
+Router::get('/tagihan/backup-offline', [TagihanController::class, 'exportOfflineBackup']);
 Router::post('/tagihan/import', [TagihanController::class, 'importBills']);
+Router::post('/tagihan/verify-import', [TagihanController::class, 'verifyImportBills']);
+Router::post('/tagihan/confirm-import', [TagihanController::class, 'confirmImportBills']);
 Router::post('/tagihan/save', [TagihanController::class, 'saveBill']);
 Router::post('/tagihan/delete', [TagihanController::class, 'deleteBill']);
+Router::post('/tagihan/upload-signed-doc', [TagihanController::class, 'uploadSignedDoc']);
 
 // Alur Surat TU (FR 8001B) & Eskalasi
 Router::get('/tagihan/cetak-fr8001b/:id', [TagihanController::class, 'printSuratFR8001B']);
 Router::post('/tagihan/kirim-fr8001b', [TagihanController::class, 'kirimSuratFR8001B']);
+Router::post('/tagihan/bulk-kirim-fr8001b', [TagihanController::class, 'bulkKirimSuratFR8001B']);
 Router::post('/tagihan/mark-selesai-tu', [TagihanController::class, 'markSelesaiTU']);
 Router::post('/tagihan/eskalasi-kepsek', [TagihanController::class, 'eskalasiKepsek']);
 Router::post('/tagihan/bulk-eskalasi-kepsek', [TagihanController::class, 'bulkEscalateToKepsek']);

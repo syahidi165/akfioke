@@ -40,6 +40,9 @@ foreach ($bills as $b) {
             <a href="<?= $baseUrl ?>/tagihan/cicilan" class="btn btn-outline" style="color: #0284c7; border-color: rgba(2, 132, 199, 0.4); font-weight: 600;">
                 <i class="fa-solid fa-book-bookmark" style="margin-right: 6px;"></i> Buka Buku Cicilan (FR 8001D)
             </a>
+            <a href="<?= $baseUrl ?>/tagihan/backup-offline" class="btn btn-outline" style="color: #475569; border-color: rgba(71, 85, 105, 0.4); font-weight: 600;" title="Unduh cadangan lengkap Tagihan, Buku Cicilan & Riwayat Angsuran dalam format Excel offline">
+                <i class="fa-solid fa-download" style="margin-right: 6px;"></i> Backup Offline (.xlsx)
+            </a>
             <a href="<?= $baseUrl ?>/tagihan/template" class="btn btn-outline" style="color: #10b981; border-color: rgba(16, 185, 129, 0.4); font-weight: 600;">
                 <i class="fa-solid fa-file-excel" style="margin-right: 6px;"></i> Unduh Format FR 8001A (.xlsx)
             </a>
@@ -227,6 +230,28 @@ foreach ($bills as $b) {
     </div>
 
     <!-- Tabel Daftar Tagihan & Alur Penagihan -->
+    <?php
+        $classNames = [];
+        foreach ($classes ?? [] as $cls) {
+            if (!empty($cls['name'])) {
+                $classNames[$cls['name']] = $cls['name'];
+            }
+        }
+        $hasNonClass = false;
+        foreach ($bills ?? [] as $bItem) {
+            $cName = trim((string)($bItem['class_name'] ?? ''));
+            if ($cName === '') {
+                $hasNonClass = true;
+            } else {
+                $classNames[$cName] = $cName;
+            }
+        }
+    ?>
+    <form id="formBulkFR8001B" action="<?= $baseUrl ?>/tagihan/bulk-kirim-fr8001b" method="POST" style="display: none;">
+        <?= CSRF::field() ?>
+        <div id="bulkBillInputs"></div>
+    </form>
+
     <div class="card" style="background: #fff; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); overflow: hidden;">
         <div class="card-header" style="background: #f8fafc; border-bottom: 1px solid #e2e8f0; padding: 16px 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
             <div style="display: flex; align-items: center; gap: 8px;">
@@ -248,7 +273,31 @@ foreach ($bills as $b) {
                     <option value="escalated_deputi">Di Yayasan/Deputi</option>
                     <option value="selesai">Selesai</option>
                 </select>
+                <label style="display: inline-flex; align-items: center; gap: 5px; font-size: 0.8125rem; color: #334155; cursor: pointer; background: #fff; border: 1px solid #cbd5e1; border-radius: 6px; padding: 5px 10px; margin: 0;">
+                    <input type="checkbox" id="toggleHideLunas"> Sembunyikan Lunas
+                </label>
+                <button type="button" class="btn btn-primary btn-sm" onclick="submitBulkFR8001B()" style="height: 34px; background: #4338ca; border-color: #4338ca; font-weight: 600; font-size: 0.8125rem;" title="Kirim Email + PDF FR 8001B untuk seluruh baris yang dicentang">
+                    <i class="fa-solid fa-paper-plane" style="margin-right: 5px;"></i> Kirim Massal FR 8001B
+                </button>
             </div>
+        </div>
+
+        <!-- Pill Tab Filter Per Kelas (diurutkan A-Z) -->
+        <div style="background: #f1f5f9; border-bottom: 1px solid #e2e8f0; padding: 10px 20px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center;">
+            <span style="font-size: 0.75rem; font-weight: 700; color: #475569; margin-right: 4px;"><i class="fa-solid fa-layer-group"></i> Filter Kelas:</span>
+            <button type="button" class="class-tab-btn active" data-class-filter="" onclick="selectClassTab(this, '')" style="padding: 4px 12px; border-radius: 999px; font-size: 0.75rem; font-weight: 600; border: 1px solid #0d9488; background: #0d9488; color: #fff; cursor: pointer;">
+                Semua Kelas
+            </button>
+            <?php foreach ($classNames as $cName): ?>
+                <button type="button" class="class-tab-btn" data-class-filter="<?= strtolower(SecurityHelper::escape($cName)) ?>" onclick="selectClassTab(this, '<?= strtolower(SecurityHelper::escape($cName)) ?>')" style="padding: 4px 12px; border-radius: 999px; font-size: 0.75rem; font-weight: 600; border: 1px solid #cbd5e1; background: #fff; color: #334155; cursor: pointer;">
+                    <?= SecurityHelper::escape($cName) ?>
+                </button>
+            <?php endforeach; ?>
+            <?php if ($hasNonClass): ?>
+                <button type="button" class="class-tab-btn" data-class-filter="non-kelas" onclick="selectClassTab(this, 'non-kelas')" style="padding: 4px 12px; border-radius: 999px; font-size: 0.75rem; font-weight: 600; border: 1px solid #cbd5e1; background: #fff; color: #64748b; cursor: pointer;">
+                    Non-Kelas
+                </button>
+            <?php endif; ?>
         </div>
 
         <div class="card-body" style="padding: 0;">
@@ -256,18 +305,22 @@ foreach ($bills as $b) {
                 <table class="table" style="margin-bottom: 0; width: 100%; border-collapse: collapse;">
                     <thead>
                         <tr style="background: #f1f5f9; border-bottom: 2px solid #cbd5e1; font-size: 0.8125rem; text-transform: uppercase;">
+                            <th style="width: 36px; text-align: center; padding: 10px;">
+                                <input type="checkbox" id="checkAllBills" title="Pilih Semua Tagihan yang Tampil">
+                            </th>
                             <th style="width: 40px; text-align: center; padding: 10px;">No</th>
                             <th style="padding: 10px;">Santri &amp; Orang Tua</th>
+                            <th style="padding: 10px; width: 110px;">Kelas</th>
                             <th style="padding: 10px; width: 220px;">Rincian Uraian (FR 8001A)</th>
                             <th style="text-align: right; width: 130px; padding: 10px;">Total Tagihan</th>
-                            <th style="text-align: center; width: 140px; padding: 10px;">Tahap Penagihan</th>
-                            <th style="text-align: center; width: 180px; padding: 10px;">Aksi Alur TU</th>
+                            <th style="text-align: center; width: 150px; padding: 10px;">Tahap Penagihan</th>
+                            <th style="text-align: center; width: 200px; padding: 10px;">Aksi Alur TU</th>
                         </tr>
                     </thead>
                     <tbody>
                         <?php if (empty($bills)): ?>
                             <tr>
-                                <td colspan="6" style="text-align: center; padding: 40px; color: var(--text-muted, #64748b);">
+                                <td colspan="8" style="text-align: center; padding: 40px; color: var(--text-muted, #64748b);">
                                     <i class="fa-solid fa-receipt" style="font-size: 2.5rem; margin-bottom: 10px; display: block; opacity: 0.4;"></i>
                                     Belum ada data tagihan santri pada unit &amp; tahun ajaran ini.
                                 </td>
@@ -277,13 +330,20 @@ foreach ($bills as $b) {
                                 $isLunas = ($b['status'] === 'Lunas');
                                 $stage = $b['pipeline_stage'] ?? 'tu_draft';
                                 $items = json_decode($b['items_detail'] ?? '{}', true) ?: [];
+                                $clsLabel = !empty($b['class_name']) ? $b['class_name'] : 'Non-Kelas';
                             ?>
                                 <tr class="bill-row" 
-                                    data-search="<?= strtolower(SecurityHelper::escape($b['student_name'] . ' ' . $b['nis'] . ' ' . ($b['class_name'] ?? '') . ' ' . ($b['parent_name'] ?? ''))) ?>" 
+                                    data-search="<?= strtolower(SecurityHelper::escape($b['student_name'] . ' ' . $b['nis'] . ' ' . $clsLabel . ' ' . ($b['parent_name'] ?? ''))) ?>" 
                                     data-status="<?= strtolower($b['status']) ?>"
                                     data-stage="<?= strtolower($stage) ?>"
+                                    data-class="<?= strtolower(SecurityHelper::escape($clsLabel)) ?>"
                                     style="border-bottom: 1px solid #f1f5f9;">
                                     
+                                    <td style="text-align: center; padding: 10px;">
+                                        <?php if (!$isLunas): ?>
+                                            <input type="checkbox" class="bill-cb" value="<?= (int)$b['id'] ?>">
+                                        <?php endif; ?>
+                                    </td>
                                     <td style="text-align: center; color: #64748b; font-size: 0.8125rem; padding: 10px;"><?= $idx + 1 ?></td>
                                     
                                     <td style="padding: 10px;">
@@ -291,8 +351,7 @@ foreach ($bills as $b) {
                                             <?= SecurityHelper::escape($b['student_name']) ?>
                                         </div>
                                         <div style="font-size: 0.75rem; color: #64748b; margin-top: 2px;">
-                                            NIS: <span style="font-family: monospace; font-weight: 600;"><?= SecurityHelper::escape($b['nis']) ?></span> &bull; 
-                                            <?= SecurityHelper::escape($b['class_name'] ?? 'Non-Kelas') ?>
+                                            NIS: <span style="font-family: monospace; font-weight: 600;"><?= SecurityHelper::escape($b['nis']) ?></span>
                                         </div>
                                         <div style="font-size: 0.75rem; color: #475569; margin-top: 2px;">
                                             <i class="fa-solid fa-user-tie" style="color: #94a3b8;"></i> Wali: <?= SecurityHelper::escape($b['parent_name'] ?: 'Wali') ?> 
@@ -311,6 +370,12 @@ foreach ($bills as $b) {
                                                 </span>
                                             <?php endif; ?>
                                         </div>
+                                    </td>
+
+                                    <td style="padding: 10px;">
+                                        <span class="badge" style="background: #f1f5f9; color: #334155; font-size: 0.75rem; font-weight: 600;">
+                                            <?= SecurityHelper::escape($clsLabel) ?>
+                                        </span>
                                     </td>
 
                                     <!-- Uraian Multi-Kolom FR 8001A -->
@@ -386,6 +451,20 @@ foreach ($bills as $b) {
                                                 Draft Tagihan TU
                                             </span>
                                         <?php endif; ?>
+                                        <?php if (!empty($b['signed_fr8001c_path']) || !empty($b['signed_fr8001d_path'])): ?>
+                                            <div style="margin-top: 5px; display: flex; gap: 4px; justify-content: center; flex-wrap: wrap;">
+                                                <?php if (!empty($b['signed_fr8001c_path'])): ?>
+                                                    <a href="<?= $baseUrl ?>/<?= ltrim(SecurityHelper::escape($b['signed_fr8001c_path']), '/') ?>" target="_blank" class="badge" style="background: #dcfce7; color: #15803d; font-size: 10px; text-decoration: none;" title="Lihat Scan FR 8001C Bertanda Tangan">
+                                                        <i class="fa-solid fa-file-signature"></i> TTD 8001C
+                                                    </a>
+                                                <?php endif; ?>
+                                                <?php if (!empty($b['signed_fr8001d_path'])): ?>
+                                                    <a href="<?= $baseUrl ?>/<?= ltrim(SecurityHelper::escape($b['signed_fr8001d_path']), '/') ?>" target="_blank" class="badge" style="background: #dbeafe; color: #1d4ed8; font-size: 10px; text-decoration: none;" title="Lihat Scan FR 8001D Bertanda Tangan">
+                                                        <i class="fa-solid fa-file-signature"></i> TTD 8001D
+                                                    </a>
+                                                <?php endif; ?>
+                                            </div>
+                                        <?php endif; ?>
                                     </td>
 
                                     <!-- Aksi Alur TU -->
@@ -396,6 +475,11 @@ foreach ($bills as $b) {
                                             <a href="<?= $baseUrl ?>/tagihan/cetak-fr8001b/<?= $b['id'] ?>" target="_blank" class="btn btn-outline btn-sm" style="padding: 4px 8px; font-size: 0.75rem; color: #0f766e; border-color: #0f766e;" title="Cetak Surat Reminder FR 8001B">
                                                 <i class="fa-solid fa-print"></i> FR 8001B
                                             </a>
+
+                                            <!-- Upload Dokumen TTD FR 8001C / FR 8001D (Opsional) -->
+                                            <button type="button" class="btn btn-outline btn-sm" style="padding: 4px 8px; font-size: 0.75rem; color: #0284c7; border-color: #0284c7;" onclick="openUploadSignedModal(<?= (int)$b['id'] ?>, '<?= SecurityHelper::escape($b['student_name']) ?>')" title="Unggah Scan FR 8001C / FR 8001D Bertanda Tangan Orang Tua">
+                                                <i class="fa-solid fa-file-arrow-up"></i> Upload TTD
+                                            </button>
 
                                             <?php if (!$isLunas): ?>
                                                 <!-- Kirim Reminder FR 8001B -->
@@ -479,36 +563,223 @@ foreach ($bills as $b) {
     </div>
 </div>
 
-<!-- Modal Impor Tagihan Excel (FR 8001A) -->
+<!-- Modal Upload Dokumen TTD FR 8001C / 8001D (Opsional oleh TU) -->
+<div id="modalUploadSignedTu" class="modal-backdrop" style="display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.6); z-index: 9999; align-items: center; justify-content: center; backdrop-filter: blur(2px);">
+    <div style="background: #fff; width: 100%; max-width: 500px; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.15); overflow: hidden; margin: 20px;">
+        <div style="background: #f0f9ff; border-bottom: 1px solid #bae6fd; padding: 16px 20px; display: flex; justify-content: space-between; align-items: center;">
+            <h4 style="margin: 0; font-size: 1rem; font-weight: 700; color: #0369a1; display: flex; align-items: center; gap: 8px;">
+                <i class="fa-solid fa-file-signature"></i> Upload Berkas TTD Orang Tua (FR 8001C / 8001D)
+            </h4>
+            <button type="button" onclick="closeUploadSignedModal()" style="background: none; border: none; font-size: 1.25rem; cursor: pointer; color: #94a3b8;">&times;</button>
+        </div>
+        <form action="<?= $baseUrl ?>/tagihan/upload-signed-doc" method="POST" enctype="multipart/form-data">
+            <?= CSRF::field() ?>
+            <input type="hidden" name="bill_id" id="uploadSignedBillId" value="">
+            <div style="padding: 20px;">
+                <p style="font-size: 0.875rem; color: #334155; margin-top: 0;">
+                    Santri: <strong id="uploadSignedStudentName">-</strong>
+                </p>
+                <div class="form-group" style="margin-bottom: 12px;">
+                    <label class="form-label" style="font-weight: 600; font-size: 0.8125rem;">Scan FR 8001C Bertanda Tangan (PDF/JPG/PNG, Opsional)</label>
+                    <input type="file" name="signed_fr8001c" class="form-control" accept=".pdf,.jpg,.jpeg,.png" style="padding: 6px;">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" style="font-weight: 600; font-size: 0.8125rem;">Scan FR 8001D (Berita Acara &amp; Surat Pernyataan) Bertanda Tangan (PDF/JPG/PNG, Opsional)</label>
+                    <input type="file" name="signed_fr8001d" class="form-control" accept=".pdf,.jpg,.jpeg,.png" style="padding: 6px;">
+                </div>
+            </div>
+            <div style="background: #f8fafc; border-top: 1px solid #e2e8f0; padding: 12px 20px; display: flex; justify-content: flex-end; gap: 10px;">
+                <button type="button" class="btn btn-outline" onclick="closeUploadSignedModal()">Batal</button>
+                <button type="submit" class="btn btn-primary" style="background: #0284c7; border-color: #0284c7; font-weight: 600;">
+                    <i class="fa-solid fa-cloud-arrow-up" style="margin-right: 6px;"></i> Simpan Berkas TTD
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Modal Impor Tagihan Excel (FR 8001A) -> Verifikasi Pratinjau -->
 <div id="modalImportTagihan" class="modal-backdrop" style="display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.6); z-index: 9999; align-items: center; justify-content: center; backdrop-filter: blur(2px);">
-    <div style="background: #fff; width: 100%; max-width: 520px; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.15); overflow: hidden; margin: 20px;">
+    <div style="background: #fff; width: 100%; max-width: 540px; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.15); overflow: hidden; margin: 20px;">
         <div style="background: #f0fdf4; border-bottom: 1px solid #dcfce7; padding: 16px 20px; display: flex; justify-content: space-between; align-items: center;">
             <h4 style="margin: 0; font-size: 1rem; font-weight: 700; color: #166534; display: flex; align-items: center; gap: 8px;">
                 <i class="fa-solid fa-file-excel"></i> Impor Berkas Tagihan Excel (FR 8001A)
             </h4>
             <button type="button" onclick="closeImportModal()" style="background: none; border: none; font-size: 1.25rem; cursor: pointer; color: #94a3b8;">&times;</button>
         </div>
-        <form action="<?= $baseUrl ?>/tagihan/import" method="POST" enctype="multipart/form-data">
+        <form action="<?= $baseUrl ?>/tagihan/verify-import" method="POST" enctype="multipart/form-data">
             <?= CSRF::field() ?>
             <div style="padding: 20px;">
-                <p style="font-size: 0.875rem; color: #334155; margin-top: 0; line-height: 1.5;">
-                    Gunakan berkas format resmi <strong>FR 8001A</strong> yang telah diunduh dari tombol <em>"Unduh Format FR 8001A"</em>.
-                    Sistem akan membaca 7 kolom rincian biaya (Buku Paket, Kegiatan, Komite, Mutu, SPP, Uang Ujian, Tunggakan Lalu) dan menghitung total secara otomatis.
-                </p>
-                <div class="form-group" style="margin-top: 14px;">
+                <div style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 6px; padding: 10px 12px; font-size: 0.8125rem; color: #1e3a8a; margin-bottom: 14px; line-height: 1.5;">
+                    <strong><i class="fa-solid fa-circle-info"></i> Sistem Akumulasi Bulanan Otomatis:</strong>
+                    Isi berkas Excel <strong>FR 8001A</strong> hanya dengan tagihan <strong>bulan berjalan saja</strong>. Saat diimpor, sistem memverifikasi kecocokan NIS/Nama terlebih dahulu lalu otomatis <strong>menambahkan (mengakumulasi)</strong> nominal bulan baru ke sisa tunggakan siswa yang sudah ada (termasuk menambah sisa kewajiban pada Buku Cicilan aktif tanpa mengubah pokok kesepakatan awal).
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 14px;">
+                    <div class="form-group" style="margin: 0;">
+                        <label class="form-label" style="font-weight: 600; font-size: 0.75rem;">Bulan Tagihan</label>
+                        <select name="bill_month" class="form-control" style="font-size: 0.8125rem;">
+                            <?php $curM = (int)date('n'); $bulanOpts = [1=>'Januari',2=>'Februari',3=>'Maret',4=>'April',5=>'Mei',6=>'Juni',7=>'Juli',8=>'Agustus',9=>'September',10=>'Oktober',11=>'November',12=>'Desember']; foreach ($bulanOpts as $mNum => $mLbl): ?>
+                                <option value="<?= $mNum ?>" <?= ($mNum === $curM) ? 'selected' : '' ?>><?= $mLbl ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="form-group" style="margin: 0;">
+                        <label class="form-label" style="font-weight: 600; font-size: 0.75rem;">Tahun</label>
+                        <input type="number" name="bill_year" class="form-control" value="<?= date('Y') ?>" min="2020" max="2035" style="font-size: 0.8125rem;">
+                    </div>
+                    <div class="form-group" style="margin: 0;">
+                        <label class="form-label" style="font-weight: 600; font-size: 0.75rem;">Jatuh Tempo</label>
+                        <input type="date" name="due_date" class="form-control" value="<?= date('Y-m-10') ?>" style="font-size: 0.8125rem;">
+                    </div>
+                </div>
+                <div class="form-group">
                     <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Pilih Berkas Excel (.xlsx) <span style="color: #ef4444;">*</span></label>
                     <input type="file" name="excel_file" class="form-control" accept=".xlsx" required style="padding: 8px;">
                 </div>
             </div>
             <div style="background: #f8fafc; border-top: 1px solid #e2e8f0; padding: 12px 20px; display: flex; justify-content: flex-end; gap: 10px;">
                 <button type="button" class="btn btn-outline" onclick="closeImportModal()">Batal</button>
-                <button type="submit" class="btn btn-primary" style="background: #16a34a; border-color: #16a34a; font-weight: 600;">
-                    <i class="fa-solid fa-cloud-arrow-up" style="margin-right: 6px;"></i> Mulai Impor Data
+                <button type="submit" class="btn btn-primary" style="background: #0d9488; border-color: #0d9488; font-weight: 600;">
+                    <i class="fa-solid fa-magnifying-glass-chart" style="margin-right: 6px;"></i> Verifikasi Data Impor
                 </button>
             </div>
         </form>
     </div>
 </div>
+
+<?php if (!empty($importPreview)):
+    $validRows   = $importPreview['valid'] ?? [];
+    $invalidRows = $importPreview['invalid'] ?? [];
+?>
+<!-- Modal Verifikasi Hasil Pratinjau Impor Tagihan (Valid vs Bermasalah) -->
+<div id="modalVerifyImportBills" class="modal-backdrop" style="display: flex; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.65); z-index: 10000; align-items: center; justify-content: center; backdrop-filter: blur(2px);">
+    <div style="background: #fff; width: 96%; max-width: 960px; max-height: 90vh; display: flex; flex-direction: column; border-radius: 10px; box-shadow: 0 20px 40px rgba(0,0,0,0.2); overflow: hidden; margin: 16px;">
+        <div style="background: #f0fdfa; border-bottom: 1px solid #ccfbf1; padding: 16px 20px; display: flex; justify-content: space-between; align-items: center;">
+            <div>
+                <h4 style="margin: 0; font-size: 1.05rem; font-weight: 700; color: #0f766e;">
+                    <i class="fa-solid fa-clipboard-check" style="margin-right: 6px;"></i> Verifikasi Impor Tagihan: <?= SecurityHelper::escape($importPreview['filename'] ?? 'import.xlsx') ?>
+                </h4>
+                <div style="font-size: 0.78rem; color: #475569; margin-top: 2px;">
+                    Periode: Bulan <?= (int)$importPreview['bill_month'] ?>/<?= (int)$importPreview['bill_year'] ?> &bull; Jatuh Tempo: <?= SecurityHelper::escape($importPreview['due_date']) ?>
+                </div>
+            </div>
+            <div style="display: flex; gap: 8px; align-items: center;">
+                <span class="badge" style="background: #dcfce7; color: #15803d; padding: 5px 10px;">Valid: <?= count($validRows) ?></span>
+                <span class="badge" style="background: #fee2e2; color: #b91c1c; padding: 5px 10px;">Bermasalah: <?= count($invalidRows) ?></span>
+            </div>
+        </div>
+
+        <form action="<?= $baseUrl ?>/tagihan/confirm-import" method="POST" style="display: flex; flex-direction: column; flex: 1; overflow: hidden;">
+            <?= CSRF::field() ?>
+            <div style="background: #f8fafc; border-bottom: 1px solid #e2e8f0; padding: 10px 20px; display: flex; gap: 8px;">
+                <button type="button" id="btnVerifyTabValid" onclick="switchVerifyTab('valid')" style="padding: 6px 14px; border-radius: 6px; font-weight: 700; font-size: 0.8125rem; border: 1px solid #0d9488; background: #0d9488; color: #fff; cursor: pointer;">
+                    Data Valid (<?= count($validRows) ?>)
+                </button>
+                <button type="button" id="btnVerifyTabInvalid" onclick="switchVerifyTab('invalid')" style="padding: 6px 14px; border-radius: 6px; font-weight: 700; font-size: 0.8125rem; border: 1px solid #cbd5e1; background: #fff; color: #dc2626; cursor: pointer;">
+                    Data Bermasalah (<?= count($invalidRows) ?>)
+                </button>
+            </div>
+
+            <div style="padding: 16px 20px; overflow-y: auto; flex: 1;">
+                <div id="verifyPaneValid">
+                    <?php if (empty($validRows)): ?>
+                        <div style="text-align: center; padding: 30px; color: #64748b;">Tidak ada baris tagihan valid yang siap disimpan.</div>
+                    <?php else: ?>
+                        <table class="table" style="width: 100%; border-collapse: collapse; font-size: 0.8125rem;">
+                            <thead>
+                                <tr style="background: #f1f5f9; border-bottom: 2px solid #cbd5e1;">
+                                    <th style="width: 34px; text-align: center; padding: 8px;"><input type="checkbox" checked onchange="document.querySelectorAll('.verify-keep-cb').forEach(c => c.checked = this.checked)"></th>
+                                    <th style="padding: 8px;">Baris</th>
+                                    <th style="padding: 8px;">Santri &amp; NIS</th>
+                                    <th style="padding: 8px;">Kelas</th>
+                                    <th style="padding: 8px; text-align: right;">Tagihan Bulan Ini</th>
+                                    <th style="padding: 8px;">Mode Impor &amp; Dampak Akumulasi</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php foreach ($validRows as $vIdx => $vr): ?>
+                                    <tr style="border-bottom: 1px solid #f1f5f9;">
+                                        <td style="text-align: center; padding: 8px;">
+                                            <input type="checkbox" name="keep_indices[]" value="<?= (int)$vIdx ?>" class="verify-keep-cb" checked>
+                                        </td>
+                                        <td style="padding: 8px; color: #64748b;">#<?= (int)$vr['row_num'] ?></td>
+                                        <td style="padding: 8px;">
+                                            <div style="font-weight: 700; color: #0f172a;"><?= SecurityHelper::escape($vr['nama']) ?></div>
+                                            <div style="font-size: 0.75rem; color: #64748b;">NIS: <?= SecurityHelper::escape($vr['nis']) ?> &bull; <?= SecurityHelper::escape($vr['match_note'] ?? '') ?></div>
+                                        </td>
+                                        <td style="padding: 8px;"><?= SecurityHelper::escape($vr['class_name'] ?? '-') ?></td>
+                                        <td style="padding: 8px; text-align: right; font-weight: 700; font-family: monospace;">
+                                            <?= SecurityHelper::formatRupiah((float)$vr['amount']) ?>
+                                        </td>
+                                        <td style="padding: 8px;">
+                                            <?php if (!empty($vr['is_accumulation'])): ?>
+                                                <span class="badge" style="background: #fef3c7; color: #b45309; font-size: 11px;">
+                                                    Akumulasi: <?= SecurityHelper::formatRupiah((float)$vr['existing_amount']) ?> &rarr; <?= SecurityHelper::formatRupiah((float)$vr['new_total']) ?>
+                                                </span>
+                                            <?php else: ?>
+                                                <span class="badge" style="background: #dcfce7; color: #15803d; font-size: 11px;">Tagihan Baru</span>
+                                            <?php endif; ?>
+                                            <?php if (!empty($vr['has_installment'])): ?>
+                                                <div style="font-size: 11px; color: #0284c7; margin-top: 3px;">
+                                                    <i class="fa-solid fa-book-bookmark"></i> Menambah Sisa Buku Cicilan (<?= SecurityHelper::escape($vr['agreement_number']) ?>)
+                                                </div>
+                                            <?php endif; ?>
+                                        </td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    <?php endif; ?>
+                </div>
+
+                <div id="verifyPaneInvalid" style="display: none;">
+                    <?php if (empty($invalidRows)): ?>
+                        <div style="text-align: center; padding: 30px; color: #16a34a;">
+                            <i class="fa-solid fa-circle-check" style="font-size: 2rem; display: block; margin-bottom: 8px;"></i>
+                            Seluruh baris Excel valid tanpa masalah.
+                        </div>
+                    <?php else: ?>
+                        <table class="table" style="width: 100%; border-collapse: collapse; font-size: 0.8125rem;">
+                            <thead>
+                                <tr style="background: #fef2f2; border-bottom: 2px solid #fecaca;">
+                                    <th style="padding: 8px;">Baris</th>
+                                    <th style="padding: 8px;">NIS &amp; Nama di Excel</th>
+                                    <th style="padding: 8px;">Kelas</th>
+                                    <th style="padding: 8px; text-align: right;">Nominal Terbaca</th>
+                                    <th style="padding: 8px;">Keterangan Masalah</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php foreach ($invalidRows as $ir): ?>
+                                    <tr style="border-bottom: 1px solid #fee2e2;">
+                                        <td style="padding: 8px; color: #64748b;">#<?= (int)$ir['row_num'] ?></td>
+                                        <td style="padding: 8px;">
+                                            <div style="font-weight: 700; color: #0f172a;"><?= SecurityHelper::escape($ir['nama'] ?? '-') ?></div>
+                                            <div style="font-size: 0.75rem; color: #64748b;">NIS: <?= SecurityHelper::escape($ir['nis'] ?? '-') ?></div>
+                                        </td>
+                                        <td style="padding: 8px;"><?= SecurityHelper::escape($ir['class_name'] ?? '-') ?></td>
+                                        <td style="padding: 8px; text-align: right; font-family: monospace;"><?= SecurityHelper::formatRupiah((float)($ir['amount'] ?? 0)) ?></td>
+                                        <td style="padding: 8px;"><span class="badge" style="background: #fee2e2; color: #b91c1c;"><?= SecurityHelper::escape($ir['reason']) ?></span></td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    <?php endif; ?>
+                </div>
+            </div>
+
+            <div style="background: #f8fafc; border-top: 1px solid #e2e8f0; padding: 12px 20px; display: flex; justify-content: flex-end; gap: 10px;">
+                <button type="submit" name="action" value="cancel" class="btn btn-outline">Batalkan Pratinjau</button>
+                <?php if (!empty($validRows)): ?>
+                    <button type="submit" name="action" value="commit" class="btn btn-primary" style="background: #16a34a; border-color: #16a34a; font-weight: 600;">
+                        <i class="fa-solid fa-check-double" style="margin-right: 6px;"></i> Simpan Data Valid Terpilih
+                    </button>
+                <?php endif; ?>
+            </div>
+        </form>
+    </div>
+</div>
+<?php endif; ?>
 
 <script>
 // Fungsi hitung penjumlahan realtime seluruh kolom biaya FR 8001A
@@ -550,25 +821,46 @@ function removeCustomRow(rowId) {
     }
 }
 
-// Filter dan search tabel tagihan
+// Filter, tab kelas, sembunyikan lunas, dan kirim massal FR 8001B
+let activeClassFilter = '';
+
+function selectClassTab(btn, classVal) {
+    activeClassFilter = (classVal || '').toLowerCase();
+    document.querySelectorAll('.class-tab-btn').forEach(function(b) {
+        const isCurrent = (b === btn);
+        b.style.background = isCurrent ? '#0d9488' : '#fff';
+        b.style.color = isCurrent ? '#fff' : '#334155';
+        b.style.borderColor = isCurrent ? '#0d9488' : '#cbd5e1';
+        b.classList.toggle('active', isCurrent);
+    });
+    if (window._applyBillFilter) window._applyBillFilter();
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     const searchInput = document.getElementById('searchBill');
     const filterStatus = document.getElementById('filterStatus');
     const filterStage = document.getElementById('filterStage');
+    const hideLunasToggle = document.getElementById('toggleHideLunas');
+    const checkAllBills = document.getElementById('checkAllBills');
     const rows = document.querySelectorAll('.bill-row');
 
     function applyFilter() {
-        const query = (searchInput.value || '').toLowerCase();
-        const stat = (filterStatus.value || '').toLowerCase();
-        const stg = (filterStage.value || '').toLowerCase();
+        const query = (searchInput ? searchInput.value : '').toLowerCase();
+        const stat = (filterStatus ? filterStatus.value : '').toLowerCase();
+        const stg = (filterStage ? filterStage.value : '').toLowerCase();
+        const hideLunas = hideLunasToggle ? hideLunasToggle.checked : false;
 
         rows.forEach(function(row) {
             const dataSearch = row.getAttribute('data-search') || '';
             const dataStatus = row.getAttribute('data-status') || '';
             const dataStage = row.getAttribute('data-stage') || '';
+            const dataClass = row.getAttribute('data-class') || '';
 
             const matchQuery = dataSearch.includes(query);
             const matchStatus = !stat || dataStatus === stat;
+            const matchClass = !activeClassFilter || dataClass === activeClassFilter;
+            const matchHideLunas = !hideLunas || (dataStatus !== 'lunas' && !dataStage.includes('selesai'));
+
             let matchStage = true;
             if (stg) {
                 if (stg === 'selesai') {
@@ -578,7 +870,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             }
 
-            if (matchQuery && matchStatus && matchStage) {
+            if (matchQuery && matchStatus && matchStage && matchClass && matchHideLunas) {
                 row.style.display = '';
             } else {
                 row.style.display = 'none';
@@ -586,10 +878,81 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
+    window._applyBillFilter = applyFilter;
     if (searchInput) searchInput.addEventListener('input', applyFilter);
     if (filterStatus) filterStatus.addEventListener('change', applyFilter);
     if (filterStage) filterStage.addEventListener('change', applyFilter);
+    if (hideLunasToggle) hideLunasToggle.addEventListener('change', applyFilter);
+
+    if (checkAllBills) {
+        checkAllBills.addEventListener('change', function() {
+            const checked = this.checked;
+            rows.forEach(function(row) {
+                if (row.style.display !== 'none') {
+                    const cb = row.querySelector('.bill-cb');
+                    if (cb) cb.checked = checked;
+                }
+            });
+        });
+    }
 });
+
+function submitBulkFR8001B() {
+    const selected = [];
+    document.querySelectorAll('.bill-row').forEach(function(row) {
+        if (row.style.display !== 'none') {
+            const cb = row.querySelector('.bill-cb');
+            if (cb && cb.checked) selected.push(cb.value);
+        }
+    });
+    if (selected.length === 0) {
+        alert('Centang minimal satu tagihan tertunggak pada tabel terlebih dahulu untuk mengirim FR 8001B massal.');
+        return;
+    }
+    if (!confirm('Kirimkan surat pengingat FR 8001B beserta lampiran PDF via email ke ' + selected.length + ' santri terpilih?')) {
+        return;
+    }
+    const container = document.getElementById('bulkBillInputs');
+    container.innerHTML = '';
+    selected.forEach(function(id) {
+        const inp = document.createElement('input');
+        inp.type = 'hidden';
+        inp.name = 'bill_ids[]';
+        inp.value = id;
+        container.appendChild(inp);
+    });
+    document.getElementById('formBulkFR8001B').submit();
+}
+
+function openUploadSignedModal(billId, studentName) {
+    document.getElementById('uploadSignedBillId').value = billId;
+    document.getElementById('uploadSignedStudentName').innerText = studentName;
+    document.getElementById('modalUploadSignedTu').style.display = 'flex';
+}
+
+function closeUploadSignedModal() {
+    document.getElementById('modalUploadSignedTu').style.display = 'none';
+}
+
+function switchVerifyTab(tab) {
+    const validPane = document.getElementById('verifyPaneValid');
+    const invalidPane = document.getElementById('verifyPaneInvalid');
+    const btnValid = document.getElementById('btnVerifyTabValid');
+    const btnInvalid = document.getElementById('btnVerifyTabInvalid');
+    if (!validPane || !invalidPane) return;
+
+    if (tab === 'valid') {
+        validPane.style.display = 'block';
+        invalidPane.style.display = 'none';
+        btnValid.style.background = '#0d9488'; btnValid.style.color = '#fff'; btnValid.style.borderColor = '#0d9488';
+        btnInvalid.style.background = '#fff'; btnInvalid.style.color = '#dc2626'; btnInvalid.style.borderColor = '#cbd5e1';
+    } else {
+        validPane.style.display = 'none';
+        invalidPane.style.display = 'block';
+        btnInvalid.style.background = '#dc2626'; btnInvalid.style.color = '#fff'; btnInvalid.style.borderColor = '#dc2626';
+        btnValid.style.background = '#fff'; btnValid.style.color = '#334155'; btnValid.style.borderColor = '#cbd5e1';
+    }
+}
 
 // Modal Eskalasi ke Kepala Sekolah
 function openEskalasiModal(billId, studentName, amount) {

@@ -15,35 +15,188 @@ use PHPMailer\PHPMailer\Exception;
 class TagihanController extends Controller {
 
     // =========================================================================
+    // HELPER UMUM PENAGIHAN (PARSING RUPIAH, PENANDATANGAN UNIT, TERBILANG)
+    // =========================================================================
+    private function parseRupiah(mixed $val): float {
+        if (is_int($val) || is_float($val)) {
+            return max(0.0, (float)$val);
+        }
+        $str = trim((string)$val);
+        if ($str === '') {
+            return 0.0;
+        }
+        $str = str_ireplace('Rp', '', $str);
+        $str = trim($str);
+        // Hilangkan desimal ,00 atau .00 di akhir string
+        if (preg_match('/[,\.]\d{2}$/', $str)) {
+            $str = preg_replace('/[,\.]\d{2}$/', '', $str);
+        }
+        $digits = preg_replace('/[^0-9]/', '', $str);
+        return $digits !== '' ? (float)$digits : 0.0;
+    }
+
+    /**
+     * Ambil identitas pejabat penandatangan resmi langsung dari database (berdasar unit_id, bukan session switch user).
+     */
+    private function resolveUnitSigner(int $unitId, string $roleName): array {
+        if ($roleName === 'tata_usaha') {
+            $emp = Database::fetch(
+                "SELECT e.nama, e.nipy, e.contact_phone as phone
+                 FROM employees e
+                 JOIN user_roles ur ON e.user_id = ur.user_id
+                 JOIN roles r ON ur.role_id = r.id
+                 WHERE e.is_deleted = 0 AND e.status = 'Aktif'
+                   AND r.name = 'tata_usaha'
+                   AND (e.unit_id = ? OR ur.unit_id = ?)
+                 ORDER BY CASE WHEN e.unit_id = ? THEN 0 ELSE 1 END, ur.is_primary DESC, e.id ASC
+                 LIMIT 1",
+                [$unitId, $unitId, $unitId]
+            );
+            if (!$emp) {
+                $emp = Database::fetch(
+                    "SELECT nama, nipy, contact_phone as phone FROM employees
+                     WHERE unit_id = ? AND is_deleted = 0 AND status = 'Aktif'
+                       AND (level_posisi LIKE '%Tata Usaha%' OR position LIKE '%Tata Usaha%')
+                     ORDER BY id ASC LIMIT 1",
+                    [$unitId]
+                );
+            }
+            return [
+                'nama'  => $emp['nama'] ?? 'Staff Tata Usaha',
+                'nipy'  => $emp['nipy'] ?? '-',
+                'phone' => $emp['phone'] ?? ''
+            ];
+        }
+
+        if ($roleName === 'kepala_sekolah') {
+            $emp = Database::fetch(
+                "SELECT e.nama, e.nipy, e.contact_phone as phone
+                 FROM employees e
+                 JOIN user_roles ur ON e.user_id = ur.user_id
+                 JOIN roles r ON ur.role_id = r.id
+                 WHERE e.is_deleted = 0 AND e.status = 'Aktif'
+                   AND r.name = 'kepala_sekolah'
+                   AND (e.unit_id = ? OR ur.unit_id = ?)
+                 ORDER BY CASE WHEN e.unit_id = ? THEN 0 ELSE 1 END, ur.is_primary DESC, e.id ASC
+                 LIMIT 1",
+                [$unitId, $unitId, $unitId]
+            );
+            if (!$emp) {
+                $emp = Database::fetch(
+                    "SELECT nama, nipy, contact_phone as phone FROM employees
+                     WHERE unit_id = ? AND is_deleted = 0 AND status = 'Aktif'
+                       AND (position LIKE '%Kepala Sekolah%' OR level_posisi LIKE '%Kepala Sekolah%' OR level_posisi LIKE '%Kepsek%' OR level_posisi LIKE '%Kanit%')
+                     ORDER BY id ASC LIMIT 1",
+                    [$unitId]
+                );
+            }
+            return [
+                'nama'  => $emp['nama'] ?? 'Kepala Sekolah',
+                'nipy'  => $emp['nipy'] ?? '-',
+                'phone' => $emp['phone'] ?? ''
+            ];
+        }
+
+        if ($roleName === 'deputi_pendidikan') {
+            try {
+                $dep = Database::fetch(
+                    "SELECT COALESCE(e.nama, u.full_name) as nama, COALESCE(e.nipy, '-') as nipy, COALESCE(e.contact_phone, u.phone, '') as phone
+                     FROM deputi_units du
+                     JOIN users u ON du.user_id = u.id AND u.is_active = 1
+                     LEFT JOIN employees e ON e.user_id = u.id AND e.is_deleted = 0
+                     WHERE du.unit_id = ?
+                     ORDER BY du.id ASC LIMIT 1",
+                    [$unitId]
+                );
+                if ($dep && !empty($dep['nama'])) {
+                    return $dep;
+                }
+            } catch (\Throwable $e) {
+                // Abaikan jika tabel deputi_units belum dibuat
+            }
+            $depFallback = Database::fetch(
+                "SELECT COALESCE(e.nama, u.full_name) as nama, COALESCE(e.nipy, '-') as nipy, COALESCE(e.contact_phone, u.phone, '') as phone
+                 FROM users u
+                 JOIN user_roles ur ON u.id = ur.user_id
+                 JOIN roles r ON ur.role_id = r.id
+                 LEFT JOIN employees e ON e.user_id = u.id AND e.is_deleted = 0
+                 WHERE r.name = 'deputi_pendidikan' AND u.is_active = 1
+                 ORDER BY u.id ASC LIMIT 1"
+            );
+            return [
+                'nama'  => $depFallback['nama'] ?? 'Deputi Direktur Pendidikan',
+                'nipy'  => $depFallback['nipy'] ?? '-',
+                'phone' => $depFallback['phone'] ?? ''
+            ];
+        }
+
+        return ['nama' => '-', 'nipy' => '-', 'phone' => ''];
+    }
+
+    private function terbilang(float $angka): string {
+        $angka = (int)round(abs($angka));
+        if ($angka === 0) {
+            return 'nol rupiah';
+        }
+        $words = ['', 'satu', 'dua', 'tiga', 'empat', 'lima', 'enam', 'tujuh', 'delapan', 'sembilan', 'sepuluh', 'sebelas'];
+        $conv = function (int $n) use (&$conv, $words): string {
+            if ($n < 12) return $words[$n];
+            if ($n < 20) return $conv($n - 10) . ' belas';
+            if ($n < 100) return $conv((int)floor($n / 10)) . ' puluh' . ($n % 10 ? ' ' . $conv($n % 10) : '');
+            if ($n < 200) return 'seratus' . ($n - 100 ? ' ' . $conv($n - 100) : '');
+            if ($n < 1000) return $conv((int)floor($n / 100)) . ' ratus' . ($n % 100 ? ' ' . $conv($n % 100) : '');
+            if ($n < 2000) return 'seribu' . ($n - 1000 ? ' ' . $conv($n - 1000) : '');
+            if ($n < 1000000) return $conv((int)floor($n / 1000)) . ' ribu' . ($n % 1000 ? ' ' . $conv($n % 1000) : '');
+            if ($n < 1000000000) return $conv((int)floor($n / 1000000)) . ' juta' . ($n % 1000000 ? ' ' . $conv($n % 1000000) : '');
+            return $conv((int)floor($n / 1000000000)) . ' miliar' . ($n % 1000000000 ? ' ' . $conv($n % 1000000000) : '');
+        };
+        return trim(preg_replace('/\s+/', ' ', $conv($angka))) . ' rupiah';
+    }
+
+    // =========================================================================
     // 1. MANAGE BILLS (INPUT TAGIHAN TU DENGAN MULTI-KOLOM FR 8001A)
     // =========================================================================
     public function manage(): void {
         $this->requireRole(['tata_usaha', 'kepala_sekolah', 'deputi_pendidikan', 'keuangan_yayasan']);
+        self::ensureSignedColumns();
         $unitId = Auth::unitId();
         $taId = Auth::academicYearId();
 
         $bills = Database::fetchAll(
-            "SELECT b.*, s.nama as student_name, s.nis, s.parent_email, 
+            "SELECT b.*, s.nama as student_name, s.nis, s.gender as student_gender, s.parent_email, 
                     COALESCE(NULLIF(s.father_name, ''), NULLIF(s.mother_name, ''), 'Wali Santri') as parent_name, 
-                    s.parent_phone, s.address as alamat, c.name as class_name 
+                    s.parent_phone, s.address as alamat,
+                    COALESCE(
+                        (SELECT c2.name FROM class_students cs2 JOIN classes c2 ON cs2.class_id = c2.id 
+                         WHERE cs2.student_id = s.id AND cs2.status = 'Aktif' AND c2.unit_id = b.unit_id 
+                         ORDER BY cs2.academic_year_id DESC, cs2.id DESC LIMIT 1),
+                        'Non-Kelas'
+                    ) as class_name
              FROM bills b 
              JOIN students s ON b.student_id = s.id 
-             LEFT JOIN class_students cs ON s.id = cs.student_id AND cs.status = 'Aktif' 
-             LEFT JOIN classes c ON cs.class_id = c.id 
              WHERE b.unit_id = ? AND b.academic_year_id = ? 
-             ORDER BY b.status DESC, b.due_date ASC, b.id DESC",
+             ORDER BY class_name ASC, s.nama ASC, b.id DESC",
             [$unitId, $taId]
         );
 
         $students = Database::fetchAll(
             "SELECT s.*, COALESCE(NULLIF(s.father_name, ''), NULLIF(s.mother_name, ''), 'Wali Santri') as parent_name, 
-                    s.address as alamat, c.name as class_name 
+                    s.address as alamat,
+                    COALESCE(
+                        (SELECT c2.name FROM class_students cs2 JOIN classes c2 ON cs2.class_id = c2.id 
+                         WHERE cs2.student_id = s.id AND cs2.status = 'Aktif' AND c2.unit_id = s.unit_id 
+                         ORDER BY cs2.academic_year_id DESC, cs2.id DESC LIMIT 1),
+                        'Tanpa Rombel'
+                    ) as class_name
              FROM students s 
-             LEFT JOIN class_students cs ON s.id = cs.student_id AND cs.status = 'Aktif' 
-             LEFT JOIN classes c ON cs.class_id = c.id 
              WHERE s.unit_id = ? AND s.status = 'Aktif' 
-             ORDER BY s.nama ASC", 
+             ORDER BY class_name ASC, s.nama ASC", 
             [$unitId]
+        );
+
+        $classes = Database::fetchAll(
+            "SELECT id, name, level FROM classes WHERE unit_id = ? AND academic_year_id = ? ORDER BY name ASC",
+            [$unitId, $taId]
         );
 
         // Hitung rasio tunggakan
@@ -57,14 +210,18 @@ class TagihanController extends Controller {
         // Ambil info unit untuk data rekening BSI & Kop
         $unit = Database::fetch("SELECT * FROM units WHERE id = ?", [$unitId]);
 
+        $importPreview = $_SESSION['bill_import_preview'] ?? null;
+
         $this->view('tagihan/manage', [
             'pageTitle'       => 'Input Tagihan & Rekap SPP Siswa (FR 8001A)',
             'bills'           => $bills,
             'students'        => $students,
+            'classes'         => $classes,
             'totalStudents'   => $totalStudents,
             'tunggakanCount'  => $tunggakanCount,
             'rasioTunggakan'  => $rasioTunggakan,
-            'unit'            => $unit
+            'unit'            => $unit,
+            'importPreview'   => $importPreview
         ]);
     }
 
@@ -76,20 +233,37 @@ class TagihanController extends Controller {
 
         $studentId = (int)($_POST['student_id'] ?? 0);
         $title = trim($_POST['title'] ?? 'Tagihan Siswa & SPP');
-        $billMonth = (int)($_POST['bill_month'] ?? date('n'));
-        $billYear = (int)($_POST['bill_year'] ?? date('Y'));
-        $dueDate = $_POST['due_date'] ?? date('Y-m-10');
-        $status = $_POST['status'] ?? 'Tertunggak';
+        if ($title === '') {
+            $title = 'Tagihan Siswa & SPP';
+        }
+        $billMonth = max(1, min(12, (int)($_POST['bill_month'] ?? date('n'))));
+        $billYear = max(2020, (int)($_POST['bill_year'] ?? date('Y')));
+        $dueDate = trim((string)($_POST['due_date'] ?? ''));
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $dueDate)) {
+            $dueDate = date('Y-m-10');
+        }
+        $status = ($_POST['status'] ?? 'Tertunggak') === 'Lunas' ? 'Lunas' : 'Tertunggak';
         $notes = trim($_POST['notes'] ?? '');
 
+        if ($studentId > 0) {
+            $stRow = Database::fetch("SELECT id, unit_id FROM students WHERE id = ?", [$studentId]);
+            if ($stRow && ($unitId <= 0 || (int)$stRow['unit_id'] === $unitId)) {
+                $unitId = (int)$stRow['unit_id'];
+            } else {
+                $this->setFlash('danger', 'Data santri tidak valid atau bukan berasal dari unit sekolah Anda.');
+                $this->redirect(Auth::baseUrl() . '/tagihan/manage');
+                return;
+            }
+        }
+
         // 7 Kolom Rincian Biaya Bawaan (FR 8001A)
-        $bukuPaket       = max(0, (float)str_replace(['Rp', '.', ' '], '', $_POST['buku_paket'] ?? '0'));
-        $kegiatanSiswa   = max(0, (float)str_replace(['Rp', '.', ' '], '', $_POST['kegiatan_siswa'] ?? '0'));
-        $komite          = max(0, (float)str_replace(['Rp', '.', ' '], '', $_POST['komite'] ?? '0'));
-        $peningkatanMutu = max(0, (float)str_replace(['Rp', '.', ' '], '', $_POST['peningkatan_mutu'] ?? '0'));
-        $spp             = max(0, (float)str_replace(['Rp', '.', ' '], '', $_POST['spp'] ?? '0'));
-        $uangUjian       = max(0, (float)str_replace(['Rp', '.', ' '], '', $_POST['uang_ujian'] ?? '0'));
-        $tunggakanLalu   = max(0, (float)str_replace(['Rp', '.', ' '], '', $_POST['tunggakan_lalu'] ?? '0'));
+        $bukuPaket       = $this->parseRupiah($_POST['buku_paket'] ?? '0');
+        $kegiatanSiswa   = $this->parseRupiah($_POST['kegiatan_siswa'] ?? '0');
+        $komite          = $this->parseRupiah($_POST['komite'] ?? '0');
+        $peningkatanMutu = $this->parseRupiah($_POST['peningkatan_mutu'] ?? '0');
+        $spp             = $this->parseRupiah($_POST['spp'] ?? '0');
+        $uangUjian       = $this->parseRupiah($_POST['uang_ujian'] ?? '0');
+        $tunggakanLalu   = $this->parseRupiah($_POST['tunggakan_lalu'] ?? '0');
 
         // Custom items tambahan jika ada
         $customNames = $_POST['custom_item_name'] ?? [];
@@ -100,7 +274,7 @@ class TagihanController extends Controller {
         if (is_array($customNames)) {
             foreach ($customNames as $idx => $cName) {
                 $cName = trim((string)$cName);
-                $cVal = max(0, (float)str_replace(['Rp', '.', ' '], '', $customAmounts[$idx] ?? '0'));
+                $cVal = $this->parseRupiah($customAmounts[$idx] ?? '0');
                 if (!empty($cName) && $cVal > 0) {
                     $customItems[] = ['name' => $cName, 'amount' => $cVal];
                     $customTotal += $cVal;
@@ -124,29 +298,35 @@ class TagihanController extends Controller {
             'custom_items'     => $customItems
         ];
 
-        if ($studentId && $totalAmount > 0) {
-            $paidDate = ($status === 'Lunas') ? date('Y-m-d') : null;
-            $paidAmount = ($status === 'Lunas') ? $totalAmount : 0.0;
+        if ($studentId > 0 && $totalAmount > 0 && $unitId > 0) {
+            try {
+                $paidDate = ($status === 'Lunas') ? date('Y-m-d') : null;
+                $paidAmount = ($status === 'Lunas') ? $totalAmount : 0.0;
+                $pipelineStage = ($status === 'Lunas') ? 'selesai_tu' : 'tu_draft';
 
-            Database::execute(
-                "INSERT INTO bills 
-                    (unit_id, academic_year_id, student_id, bill_month, bill_year, title, amount, items_detail, amount_spp, amount_non_spp, due_date, status, pipeline_stage, paid_date, paid_amount, notes, created_by_user_id) 
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'tu_draft', ?, ?, ?, ?)",
-                [
-                    $unitId, $taId, $studentId, $billMonth, $billYear, $title, $totalAmount, 
-                    json_encode($itemsDetail), $amountSpp, $amountNonSpp, $dueDate, $status, 
-                    $paidDate, $paidAmount, $notes, $userId
-                ]
-            );
+                Database::execute(
+                    "INSERT INTO bills 
+                        (unit_id, academic_year_id, student_id, bill_month, bill_year, title, amount, items_detail, amount_spp, amount_non_spp, due_date, status, pipeline_stage, paid_date, paid_amount, notes, created_by_user_id) 
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    [
+                        $unitId, $taId, $studentId, $billMonth, $billYear, $title, $totalAmount, 
+                        json_encode($itemsDetail), $amountSpp, $amountNonSpp, $dueDate, $status, 
+                        $pipelineStage, $paidDate, $paidAmount, $notes, $userId
+                    ]
+                );
 
-            AuditLog::log('CREATE_BILL_MULTI', 'bills', Database::lastInsertId(), null, [
-                'amount' => $totalAmount, 
-                'student_id' => $studentId,
-                'items_detail' => $itemsDetail
-            ]);
-            $this->setFlash('success', 'Data tagihan (FR 8001A) berhasil disimpan dengan total ' . SecurityHelper::formatRupiah($totalAmount) . '.');
+                AuditLog::log('CREATE_BILL_MULTI', 'bills', Database::lastInsertId(), null, [
+                    'amount' => $totalAmount, 
+                    'student_id' => $studentId,
+                    'items_detail' => $itemsDetail
+                ]);
+                $this->setFlash('success', 'Data tagihan (FR 8001A) berhasil disimpan dengan total ' . SecurityHelper::formatRupiah($totalAmount) . '.');
+            } catch (\Throwable $e) {
+                error_log('Gagal menyimpan tagihan FR8001A: ' . $e->getMessage());
+                $this->setFlash('danger', 'Terjadi kesalahan saat menyimpan tagihan: ' . htmlspecialchars($e->getMessage()));
+            }
         } else {
-            $this->setFlash('danger', 'Harap pilih santri dan isi minimal satu rincian uraian tagihan bernominal.');
+            $this->setFlash('danger', 'Harap pilih santri yang valid dan isi minimal satu rincian uraian tagihan bernominal (> 0).');
         }
 
         $this->redirect(Auth::baseUrl() . '/tagihan/manage');
@@ -168,7 +348,7 @@ class TagihanController extends Controller {
     }
 
     // =========================================================================
-    // 2. TEMPLATE EXCEL & IMPORT MULTI-KOLOM (FR 8001A)
+    // 2. TEMPLATE EXCEL, VERIFIKASI & IMPORT AKUMULATIF BULANAN (FR 8001A)
     // =========================================================================
     public function downloadTemplate(): void {
         $this->requireRole(['tata_usaha', 'kepala_sekolah']);
@@ -179,120 +359,212 @@ class TagihanController extends Controller {
         $students = Database::fetchAll(
             "SELECT s.nis, s.nama, s.gender, 
                     COALESCE(NULLIF(s.father_name, ''), NULLIF(s.mother_name, ''), 'Wali Santri') as parent_name, 
-                    s.parent_phone, c.name as class_name 
+                    s.parent_phone,
+                    COALESCE(
+                        (SELECT c2.name FROM class_students cs2 JOIN classes c2 ON cs2.class_id = c2.id 
+                         WHERE cs2.student_id = s.id AND cs2.status = 'Aktif' AND c2.unit_id = s.unit_id 
+                         ORDER BY cs2.academic_year_id DESC, cs2.id DESC LIMIT 1),
+                        'Non-Kelas'
+                    ) as class_name
              FROM students s 
-             LEFT JOIN class_students cs ON s.id = cs.student_id AND cs.status = 'Aktif' 
-             LEFT JOIN classes c ON cs.class_id = c.id 
              WHERE s.unit_id = ? AND s.status = 'Aktif' 
-             ORDER BY c.name ASC, s.nama ASC",
+             ORDER BY class_name ASC, s.nama ASC",
             [$unitId]
         );
 
         $headers = [
-            'No Urut', 'Induk', 'Nama Siswa', 'L/P', 'Nama Orang Tua/Wali', 'Nomor HP Orang Tua/Wali',
+            'No Urut', 'Induk', 'Nama Siswa', 'Kelas', 'L/P', 'Nama Orang Tua/Wali', 'Nomor HP Orang Tua/Wali',
             'Buku Paket (Rp)', 'Kegiatan Siswa (Rp)', 'Komite (Rp)', 'Peningkatan Mutu (Rp)',
             'SPP (Rp)', 'Uang Ujian (Rp)', 'Tunggakan Tahun Lalu (Rp)', 'JUMLAH (Rp)'
         ];
 
         $rows = [];
         foreach ($students as $idx => $st) {
+            $g = strtoupper(trim((string)($st['gender'] ?? 'L')));
+            if (!in_array($g, ['L', 'P'], true)) {
+                $g = 'L';
+            }
             $rows[] = [
                 $idx + 1,
                 (string)$st['nis'],
                 $st['nama'],
-                $st['jenis_kelamin'] ?? 'L',
+                $st['class_name'] ?? 'Non-Kelas',
+                $g,
                 $st['parent_name'] ?? 'Wali Santri',
                 $st['parent_phone'] ?? '',
                 0, // Buku Paket
                 0, // Kegiatan Siswa
                 0, // Komite
                 0, // Peningkatan Mutu
-                500000, // SPP default
+                0, // SPP bulan berjalan
                 0, // Uang Ujian
                 0, // Tunggakan Tahun Lalu
-                500000 // Total Jumlah
+                0  // Total Jumlah bulan berjalan
             ];
         }
 
         $filename = 'Format_FR8001A_Tagihan_' . preg_replace('/[^a-zA-Z0-9]/', '_', $unitName) . '_' . date('Y_m');
-        ExportHelper::xlsx($headers, $rows, $filename, "Format Tagihan / Jenis Biaya (FR 8001A) - {$unitName}");
+        ExportHelper::xlsx($headers, $rows, $filename, "Format Tagihan Bulanan Akumulatif (FR 8001A) - {$unitName}");
     }
 
-    public function importBills(): void {
-        $this->requireRole('tata_usaha');
-        $unitId = Auth::unitId();
-        $taId = Auth::academicYearId();
-        $userId = Auth::id();
+    /**
+     * Parsing file Excel FR 8001A dan mencocokkan terhadap master siswa unit serta tunggakan berjalan.
+     */
+    private function parseImportExcelRows(string $filePath, int $unitId, int $taId): array {
+        $spreadsheet = \PhpOffice\PhpSpreadsheet\IOFactory::load($filePath);
+        $sheet = $spreadsheet->getActiveSheet();
+        $rows = $sheet->toArray(null, true, true, true);
 
-        if (empty($_FILES['excel_file']['tmp_name'])) {
-            $this->setFlash('danger', 'Harap pilih berkas Excel (.xlsx) untuk diimpor.');
-            $this->redirect(Auth::baseUrl() . '/tagihan/manage');
-            return;
-        }
+        $students = Database::fetchAll(
+            "SELECT s.id, s.nis, s.nama, s.gender,
+                    COALESCE(
+                        (SELECT c2.name FROM class_students cs2 JOIN classes c2 ON cs2.class_id = c2.id 
+                         WHERE cs2.student_id = s.id AND cs2.status = 'Aktif' AND c2.unit_id = s.unit_id 
+                         ORDER BY cs2.academic_year_id DESC, cs2.id DESC LIMIT 1),
+                        'Non-Kelas'
+                    ) as class_name
+             FROM students s
+             WHERE s.unit_id = ? AND s.status = 'Aktif'",
+            [$unitId]
+        );
 
-        $filePath = $_FILES['excel_file']['tmp_name'];
-
-        try {
-            $spreadsheet = \PhpOffice\PhpSpreadsheet\IOFactory::load($filePath);
-            $sheet = $spreadsheet->getActiveSheet();
-            $rows = $sheet->toArray(null, true, true, true);
-        } catch (\Exception $e) {
-            $this->setFlash('danger', 'Gagal membaca berkas Excel: ' . $e->getMessage());
-            $this->redirect(Auth::baseUrl() . '/tagihan/manage');
-            return;
-        }
-
-        $students = Database::fetchAll("SELECT id, nis FROM students WHERE unit_id = ? AND status = 'Aktif'", [$unitId]);
-        $studentMapByNis = [];
+        $studentByNis = [];
+        $studentByName = [];
         foreach ($students as $st) {
             $cleanNis = trim((string)$st['nis']);
             if ($cleanNis !== '') {
-                $studentMapByNis[$cleanNis] = (int)$st['id'];
+                $studentByNis[$cleanNis] = $st;
+            }
+            $cleanName = strtolower(preg_replace('/\s+/', ' ', trim((string)$st['nama'])));
+            if ($cleanName !== '') {
+                $studentByName[$cleanName] = $st;
             }
         }
 
-        $importedCount = 0;
-        $updatedCount = 0;
-        $skippedCount = 0;
+        // Ambil tunggakan aktif & buku cicilan aktif per student_id untuk kalkulasi akumulasi preview
+        $openBills = Database::fetchAll(
+            "SELECT id, student_id, amount FROM bills WHERE unit_id = ? AND academic_year_id = ? AND status = 'Tertunggak' ORDER BY id DESC",
+            [$unitId, $taId]
+        );
+        $openBillMap = [];
+        foreach ($openBills as $ob) {
+            $sid = (int)$ob['student_id'];
+            if (!isset($openBillMap[$sid])) {
+                $openBillMap[$sid] = (float)$ob['amount'];
+            }
+        }
 
-        $month = (int)date('n');
-        $year = (int)date('Y');
-        $dueDate = date('Y-m-10');
+        $activeInsts = Database::fetchAll(
+            "SELECT student_id, agreement_number, total_debt, remaining_debt FROM bill_installments WHERE unit_id = ? AND status = 'Aktif'",
+            [$unitId]
+        );
+        $activeInstMap = [];
+        foreach ($activeInsts as $ai) {
+            $activeInstMap[(int)$ai['student_id']] = $ai;
+        }
+
+        // Deteksi apakah ada kolom Kelas (D = Kelas, E = L/P) atau format lama (D = L/P, G..M biaya)
+        $hasClassCol = false;
+        foreach ($rows as $rCheck) {
+            $colD = strtolower(trim((string)($rCheck['D'] ?? '')));
+            if (str_contains($colD, 'kelas')) {
+                $hasClassCol = true;
+                break;
+            }
+        }
+
+        $valid = [];
+        $invalid = [];
 
         foreach ($rows as $rowIndex => $row) {
-            $nis = trim((string)($row['B'] ?? ''));
             $colA = trim((string)($row['A'] ?? ''));
+            $nis  = trim((string)($row['B'] ?? ''));
+            $namaExcel = trim((string)($row['C'] ?? ''));
 
-            if (empty($nis) || strtolower($nis) === 'induk' || strtolower($nis) === 'nis' || strtolower($colA) === 'no urut' || !is_numeric($colA)) {
+            if ($colA === '' || strtolower($colA) === 'no urut' || strtolower($nis) === 'induk' || strtolower($nis) === 'nis' || !is_numeric($colA)) {
+                continue;
+            }
+            if ($nis === '' && $namaExcel === '') {
                 continue;
             }
 
-            if (!isset($studentMapByNis[$nis])) {
-                $skippedCount++;
-                continue;
+            if (!$hasClassCol) {
+                // Auto-deteksi per baris jika user memakai format baru tanpa row header standar
+                $valD = trim((string)($row['D'] ?? ''));
+                $valE = strtoupper(trim((string)($row['E'] ?? '')));
+                if (!in_array(strtoupper($valD), ['L', 'P', 'LAKI-LAKI', 'PEREMPUAN'], true) && in_array($valE, ['L', 'P'], true)) {
+                    $hasClassCol = true;
+                }
             }
 
-            $studentId = $studentMapByNis[$nis];
+            $cOffset = $hasClassCol ? 1 : 0; // Geser 1 kolom ke kanan bila ada kolom Kelas
+            $colKeys = $hasClassCol
+                ? ['kelas' => 'D', 'lp' => 'E', 'bp' => 'H', 'ks' => 'I', 'km' => 'J', 'pm' => 'K', 'spp' => 'L', 'uj' => 'M', 'tl' => 'N']
+                : ['kelas' => null, 'lp' => 'D', 'bp' => 'G', 'ks' => 'H', 'km' => 'I', 'pm' => 'J', 'spp' => 'K', 'uj' => 'L', 'tl' => 'M'];
 
-            // 7 Kolom Biaya FR 8001A
-            $bukuPaket       = max(0, (float)str_replace(['Rp', '.', ',', ' '], '', (string)($row['G'] ?? '0')));
-            $kegiatanSiswa   = max(0, (float)str_replace(['Rp', '.', ',', ' '], '', (string)($row['H'] ?? '0')));
-            $komite          = max(0, (float)str_replace(['Rp', '.', ',', ' '], '', (string)($row['I'] ?? '0')));
-            $peningkatanMutu = max(0, (float)str_replace(['Rp', '.', ',', ' '], '', (string)($row['J'] ?? '0')));
-            $spp             = max(0, (float)str_replace(['Rp', '.', ',', ' '], '', (string)($row['K'] ?? '0')));
-            $uangUjian       = max(0, (float)str_replace(['Rp', '.', ',', ' '], '', (string)($row['L'] ?? '0')));
-            $tunggakanLalu   = max(0, (float)str_replace(['Rp', '.', ',', ' '], '', (string)($row['M'] ?? '0')));
+            $excelClass = $colKeys['kelas'] ? trim((string)($row[$colKeys['kelas']] ?? '')) : '';
+            $bukuPaket       = $this->parseRupiah($row[$colKeys['bp']] ?? '0');
+            $kegiatanSiswa   = $this->parseRupiah($row[$colKeys['ks']] ?? '0');
+            $komite          = $this->parseRupiah($row[$colKeys['km']] ?? '0');
+            $peningkatanMutu = $this->parseRupiah($row[$colKeys['pm']] ?? '0');
+            $spp             = $this->parseRupiah($row[$colKeys['spp']] ?? '0');
+            $uangUjian       = $this->parseRupiah($row[$colKeys['uj']] ?? '0');
+            $tunggakanLalu   = $this->parseRupiah($row[$colKeys['tl']] ?? '0');
 
-            $amountSpp = $spp;
+            $amountSpp    = $spp;
             $amountNonSpp = $bukuPaket + $kegiatanSiswa + $komite + $peningkatanMutu + $uangUjian + $tunggakanLalu;
-            $totalAmount = $amountSpp + $amountNonSpp;
+            $totalAmount  = $amountSpp + $amountNonSpp;
+
+            // Cocokkan siswa: prioritas NIS, lalu Nama lengkap
+            $matchedStudent = null;
+            $matchNote = 'NIS cocok';
+            if ($nis !== '' && isset($studentByNis[$nis])) {
+                $matchedStudent = $studentByNis[$nis];
+            } else {
+                $normName = strtolower(preg_replace('/\s+/', ' ', $namaExcel));
+                if ($normName !== '' && isset($studentByName[$normName])) {
+                    $matchedStudent = $studentByName[$normName];
+                    $matchNote = 'Cocok via Nama (NIS Excel: ' . ($nis ?: '-') . ')';
+                }
+            }
+
+            if (!$matchedStudent) {
+                $invalid[] = [
+                    'row_num'    => $rowIndex,
+                    'nis'        => $nis,
+                    'nama'       => $namaExcel,
+                    'class_name' => $excelClass ?: '-',
+                    'amount'     => $totalAmount,
+                    'reason'     => 'Siswa tidak ditemukan di Master Siswa unit ini (periksa ejaan nama/NIS sesuai Dapodik).'
+                ];
+                continue;
+            }
 
             if ($totalAmount <= 0) {
-                $skippedCount++;
+                $invalid[] = [
+                    'row_num'    => $rowIndex,
+                    'nis'        => $matchedStudent['nis'],
+                    'nama'       => $matchedStudent['nama'],
+                    'class_name' => $matchedStudent['class_name'],
+                    'amount'     => 0,
+                    'reason'     => 'Total nominal tagihan bulan berjalan = Rp 0 (tidak ada nominal yang perlu ditambahkan).'
+                ];
                 continue;
             }
 
-            $itemsDetail = [
+            $sid = (int)$matchedStudent['id'];
+            $existingAmount = $openBillMap[$sid] ?? 0.0;
+            $hasOpenBill = isset($openBillMap[$sid]);
+            $instInfo = $activeInstMap[$sid] ?? null;
+
+            $valid[] = [
+                'row_num'          => $rowIndex,
+                'student_id'       => $sid,
+                'nis'              => $matchedStudent['nis'],
+                'nama'             => $matchedStudent['nama'],
+                'class_name'       => $matchedStudent['class_name'] ?: ($excelClass ?: 'Non-Kelas'),
+                'gender'           => $matchedStudent['gender'] ?? 'L',
+                'match_note'       => $matchNote,
                 'buku_paket'       => $bukuPaket,
                 'kegiatan_siswa'   => $kegiatanSiswa,
                 'komite'           => $komite,
@@ -300,42 +572,217 @@ class TagihanController extends Controller {
                 'spp'              => $spp,
                 'uang_ujian'       => $uangUjian,
                 'tunggakan_lalu'   => $tunggakanLalu,
+                'amount_spp'       => $amountSpp,
+                'amount_non_spp'   => $amountNonSpp,
+                'amount'           => $totalAmount,
+                'is_accumulation'  => $hasOpenBill,
+                'existing_amount'  => $existingAmount,
+                'new_total'        => $existingAmount + $totalAmount,
+                'has_installment'  => (bool)$instInfo,
+                'agreement_number' => $instInfo['agreement_number'] ?? null
+            ];
+        }
+
+        return ['valid' => $valid, 'invalid' => $invalid];
+    }
+
+    /**
+     * Terapkan baris tagihan valid secara AKUMULATIF:
+     * - Bila siswa punya tunggakan aktif ('Tertunggak'), jumlahkan nominal bulan berjalan ke tagihan tersebut.
+     * - Bila siswa punya Buku Cicilan ('Aktif'), pertahankan anchor (total_debt) dan tambahkan ke remaining_debt.
+     * - Bila belum punya tunggakan aktif, buat tagihan baru.
+     */
+    private function applyBillImportRows(array $validRows, int $unitId, int $taId, int $userId, int $billMonth, int $billYear, string $dueDate): array {
+        $importedCount = 0;
+        $accumulatedCount = 0;
+        $installmentUpdatedCount = 0;
+        $periodLabel = sprintf('%02d/%04d', $billMonth, $billYear);
+
+        foreach ($validRows as $r) {
+            $studentId = (int)$r['student_id'];
+            $addSpp = (float)$r['amount_spp'];
+            $addNonSpp = (float)$r['amount_non_spp'];
+            $addTotal = (float)$r['amount'];
+
+            if ($studentId <= 0 || $addTotal <= 0) {
+                continue;
+            }
+
+            $addItems = [
+                'buku_paket'       => (float)$r['buku_paket'],
+                'kegiatan_siswa'   => (float)$r['kegiatan_siswa'],
+                'komite'           => (float)$r['komite'],
+                'peningkatan_mutu' => (float)$r['peningkatan_mutu'],
+                'spp'              => (float)$r['spp'],
+                'uang_ujian'       => (float)$r['uang_ujian'],
+                'tunggakan_lalu'   => (float)$r['tunggakan_lalu'],
                 'custom_items'     => []
             ];
 
-            $title = 'Tagihan Siswa & SPP';
-            $status = 'Tertunggak';
-
             $existing = Database::fetch(
-                "SELECT id FROM bills WHERE unit_id = ? AND academic_year_id = ? AND student_id = ? AND bill_month = ? AND bill_year = ?",
-                [$unitId, $taId, $studentId, $month, $year]
+                "SELECT * FROM bills WHERE unit_id = ? AND academic_year_id = ? AND student_id = ? AND status = 'Tertunggak' ORDER BY id DESC LIMIT 1",
+                [$unitId, $taId, $studentId]
             );
 
             if ($existing) {
+                $oldItems = json_decode($existing['items_detail'] ?? '{}', true) ?: [];
+                $mergedItems = [
+                    'buku_paket'       => (float)($oldItems['buku_paket'] ?? 0) + $addItems['buku_paket'],
+                    'kegiatan_siswa'   => (float)($oldItems['kegiatan_siswa'] ?? 0) + $addItems['kegiatan_siswa'],
+                    'komite'           => (float)($oldItems['komite'] ?? 0) + $addItems['komite'],
+                    'peningkatan_mutu' => (float)($oldItems['peningkatan_mutu'] ?? 0) + $addItems['peningkatan_mutu'],
+                    'spp'              => (float)($oldItems['spp'] ?? 0) + $addItems['spp'],
+                    'uang_ujian'       => (float)($oldItems['uang_ujian'] ?? 0) + $addItems['uang_ujian'],
+                    'tunggakan_lalu'   => (float)($oldItems['tunggakan_lalu'] ?? 0) + $addItems['tunggakan_lalu'],
+                    'custom_items'     => $oldItems['custom_items'] ?? []
+                ];
+
+                $newTotal = (float)$existing['amount'] + $addTotal;
+                $newSpp = (float)$existing['amount_spp'] + $addSpp;
+                $newNonSpp = (float)$existing['amount_non_spp'] + $addNonSpp;
+                $logNote = '[Akumulasi Impor ' . $periodLabel . ': +' . SecurityHelper::formatRupiah($addTotal) . ']';
+                $updatedNotes = trim(($existing['notes'] ? $existing['notes'] . "\n" : '') . $logNote);
+
                 Database::execute(
-                    "UPDATE bills SET amount = ?, items_detail = ?, amount_spp = ?, amount_non_spp = ?, due_date = ?, status = ? WHERE id = ?",
-                    [$totalAmount, json_encode($itemsDetail), $amountSpp, $amountNonSpp, $dueDate, $status, $existing['id']]
+                    "UPDATE bills 
+                     SET bill_month = ?, bill_year = ?, amount = ?, items_detail = ?, amount_spp = ?, amount_non_spp = ?, due_date = ?, notes = ? 
+                     WHERE id = ?",
+                    [$billMonth, $billYear, $newTotal, json_encode($mergedItems), $newSpp, $newNonSpp, $dueDate, $updatedNotes, $existing['id']]
                 );
-                $updatedCount++;
+                $accumulatedCount++;
             } else {
+                $logNote = '[Impor Tagihan ' . $periodLabel . ': ' . SecurityHelper::formatRupiah($addTotal) . ']';
                 Database::execute(
                     "INSERT INTO bills 
-                        (unit_id, academic_year_id, student_id, bill_month, bill_year, title, amount, items_detail, amount_spp, amount_non_spp, due_date, status, pipeline_stage, created_by_user_id) 
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'tu_draft', ?)",
-                    [$unitId, $taId, $studentId, $month, $year, $title, $totalAmount, json_encode($itemsDetail), $amountSpp, $amountNonSpp, $dueDate, $status, $userId]
+                        (unit_id, academic_year_id, student_id, bill_month, bill_year, title, amount, items_detail, amount_spp, amount_non_spp, due_date, status, pipeline_stage, notes, created_by_user_id) 
+                     VALUES (?, ?, ?, ?, ?, 'Tagihan Siswa & SPP', ?, ?, ?, ?, ?, 'Tertunggak', 'tu_draft', ?, ?)",
+                    [$unitId, $taId, $studentId, $billMonth, $billYear, $addTotal, json_encode($addItems), $addSpp, $amountNonSpp = $addNonSpp, $dueDate, $logNote, $userId]
                 );
                 $importedCount++;
             }
+
+            // Jika siswa memiliki Buku Cicilan aktif: anchor (total_debt) TETAP, sisa tunggakan (remaining_debt) bertambah!
+            $activeInst = Database::fetch(
+                "SELECT id, notes FROM bill_installments WHERE unit_id = ? AND student_id = ? AND status = 'Aktif' ORDER BY id DESC LIMIT 1",
+                [$unitId, $studentId]
+            );
+            if ($activeInst) {
+                $instNote = '[Tambahan Tunggakan Impor ' . $periodLabel . ': +' . SecurityHelper::formatRupiah($addTotal) . ']';
+                Database::execute(
+                    "UPDATE bill_installments 
+                     SET remaining_debt = remaining_debt + ?,
+                         notes = CONCAT(COALESCE(notes, ''), ?)
+                     WHERE id = ?",
+                    [$addTotal, "\n" . $instNote, $activeInst['id']]
+                );
+                $installmentUpdatedCount++;
+            }
         }
 
-        AuditLog::log('IMPORT_BILLS_FR8001A', 'bills', $unitId, null, [
+        return [
             'imported' => $importedCount,
-            'updated'  => $updatedCount,
-            'skipped'  => $skippedCount
-        ]);
+            'accumulated' => $accumulatedCount,
+            'installment_updated' => $installmentUpdatedCount
+        ];
+    }
 
-        $this->setFlash('success', "Import Excel FR 8001A Selesai: {$importedCount} tagihan baru ditambahkan, {$updatedCount} diperbarui, {$skippedCount} dilewati.");
+    public function verifyImportBills(): void {
+        $this->requireRole('tata_usaha');
+        $unitId = Auth::unitId();
+        $taId = Auth::academicYearId();
+
+        if (empty($_FILES['excel_file']['tmp_name'])) {
+            $this->setFlash('danger', 'Harap pilih berkas Excel (.xlsx) untuk diverifikasi.');
+            $this->redirect(Auth::baseUrl() . '/tagihan/manage');
+            return;
+        }
+
+        $billMonth = max(1, min(12, (int)($_POST['bill_month'] ?? date('n'))));
+        $billYear  = max(2020, (int)($_POST['bill_year'] ?? date('Y')));
+        $dueDate   = trim((string)($_POST['due_date'] ?? ''));
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $dueDate)) {
+            $dueDate = date('Y-m-10');
+        }
+
+        try {
+            $parsed = $this->parseImportExcelRows($_FILES['excel_file']['tmp_name'], $unitId, $taId);
+            $_SESSION['bill_import_preview'] = [
+                'filename'   => $_FILES['excel_file']['name'] ?? 'import.xlsx',
+                'bill_month' => $billMonth,
+                'bill_year'  => $billYear,
+                'due_date'   => $dueDate,
+                'valid'      => $parsed['valid'],
+                'invalid'    => $parsed['invalid']
+            ];
+            $vCnt = count($parsed['valid']);
+            $iCnt = count($parsed['invalid']);
+            $this->setFlash('info', "Hasil Verifikasi Impor: {$vCnt} baris siap masuk/terakumulasi, {$iCnt} baris masuk tab Data Bermasalah. Silakan periksa sebelum menyimpan.");
+        } catch (\Throwable $e) {
+            $this->setFlash('danger', 'Gagal membaca berkas Excel: ' . $e->getMessage());
+        }
+
         $this->redirect(Auth::baseUrl() . '/tagihan/manage');
+    }
+
+    public function confirmImportBills(): void {
+        $this->requireRole('tata_usaha');
+        $unitId = Auth::unitId();
+        $taId = Auth::academicYearId();
+        $userId = Auth::id();
+
+        $action = $_POST['action'] ?? 'commit';
+        if ($action === 'cancel') {
+            unset($_SESSION['bill_import_preview']);
+            $this->setFlash('info', 'Pratinjau impor tagihan dibatalkan.');
+            $this->redirect(Auth::baseUrl() . '/tagihan/manage');
+            return;
+        }
+
+        $preview = $_SESSION['bill_import_preview'] ?? null;
+        if (!$preview || empty($preview['valid'])) {
+            unset($_SESSION['bill_import_preview']);
+            $this->setFlash('warning', 'Tidak ada data tagihan valid untuk disimpan.');
+            $this->redirect(Auth::baseUrl() . '/tagihan/manage');
+            return;
+        }
+
+        $selectedIndices = $_POST['keep_indices'] ?? null;
+        $rowsToProcess = [];
+        if (is_array($selectedIndices)) {
+            $keepSet = array_flip(array_map('intval', $selectedIndices));
+            foreach ($preview['valid'] as $idx => $row) {
+                if (isset($keepSet[(int)$idx])) {
+                    $rowsToProcess[] = $row;
+                }
+            }
+        } else {
+            $rowsToProcess = $preview['valid'];
+        }
+
+        $stats = $this->applyBillImportRows(
+            $rowsToProcess,
+            $unitId,
+            $taId,
+            $userId,
+            (int)$preview['bill_month'],
+            (int)$preview['bill_year'],
+            (string)$preview['due_date']
+        );
+        unset($_SESSION['bill_import_preview']);
+
+        AuditLog::log('IMPORT_BILLS_FR8001A', 'bills', $unitId, null, $stats);
+
+        $msg = "Impor Tagihan Selesai: {$stats['imported']} tagihan baru dibuat, {$stats['accumulated']} tunggakan lama terakumulasi.";
+        if ($stats['installment_updated'] > 0) {
+            $msg .= " ({$stats['installment_updated']} Buku Cicilan aktif diperbarui sisa tunggakannya tanpa mengubah anchor perjanjian).";
+        }
+        $this->setFlash('success', $msg);
+        $this->redirect(Auth::baseUrl() . '/tagihan/manage');
+    }
+
+    public function importBills(): void {
+        // Fallback langsung ke tahap verifikasi agar tidak ada data masuk tanpa verifikasi
+        $this->verifyImportBills();
     }
 
     // =========================================================================
@@ -376,26 +823,10 @@ class TagihanController extends Controller {
         $bsiHolder = $bill['bank_holder'] ?: $bill['unit_name'];
         $unitPhone = $bill['unit_phone'] ?: '-';
 
-        // Ambil data staf Tata Usaha aktif
-        $tuEmp = Database::fetch(
-            "SELECT e.nama, e.nipy 
-             FROM employees e 
-             JOIN user_roles ur ON e.user_id = ur.user_id 
-             JOIN roles r ON ur.role_id = r.id 
-             WHERE e.unit_id = ? AND r.name = 'tata_usaha' AND e.status = 'Aktif' 
-             LIMIT 1",
-            [$bill['unit_id']]
-        );
-        if (!$tuEmp) {
-            $tuEmp = Database::fetch(
-                "SELECT nama, nipy FROM employees 
-                 WHERE unit_id = ? AND (level_posisi LIKE '%Tata Usaha%' OR position LIKE '%Tata Usaha%') AND status = 'Aktif' 
-                 LIMIT 1", 
-                [$bill['unit_id']]
-            );
-        }
-        $tuName = $tuEmp['nama'] ?? 'Staff Tata Usaha';
-        $tuNipy = $tuEmp['nipy'] ?? '-';
+        // Ambil data staf Tata Usaha aktif langsung dari DB unit (konsisten walau admin switch user)
+        $tuEmp = $this->resolveUnitSigner((int)$bill['unit_id'], 'tata_usaha');
+        $tuName = $tuEmp['nama'];
+        $tuNipy = $tuEmp['nipy'];
 
         // Render Kop Surat standar dual logo
         $kopHtml = ExportHelper::renderKop($bill);
@@ -546,136 +977,209 @@ class TagihanController extends Controller {
         return null;
     }
 
-    public function kirimSuratFR8001B(): void {
-        $this->requireRole('tata_usaha');
-        $billId = (int)($_POST['bill_id'] ?? 0);
-        $unitId = Auth::unitId();
+    private function configureMailer(PHPMailer $mail, array $smtp): void {
+        $mail->isSMTP();
+        $mail->Host       = trim($smtp['host']);
+        $mail->SMTPAuth   = true;
+        $mail->Username   = trim($smtp['username']);
+        $mail->Password   = $smtp['password'];
+        $mail->Timeout    = 25;
+        $mail->CharSet    = 'UTF-8';
 
+        $port = (int)($smtp['port'] ?: 587);
+        $enc  = strtolower(trim($smtp['encryption'] ?? ''));
+        if ($enc === 'ssl' || $port === 465) {
+            $mail->SMTPSecure = PHPMailer::ENCRYPTION_SMTPS;
+            $mail->Port       = $port ?: 465;
+        } elseif ($enc === 'tls' || $port === 587) {
+            $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
+            $mail->Port       = $port ?: 587;
+        } else {
+            $mail->SMTPSecure  = false;
+            $mail->SMTPAutoTLS = false;
+            $mail->Port        = $port ?: 25;
+        }
+
+        $mail->SMTPOptions = [
+            'ssl' => [
+                'verify_peer'       => false,
+                'verify_peer_name'  => false,
+                'allow_self_signed' => true,
+            ]
+        ];
+    }
+
+    private function sendSingleFR8001B(int $billId, int $unitId, ?array $smtp = null): array {
         $bill = Database::fetch(
             "SELECT b.*, s.nama as student_name, s.nis, s.parent_email, 
-                    c.name as class_name, u.name as unit_name, u.phone as unit_phone, u.bank_name, 
+                    (SELECT c2.name FROM class_students cs2 JOIN classes c2 ON cs2.class_id = c2.id 
+                     WHERE cs2.student_id = s.id AND cs2.status = 'Aktif' AND c2.unit_id = b.unit_id 
+                     ORDER BY cs2.academic_year_id DESC, cs2.id DESC LIMIT 1) as class_name,
+                    u.name as unit_name, u.phone as unit_phone, u.bank_name, 
                     u.bank_account, u.bank_holder, u.kop_title, u.kop_subtitle, u.address, u.email as unit_email,
                     u.code, u.level, u.npsn, u.akreditasi, u.nomor_akreditasi, u.nomor_izin_operasional, u.logo_path
              FROM bills b 
              JOIN students s ON b.student_id = s.id 
              JOIN units u ON b.unit_id = u.id 
-             LEFT JOIN class_students cs ON s.id = cs.student_id AND cs.status = 'Aktif' 
-             LEFT JOIN classes c ON cs.class_id = c.id 
              WHERE b.id = ? AND b.unit_id = ?",
             [$billId, $unitId]
         );
 
         if (!$bill) {
-            $this->setFlash('danger', 'Data tagihan tidak ditemukan.');
-            $this->redirect(Auth::baseUrl() . '/tagihan/manage');
-            return;
+            return ['found' => false, 'email_sent' => false, 'reason' => 'not_found', 'error' => 'Data tagihan tidak ditemukan.'];
         }
 
-        $letterNo = 'REM/TU/' . date('Ym') . '/' . sprintf('%04d', $billId);
+        $letterNo = !empty($bill['tu_reminder_letter_no'])
+            ? $bill['tu_reminder_letter_no']
+            : ('REM/TU/' . date('Ym') . '/' . sprintf('%04d', $billId));
         $bill['tu_reminder_letter_no'] = $letterNo;
 
         Database::execute(
             "UPDATE bills 
-             SET pipeline_stage = 'tu_reminder_sent', 
-                 tu_reminder_sent_at = NOW(), 
+             SET pipeline_stage = CASE WHEN pipeline_stage = 'tu_draft' THEN 'tu_reminder_sent' ELSE pipeline_stage END, 
+                 tu_reminder_sent_at = COALESCE(tu_reminder_sent_at, NOW()), 
                  tu_reminder_letter_no = ? 
              WHERE id = ?",
             [$letterNo, $billId]
         );
 
-        // Kirim email notifikasi jika SMTP tersedia secara aman
-        $smtp = $this->getSmtpConfig($unitId);
-        $emailSent = false;
-        $emailError = null;
+        $smtp = $smtp ?? $this->getSmtpConfig($unitId);
         $parentEmail = trim($bill['parent_email'] ?? '');
 
-        if (!empty($smtp) && !empty($parentEmail)) {
+        if (empty($parentEmail)) {
+            AuditLog::log('SEND_REMINDER_FR8001B', 'bills', $billId, null, ['letter_no' => $letterNo, 'email_sent' => false, 'reason' => 'no_parent_email']);
+            return ['found' => true, 'email_sent' => false, 'reason' => 'no_email', 'letter_no' => $letterNo, 'parent_email' => ''];
+        }
+        if (empty($smtp)) {
+            AuditLog::log('SEND_REMINDER_FR8001B', 'bills', $billId, null, ['letter_no' => $letterNo, 'email_sent' => false, 'reason' => 'no_smtp']);
+            return ['found' => true, 'email_sent' => false, 'reason' => 'no_smtp', 'letter_no' => $letterNo, 'parent_email' => $parentEmail];
+        }
+
+        $emailSent = false;
+        $emailError = null;
+        try {
+            @ini_set('memory_limit', '512M');
+            @set_time_limit(120);
+
+            $mail = new PHPMailer(true);
+            $this->configureMailer($mail, $smtp);
+
+            $fromEmail = !empty($smtp['from_email']) ? trim($smtp['from_email']) : trim($smtp['username']);
+            $fromName  = !empty($smtp['from_name']) ? trim($smtp['from_name']) : ($bill['unit_name'] ?? 'Tata Usaha');
+            $mail->setFrom($fromEmail, $fromName);
+            $mail->addAddress($parentEmail, $bill['student_name']);
+            $mail->isHTML(true);
+            $mail->Subject = "[Reminder Tunggakan - FR 8001B] " . $bill['student_name'] . " - " . $bill['unit_name'];
+            $mail->Body = "
+                <div style='font-family: Arial, sans-serif; line-height: 1.6; max-width: 600px; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;'>
+                    <h4 style='color: #0f766e; margin-top: 0;'>Pemberitahuan Tagihan Sekolah (FR 8001B)</h4>
+                    <p>Yth. Orang Tua dari ananda <strong>" . htmlspecialchars($bill['student_name']) . "</strong>,</p>
+                    <p>Berdasarkan data keuangan kami, terdapat kewajiban pembiayaan sekolah yang belum diselesaikan sebesar <strong>" . SecurityHelper::formatRupiah((float)$bill['amount']) . "</strong>.</p>
+                    <p>Dokumen resmi Surat Pemberitahuan Tunggakan (FR 8001B) terlampir dalam format PDF pada email ini.</p>
+                    <p>Mohon dapat melakukan konfirmasi atau penyelesaian pembayaran melalui loket Tata Usaha sekolah atau rekening resmi sekolah.</p>
+                    <p><em>Jazakumullah Khairan Katsiran.</em></p>
+                </div>";
+
             try {
-                @ini_set('memory_limit', '512M');
-                @set_time_limit(120);
-
-                $mail = new PHPMailer(true);
-                $mail->isSMTP();
-                $mail->Host       = trim($smtp['host']);
-                $mail->SMTPAuth   = true;
-                $mail->Username   = trim($smtp['username']);
-                $mail->Password   = $smtp['password'];
-                $mail->Timeout    = 25;
-                $mail->CharSet    = 'UTF-8';
-
-                $port = (int)($smtp['port'] ?: 587);
-                $enc  = strtolower(trim($smtp['encryption'] ?? ''));
-                if ($enc === 'ssl' || $port === 465) {
-                    $mail->SMTPSecure = PHPMailer::ENCRYPTION_SMTPS;
-                    $mail->Port       = $port ?: 465;
-                } elseif ($enc === 'tls' || $port === 587) {
-                    $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
-                    $mail->Port       = $port ?: 587;
-                } else {
-                    $mail->SMTPSecure  = false;
-                    $mail->SMTPAutoTLS = false;
-                    $mail->Port        = $port ?: 25;
+                $htmlPdf = $this->generateFR8001BHtml($bill, $letterNo);
+                $pdfBytes = ExportHelper::getPdfBytes($htmlPdf, 'A4', 'portrait');
+                if (!empty($pdfBytes)) {
+                    $cleanNis = preg_replace('/[^a-zA-Z0-9_\-]/', '_', $bill['nis']);
+                    $mail->addStringAttachment($pdfBytes, 'Surat_Pemberitahuan_FR8001B_' . $cleanNis . '.pdf', 'base64', 'application/pdf');
                 }
-
-                $mail->SMTPOptions = [
-                    'ssl' => [
-                        'verify_peer'       => false,
-                        'verify_peer_name'  => false,
-                        'allow_self_signed' => true,
-                    ]
-                ];
-
-                $fromEmail = !empty($smtp['from_email']) ? trim($smtp['from_email']) : trim($smtp['username']);
-                $fromName  = !empty($smtp['from_name']) ? trim($smtp['from_name']) : ($bill['unit_name'] ?? 'Tata Usaha');
-                $mail->setFrom($fromEmail, $fromName);
-                $mail->addAddress($parentEmail, $bill['student_name']);
-                $mail->isHTML(true);
-                $mail->Subject = "[Reminder Tunggakan - FR 8001B] " . $bill['student_name'] . " - " . $bill['unit_name'];
-                $mail->Body = "
-                    <div style='font-family: Arial, sans-serif; line-height: 1.6; max-width: 600px; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;'>
-                        <h4 style='color: #0f766e; margin-top: 0;'>Pemberitahuan Tagihan Sekolah (FR 8001B)</h4>
-                        <p>Yth. Orang Tua dari ananda <strong>" . htmlspecialchars($bill['student_name']) . "</strong>,</p>
-                        <p>Berdasarkan data keuangan kami, terdapat kewajiban pembiayaan sekolah yang belum diselesaikan sebesar <strong>" . SecurityHelper::formatRupiah((float)$bill['amount']) . "</strong>.</p>
-                        <p>Dokumen resmi Surat Pemberitahuan Tunggakan (FR 8001B) terlampir dalam format PDF pada email ini.</p>
-                        <p>Mohon dapat melakukan konfirmasi atau penyelesaian pembayaran melalui loket Tata Usaha sekolah atau rekening resmi sekolah.</p>
-                        <p><em>Jazakumullah Khairan Katsiran.</em></p>
-                    </div>";
-
-                // Generate dan lampirkan dokumen PDF resmi FR 8001B
-                try {
-                    $htmlPdf = $this->generateFR8001BHtml($bill, $letterNo);
-                    $pdfBytes = ExportHelper::getPdfBytes($htmlPdf, 'A4', 'portrait');
-                    if (!empty($pdfBytes)) {
-                        $cleanNis = preg_replace('/[^a-zA-Z0-9_\-]/', '_', $bill['nis']);
-                        $mail->addStringAttachment($pdfBytes, 'Surat_Pemberitahuan_FR8001B_' . $cleanNis . '.pdf', 'base64', 'application/pdf');
-                    }
-                } catch (\Throwable $pdfEx) {
-                    error_log('Gagal membuat lampiran PDF FR8001B: ' . $pdfEx->getMessage());
-                }
-
-                $mail->send();
-                $emailSent = true;
-            } catch (\Throwable $e) {
-                $emailError = !empty($mail->ErrorInfo) ? $mail->ErrorInfo : $e->getMessage();
-                error_log('Gagal mengirim email FR 8001B: ' . $emailError);
+            } catch (\Throwable $pdfEx) {
+                error_log('Gagal membuat lampiran PDF FR8001B: ' . $pdfEx->getMessage());
             }
+
+            $mail->send();
+            $emailSent = true;
+        } catch (\Throwable $e) {
+            $emailError = !empty($mail->ErrorInfo) ? $mail->ErrorInfo : $e->getMessage();
+            error_log('Gagal mengirim email FR 8001B: ' . $emailError);
         }
 
         AuditLog::log('SEND_REMINDER_FR8001B', 'bills', $billId, null, [
-            'letter_no' => $letterNo, 
-            'email_sent' => $emailSent,
+            'letter_no'   => $letterNo,
+            'email_sent'  => $emailSent,
             'email_error' => $emailError
         ]);
 
-        if ($emailSent) {
-            $this->setFlash('success', "Surat reminder FR 8001B berhasil diterbitkan ({$letterNo}) dan email beserta lampiran PDF berhasil dikirim ke orang tua ({$parentEmail}).");
-        } elseif (empty($parentEmail)) {
+        return [
+            'found'        => true,
+            'email_sent'   => $emailSent,
+            'reason'       => $emailSent ? 'sent' : 'smtp_error',
+            'error'        => $emailError,
+            'letter_no'    => $letterNo,
+            'parent_email' => $parentEmail
+        ];
+    }
+
+    public function kirimSuratFR8001B(): void {
+        $this->requireRole('tata_usaha');
+        $billId = (int)($_POST['bill_id'] ?? 0);
+        $unitId = Auth::unitId();
+
+        $res = $this->sendSingleFR8001B($billId, $unitId);
+        if (!$res['found']) {
+            $this->setFlash('danger', 'Data tagihan tidak ditemukan.');
+            $this->redirect(Auth::baseUrl() . '/tagihan/manage');
+            return;
+        }
+
+        $letterNo = $res['letter_no'];
+        if ($res['email_sent']) {
+            $this->setFlash('success', "Surat reminder FR 8001B berhasil diterbitkan ({$letterNo}) dan email beserta lampiran PDF berhasil dikirim ke orang tua ({$res['parent_email']}).");
+        } elseif ($res['reason'] === 'no_email') {
             $this->setFlash('warning', "Surat reminder FR 8001B berhasil diterbitkan ({$letterNo}), namun email TIDAK dikirim karena alamat email orang tua pada siswa ini belum terdaftar di data siswa.");
-        } elseif (empty($smtp)) {
+        } elseif ($res['reason'] === 'no_smtp') {
             $this->setFlash('warning', "Surat reminder FR 8001B berhasil diterbitkan ({$letterNo}), namun pengiriman email dilewati karena pengaturan SMTP unit belum dikonfigurasi.");
         } else {
-            $this->setFlash('warning', "Surat reminder FR 8001B berhasil diterbitkan ({$letterNo}), namun EMAIL GAGAL DIKIRIM ke {$parentEmail}. Kendala: " . htmlspecialchars($emailError ?? 'Koneksi gagal'));
+            $this->setFlash('warning', "Surat reminder FR 8001B berhasil diterbitkan ({$letterNo}), namun EMAIL GAGAL DIKIRIM ke {$res['parent_email']}. Kendala: " . htmlspecialchars($res['error'] ?? 'Koneksi gagal'));
         }
+        $this->redirect(Auth::baseUrl() . '/tagihan/manage');
+    }
+
+    public function bulkKirimSuratFR8001B(): void {
+        $this->requireRole('tata_usaha');
+        $unitId = Auth::unitId();
+        $billIds = $_POST['bill_ids'] ?? [];
+
+        if (empty($billIds) || !is_array($billIds)) {
+            $this->setFlash('warning', 'Pilih minimal satu santri dengan mencentang kotak di tabel untuk kirim massal FR 8001B.');
+            $this->redirect(Auth::baseUrl() . '/tagihan/manage');
+            return;
+        }
+
+        $smtp = $this->getSmtpConfig($unitId);
+        $sentCount = 0;
+        $noEmailCount = 0;
+        $failedCount = 0;
+        $processed = 0;
+
+        foreach ($billIds as $bId) {
+            $id = (int)$bId;
+            if ($id <= 0) continue;
+            $res = $this->sendSingleFR8001B($id, $unitId, $smtp);
+            if (!$res['found']) continue;
+            $processed++;
+            if ($res['email_sent']) {
+                $sentCount++;
+            } elseif ($res['reason'] === 'no_email') {
+                $noEmailCount++;
+            } else {
+                $failedCount++;
+            }
+        }
+
+        if ($processed === 0) {
+            $this->setFlash('warning', 'Tidak ada data tagihan valid yang diproses.');
+        } elseif (empty($smtp)) {
+            $this->setFlash('warning', "{$processed} surat FR 8001B diterbitkan, namun email tidak terkirim karena SMTP unit belum dikonfigurasi.");
+        } else {
+            $type = ($sentCount > 0 && $failedCount === 0) ? 'success' : 'warning';
+            $this->setFlash($type, "Kirim Massal FR 8001B selesai ({$processed} tagihan): {$sentCount} email+PDF terkirim, {$noEmailCount} dilewati (email ortu kosong), {$failedCount} gagal.");
+        }
+
         $this->redirect(Auth::baseUrl() . '/tagihan/manage');
     }
 
@@ -689,7 +1193,7 @@ class TagihanController extends Controller {
             Database::execute(
                 "UPDATE bills 
                  SET status = 'Lunas', 
-                     paid_date = NOW(), 
+                     paid_date = CURDATE(), 
                      paid_amount = amount, 
                      pipeline_stage = 'selesai_tu', 
                      pipeline_resolved_at = NOW(), 
@@ -832,25 +1336,81 @@ class TagihanController extends Controller {
         return $paths;
     }
 
+    /**
+     * Unggah opsional dokumen FR 8001C & FR 8001D bertanda tangan orang tua oleh TU, Kepala Sekolah, atau Deputi.
+     */
+    public function uploadSignedDoc(): void {
+        $this->requireRole(['tata_usaha', 'kepala_sekolah', 'deputi_pendidikan']);
+        self::ensureSignedColumns();
+
+        $billId = (int)($_POST['bill_id'] ?? 0);
+        $role = Auth::activeRoleName();
+        $unitId = Auth::unitId();
+
+        $bill = ($role === 'deputi_pendidikan')
+            ? Database::fetch("SELECT id, unit_id FROM bills WHERE id = ?", [$billId])
+            : Database::fetch("SELECT id, unit_id FROM bills WHERE id = ? AND unit_id = ?", [$billId, $unitId]);
+
+        if (!$bill) {
+            $this->setFlash('danger', 'Data tagihan tidak ditemukan atau bukan milik unit Anda.');
+            $this->redirect($_SERVER['HTTP_REFERER'] ?? (Auth::baseUrl() . '/tagihan/manage'));
+            return;
+        }
+
+        $signedFiles = $this->handleSignedUploads($billId, $role);
+        if (empty($signedFiles)) {
+            $this->setFlash('warning', 'Harap pilih file PDF/JPG/PNG untuk FR 8001C atau FR 8001D sebelum menyimpan.');
+            $this->redirect($_SERVER['HTTP_REFERER'] ?? (Auth::baseUrl() . '/tagihan/manage'));
+            return;
+        }
+
+        $setParts = [];
+        $params = [];
+        foreach ($signedFiles as $col => $val) {
+            $setParts[] = "{$col} = ?";
+            $params[] = $val;
+        }
+        $setParts[] = "signed_uploaded_at = NOW()";
+        $setParts[] = "signed_uploaded_by_level = ?";
+        $params[] = $role;
+        $params[] = $billId;
+
+        Database::execute("UPDATE bills SET " . implode(', ', $setParts) . " WHERE id = ?", $params);
+
+        AuditLog::log('UPLOAD_SIGNED_AGREEMENT_DOCS', 'bills', $billId, null, [
+            'role'  => $role,
+            'files' => array_keys($signedFiles)
+        ]);
+
+        $this->setFlash('success', 'Dokumen perjanjian/pemanggilan bertanda tangan orang tua berhasil diunggah & tersimpan.');
+        $this->redirect($_SERVER['HTTP_REFERER'] ?? (Auth::baseUrl() . '/tagihan/manage'));
+    }
+
     public function approvalList(): void {
         $this->requireRole(['kepala_sekolah', 'deputi_pendidikan']);
         self::ensureSignedColumns();
         $unitId = Auth::unitId();
+        $kepsekInfo = $this->resolveUnitSigner($unitId, 'kepala_sekolah');
 
         $bills = Database::fetchAll(
             "SELECT b.*, s.nama as student_name, s.nis, COALESCE(NULLIF(s.father_name, ''), NULLIF(s.mother_name, ''), 'Wali Santri') as parent_name, s.parent_phone, s.parent_email, 
-                    s.address as alamat, s.nik, c.name as class_name, u.name as unit_name, u.phone as unit_phone,
-                    u.bank_name, u.bank_account, u.bank_holder, ks.nama as kepsek_name, ks.contact_phone as kepsek_phone
+                    s.address as alamat, s.nik,
+                    (SELECT c2.name FROM class_students cs2 JOIN classes c2 ON cs2.class_id = c2.id 
+                     WHERE cs2.student_id = s.id AND cs2.status = 'Aktif' AND c2.unit_id = b.unit_id 
+                     ORDER BY cs2.academic_year_id DESC, cs2.id DESC LIMIT 1) as class_name,
+                    u.name as unit_name, u.phone as unit_phone, u.bank_name, u.bank_account, u.bank_holder
              FROM bills b 
              JOIN students s ON b.student_id = s.id 
              JOIN units u ON b.unit_id = u.id 
-             LEFT JOIN class_students cs ON s.id = cs.student_id AND cs.status = 'Aktif' 
-             LEFT JOIN classes c ON cs.class_id = c.id 
-             LEFT JOIN employees ks ON u.id = ks.unit_id AND (ks.position LIKE '%Kepala Sekolah%' OR ks.level_posisi LIKE '%Kepala Sekolah%' OR ks.level_posisi LIKE '%Kepsek%' OR ks.level_posisi LIKE '%Kanit%')
              WHERE b.unit_id = ? AND (b.pipeline_stage IN ('escalated_kepsek', 'kepsek_summon_sent', 'selesai_kepsek') OR b.status = 'Tertunggak')
-             ORDER BY FIELD(b.pipeline_stage, 'escalated_kepsek', 'kepsek_summon_sent', 'selesai_kepsek') ASC, b.due_date ASC",
+             ORDER BY FIELD(b.pipeline_stage, 'escalated_kepsek', 'kepsek_summon_sent', 'selesai_kepsek') ASC, class_name ASC, s.nama ASC",
             [$unitId]
         );
+        foreach ($bills as &$bRow) {
+            $bRow['kepsek_name'] = $kepsekInfo['nama'];
+            $bRow['kepsek_phone'] = $kepsekInfo['phone'];
+        }
+        unset($bRow);
 
         $pendingCount = 0;
         $totalNominalPending = 0;
@@ -861,11 +1421,7 @@ class TagihanController extends Controller {
             }
         }
 
-        // Ambil info Kepala Sekolah untuk default no HP
-        $kepsekEmp = Database::fetch(
-            "SELECT e.nama, e.contact_phone as phone FROM employees e WHERE e.unit_id = ? AND (e.position LIKE '%Kepala Sekolah%' OR e.level_posisi LIKE '%Kepala Sekolah%' OR e.level_posisi LIKE '%Kepsek%' OR e.level_posisi LIKE '%Kanit%') LIMIT 1",
-            [$unitId]
-        );
+        $kepsekEmp = ['nama' => $kepsekInfo['nama'], 'phone' => $kepsekInfo['phone']];
 
         $this->view('tagihan/approval', [
             'pageTitle'           => 'Penagihan Kepala Sekolah & Pemanggilan Orang Tua (FR 8001C/D)',
@@ -921,15 +1477,16 @@ class TagihanController extends Controller {
 
         $bill = Database::fetch(
             "SELECT b.*, s.nama as student_name, s.nis, COALESCE(NULLIF(s.father_name, ''), NULLIF(s.mother_name, ''), 'Wali Santri') as parent_name, s.parent_phone, s.parent_email, 
-                    c.name as class_name, u.name as unit_name, u.phone as unit_phone, u.bank_name, 
+                    s.address as alamat, s.nik,
+                    (SELECT c2.name FROM class_students cs2 JOIN classes c2 ON cs2.class_id = c2.id 
+                     WHERE cs2.student_id = s.id AND cs2.status = 'Aktif' AND c2.unit_id = b.unit_id 
+                     ORDER BY cs2.academic_year_id DESC, cs2.id DESC LIMIT 1) as class_name,
+                    u.name as unit_name, u.phone as unit_phone, u.bank_name, 
                     u.bank_account, u.bank_holder, u.kop_title, u.kop_subtitle, u.address, u.email as unit_email,
-                    ks.nama as kepsek_name, ks.contact_phone as kepsek_phone 
+                    u.code, u.level, u.npsn, u.akreditasi, u.nomor_akreditasi, u.nomor_izin_operasional, u.logo_path
              FROM bills b 
              JOIN students s ON b.student_id = s.id 
              JOIN units u ON b.unit_id = u.id 
-             LEFT JOIN class_students cs ON s.id = cs.student_id AND cs.status = 'Aktif' 
-             LEFT JOIN classes c ON cs.class_id = c.id 
-             LEFT JOIN employees ks ON u.id = ks.unit_id AND (ks.position LIKE '%Kepala Sekolah%' OR ks.level_posisi LIKE '%Kepala Sekolah%' OR ks.level_posisi LIKE '%Kepsek%' OR ks.level_posisi LIKE '%Kanit%')
              WHERE b.id = ?",
             [$billId]
         );
@@ -939,49 +1496,170 @@ class TagihanController extends Controller {
         }
         $this->assertUnitOwnership('bills', $billId, 'unit_id');
 
-        $kop = ExportHelper::renderKop($bill);
-        $letterNo = $bill['kepsek_letter_no'] ?: ('PANG/KS/' . date('Ym') . '/' . sprintf('%04d', $billId));
-        $bsiAcc = $bill['bank_account'] ?: '1033667414';
-        $bsiHolder = $bill['bank_holder'] ?: $bill['unit_name'];
-        $kepsekPhone = $bill['kepsek_phone'] ?: ($bill['unit_phone'] ?: '0812-XXXX-XXXX');
-        $kepsekName = $bill['kepsek_name'] ?: 'Kepala Sekolah';
+        $html = $this->generateFR8001CHtml($bill, false);
+        ExportHelper::pdf($html, 'Surat_Panggilan_FR8001C_' . $bill['nis'], 'A4', 'portrait', true);
+    }
+
+    public function printSuratFR8001D(string $id): void {
+        $this->requireRole(['tata_usaha', 'kepala_sekolah', 'deputi_pendidikan']);
+        $billId = (int)$id;
+
+        $bill = Database::fetch(
+            "SELECT b.*, s.nama as student_name, s.nis, COALESCE(NULLIF(s.father_name, ''), NULLIF(s.mother_name, ''), 'Wali Santri') as parent_name, s.parent_phone, s.parent_email, 
+                    s.address as alamat, s.nik,
+                    (SELECT c2.name FROM class_students cs2 JOIN classes c2 ON cs2.class_id = c2.id 
+                     WHERE cs2.student_id = s.id AND cs2.status = 'Aktif' AND c2.unit_id = b.unit_id 
+                     ORDER BY cs2.academic_year_id DESC, cs2.id DESC LIMIT 1) as class_name,
+                    u.name as unit_name, u.kop_title, u.kop_subtitle, 
+                    u.address, u.phone, u.email, u.code, u.level, u.npsn, u.akreditasi, u.nomor_akreditasi, u.nomor_izin_operasional, u.logo_path
+             FROM bills b 
+             JOIN students s ON b.student_id = s.id 
+             JOIN units u ON b.unit_id = u.id 
+             WHERE b.id = ?",
+            [$billId]
+        );
+
+        if (!$bill) {
+            die('Data tagihan tidak ditemukan.');
+        }
+        $this->assertUnitOwnership('bills', $billId, 'unit_id');
+
+        $html = $this->generateFR8001DHtml($bill, false);
+        ExportHelper::pdf($html, 'Berita_Acara_dan_Pernyataan_FR8001D_' . $bill['nis'], 'A4', 'portrait', true);
+    }
+
+    private function renderKopAisEducation(): string {
+        $logoPath = dirname(__DIR__, 2) . '/public/images/logo_alkahfi.png';
+        if (!file_exists($logoPath)) {
+            $logoPath = dirname(__DIR__, 2) . '/public/uploads/logos/app_logo_1790375160.png';
+        }
+        $logoHtml = '';
+        if (file_exists($logoPath)) {
+            $base64 = base64_encode(file_get_contents($logoPath));
+            $logoHtml = "<img src='data:image/png;base64,{$base64}' style='max-height: 75px; max-width: 82px; object-fit: contain; margin: 0 auto; display: block;'>";
+        } else {
+            $logoHtml = "<div style='width: 66px; height: 66px; border-radius: 50%; background: #0f766e; color: #fff; font-weight: bold; line-height: 66px; font-size: 18px; text-align: center; margin: 0 auto;'>AIS</div>";
+        }
+
+        return "
+        <div style='padding-bottom: 6px; margin-bottom: 14px; font-family: \"Times New Roman\", Times, serif;'>
+            <table style='width: 100%; border-collapse: collapse;'>
+                <tr>
+                    <td style='width: 88px; text-align: center; vertical-align: middle;'>
+                        {$logoHtml}
+                    </td>
+                    <td style='text-align: center; vertical-align: middle; padding: 0 8px;'>
+                        <div style='font-size: 15pt; font-weight: bold; text-transform: uppercase; color: #111; letter-spacing: 0.4px;'>EDUCATION DEPARTMENT</div>
+                        <div style='font-size: 14.5pt; font-weight: bold; text-transform: uppercase; color: #111; margin-top: 1px;'>AL-KAHFI ISLAMIC SCHOOL (AIS)</div>
+                        <div style='font-size: 9.5pt; color: #222; margin-top: 3px; line-height: 1.35;'>
+                            Address : The Capitol Imperium Blok A No.40-47, Superblok Imperium<br>
+                            Jl. Jend.Soedirman &ndash; Batam, Indonesia, Call Centre : +628-2392-6020-11,<br>
+                            Email : <span style='color: #1d4ed8; text-decoration: underline;'>edu@aisbatam.sch.id</span>, web : <span style='color: #1d4ed8; text-decoration: underline;'>www.aisbatam.sch.id</span>
+                        </div>
+                    </td>
+                </tr>
+            </table>
+            <div style='border-top: 2.5px solid #000; border-bottom: 1px solid #000; height: 2px; margin-top: 6px;'></div>
+        </div>";
+    }
+
+    private function generateFR8001CHtml(array $bill, bool $isYayasan): string {
+        $unitId = (int)$bill['unit_id'];
+        $kepsekInfo = $this->resolveUnitSigner($unitId, 'kepala_sekolah');
+        $deputiInfo = $this->resolveUnitSigner($unitId, 'deputi_pendidikan');
+
+        $kop = $isYayasan ? ExportHelper::renderKopYayasan() : ExportHelper::renderKop($bill);
+        $billId = (int)$bill['id'];
+        $letterNo = $isYayasan
+            ? ($bill['deputi_letter_no'] ?: ('PANG/YAYASAN/' . date('Ym') . '/' . sprintf('%04d', $billId)))
+            : ($bill['kepsek_letter_no'] ?: ('PANG/KS/' . date('Ym') . '/' . sprintf('%04d', $billId)));
+
+        $bsiAcc = SecurityHelper::escape($bill['bank_account'] ?: '1033667414');
+        $bsiHolder = SecurityHelper::escape($bill['bank_holder'] ?: $bill['unit_name']);
+        $kepsekPhone = SecurityHelper::escape($kepsekInfo['phone'] ?: ($bill['unit_phone'] ?: '-'));
+        $kepsekName = SecurityHelper::escape($kepsekInfo['nama']);
+        $deputiName = SecurityHelper::escape($deputiInfo['nama']);
+        $unitName = SecurityHelper::escape($bill['unit_name']);
 
         $sppFmt = number_format((float)$bill['amount_spp'], 0, ',', '.');
         $nonSppFmt = number_format((float)$bill['amount_non_spp'], 0, ',', '.');
         $totalFmt = number_format((float)$bill['amount'], 0, ',', '.');
 
         $schedText = '';
-        if (!empty($bill['kepsek_schedule_date'])) {
+        if ($isYayasan && !empty($bill['deputi_schedule_date'])) {
+            $ts = strtotime($bill['deputi_schedule_date']);
+            $schedText = "
+            <div style='margin: 14px 0; padding: 10px 14px; background: #ecfdf5; border-left: 4px solid #059669;'>
+                <strong>Jadwal Pertemuan Orang Tua di Kantor Yayasan:</strong><br>
+                Hari / Tanggal : <strong>" . SecurityHelper::formatTanggalIndo(date('Y-m-d', $ts)) . "</strong><br>
+                Pukul / Waktu &nbsp;: <strong>" . date('H:i', $ts) . " WIB</strong><br>
+                Tempat &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;: <strong>" . SecurityHelper::escape($bill['deputi_schedule_place'] ?: 'Ruang Rapat Direktorat Pendidikan Yayasan') . "</strong>
+            </div>";
+        } elseif (!$isYayasan && !empty($bill['kepsek_schedule_date'])) {
             $ts = strtotime($bill['kepsek_schedule_date']);
             $schedText = "
-            <div style='margin: 15px 0; padding: 10px 14px; background: #f8fafc; border-left: 4px solid #0f766e;'>
-                <strong>Jadwal Pertemuan / Pertemuan Langsung:</strong><br>
+            <div style='margin: 14px 0; padding: 10px 14px; background: #f8fafc; border-left: 4px solid #0f766e;'>
+                <strong>Jadwal Pertemuan / Silaturahmi Orang Tua:</strong><br>
                 Hari / Tanggal : <strong>" . SecurityHelper::formatTanggalIndo(date('Y-m-d', $ts)) . "</strong><br>
                 Pukul / Waktu &nbsp;: <strong>" . date('H:i', $ts) . " WIB</strong><br>
                 Tempat &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;: <strong>" . SecurityHelper::escape($bill['kepsek_schedule_place'] ?: 'Ruang Kepala Sekolah') . "</strong>
             </div>";
         }
 
-        $html = "
+        $docCode = $isYayasan ? 'FR 8001C (Tingkat Yayasan)' : 'FR 8001C (Tingkat Sekolah)';
+        $perihal = $isYayasan ? 'Pemanggilan Orang Tua / Wali &ndash; Penyelesaian Tunggakan Biaya Sekolah' : 'Informasi Nominal Tunggakan dan Undangan Silaturahmi';
+        $introParagraph = $isYayasan
+            ? "Melalui surat ini, Direktorat Pendidikan Yayasan memberitahukan kepada Bapak/Ibu orang tua/wali murid terkait kewajiban pembiayaan pendidikan ananda di {$unitName} yang belum diselesaikan. Pembayaran dapat ditransfer ke rekening resmi <strong>Bank Syariah Indonesia (BSI), No. Rekening {$bsiAcc} a.n. {$bsiHolder}</strong>, dengan rincian sebagai berikut:"
+            : "Melalui surat ini kami sampaikan kepada Bapak/Ibu orang tua/wali murid bahwa demi kelancaran Kegiatan Belajar Mengajar (KBM) di {$unitName}, kami memohon kesediaan Bapak/Ibu untuk menyelesaikan kewajiban pembiayaan pendidikan yang masih tertunggak. Pembayaran dapat ditransfer melalui rekening resmi sekolah: <strong>Bank Syariah Indonesia (BSI), No. Rekening {$bsiAcc} a.n. {$bsiHolder}</strong>, dengan rincian sebagai berikut:";
+
+        $closingCall = $isYayasan
+            ? "Mengingat pentingnya penyelesaian administrasi pendidikan ananda, kami mengharapkan kehadiran Bapak/Ibu sesuai jadwal tersebut di atas."
+            : "<strong>Kami menunggu konfirmasi Bapak/Ibu terkait rencana penyelesaian pembayaran tunggakan tersebut atau menghubungi Kepala Sekolah di nomor HP {$kepsekPhone}.</strong>";
+
+        $sigBlock = $isYayasan
+            ? "<tr>
+                    <td class='sig-box'>
+                        Mengetahui,<br>
+                        <strong>Kepala Satuan Pendidikan</strong><br>
+                        {$unitName}<br><br><br><br>
+                        <strong><u>{$kepsekName}</u></strong>
+                    </td>
+                    <td class='sig-box'>
+                        Batam, " . SecurityHelper::formatTanggalIndo(date('Y-m-d')) . "<br>
+                        <strong>Deputi Direktur Pendidikan Yayasan</strong><br>
+                        Al-Kahfi Islamic School Batam<br><br><br><br>
+                        <strong><u>{$deputiName}</u></strong>
+                    </td>
+               </tr>"
+            : "<tr>
+                    <td class='sig-box'>&nbsp;</td>
+                    <td class='sig-box'>
+                        Kepala Satuan Pendidikan,<br>
+                        <strong>{$unitName}</strong><br><br><br><br>
+                        <strong><u>{$kepsekName}</u></strong>
+                    </td>
+               </tr>";
+
+        return "
         <html>
         <head>
             <meta charset='UTF-8'>
-            <title>Format Surat Pemanggilan Orangtua - FR 8001C</title>
+            <title>Surat Pemanggilan Orangtua - {$docCode}</title>
             <style>
                 @page { margin: 15mm 20mm 20mm 20mm; }
                 body { font-family: 'Times New Roman', Times, serif; font-size: 11.5pt; line-height: 1.45; color: #111; }
-                .doc-code { font-size: 10pt; font-weight: normal; margin-bottom: 8px; color: #444; }
-                .meta-table { width: 100%; margin-top: 10px; margin-bottom: 12px; }
+                .doc-code { font-size: 9.5pt; margin-bottom: 6px; color: #475569; }
+                .meta-table { width: 100%; margin-top: 8px; margin-bottom: 12px; }
                 .meta-table td { padding: 2px; vertical-align: top; }
                 .data-table { width: 100%; border-collapse: collapse; margin: 12px 0; }
                 .data-table th, .data-table td { border: 1px solid #222; padding: 6px 8px; font-size: 11pt; }
                 .data-table th { background: #f1f5f9; text-align: center; font-weight: bold; }
-                .signatures { width: 100%; margin-top: 25px; border-collapse: collapse; page-break-inside: avoid; }
-                .sig-box { width: 50%; text-align: center; vertical-align: top; font-size: 11.5pt; }
+                .signatures { width: 100%; margin-top: 24px; border-collapse: collapse; page-break-inside: avoid; }
+                .sig-box { width: 50%; text-align: center; vertical-align: top; font-size: 11pt; }
             </style>
         </head>
         <body>
-            <div class='doc-code'>7.3 Format Surat Pemanggilan Orangtua - <strong>FR 8001C</strong></div>
+            <div class='doc-code'>Formulir Penagihan Resmi &ndash; <strong>{$docCode}</strong></div>
             {$kop}
 
             <table class='meta-table'>
@@ -989,41 +1667,32 @@ class TagihanController extends Controller {
                     <td width='12%'>No.</td><td width='2%'>:</td><td width='46%'>{$letterNo}</td>
                     <td width='40%' style='text-align: right;'>Batam, " . SecurityHelper::formatTanggalIndo(date('Y-m-d')) . "</td>
                 </tr>
-                <tr>
-                    <td>Lamp.</td><td>:</td><td>-</td>
-                    <td></td>
-                </tr>
-                <tr>
-                    <td>Perihal</td><td>:</td><td><strong>Informasi Nominal Tunggakan dan Tagihan</strong></td>
-                    <td></td>
-                </tr>
+                <tr><td>Lamp.</td><td>:</td><td>-</td><td></td></tr>
+                <tr><td>Perihal</td><td>:</td><td colspan='2'><strong>{$perihal}</strong></td></tr>
             </table>
 
-            <div style='margin-top: 10px; margin-bottom: 12px;'>
-                Kepada Ykh. :<br>
-                <strong>Orang Tua Dari " . SecurityHelper::escape($bill['student_name']) . "</strong><br>
-                Kelas " . SecurityHelper::escape($bill['class_name'] ?? 'Aktif') . "<br>
+            <div style='margin-top: 8px; margin-bottom: 12px;'>
+                Kepada Yth. :<br>
+                <strong>Bapak/Ibu Orang Tua / Wali dari " . SecurityHelper::escape($bill['student_name']) . "</strong><br>
+                NIS: " . SecurityHelper::escape($bill['nis']) . " &bull; Unit {$unitName} &ndash; Kelas " . SecurityHelper::escape($bill['class_name'] ?? 'Aktif') . "<br>
                 Di &ndash; Tempat
             </div>
 
-            <div style='font-style: italic; margin-bottom: 8px;'>Assalamu'alaikum warahmatullahi wabarakaatuh,</div>
+            <div style='font-style: italic; margin-bottom: 8px;'>Assalamu'alaikum warahmatullahi wabarakatuh,</div>
 
             <div style='text-align: justify; margin-bottom: 8px;'>
-                Segala puji hanyalah milik Allah, kita memujinya dengan nama-nama dan sifat-sifat Nya yang baik, Shalawat dan salam senantiasa tercurah atas junjungan dan panutan hidup kita, Nabi Muhammad Shallallahu'alaihi wa sallam.
+                Segala puji hanyalah milik Allah Subhaanahu wa Ta'ala. Shalawat dan salam senantiasa tercurah kepada junjungan kita Nabi Muhammad Shallallahu 'alaihi wa sallam beserta keluarga dan sahabatnya.
             </div>
 
-            <div style='text-align: justify; margin-bottom: 10px;'>
-                Melalui surat ini kami beritahukan kepada Bapak/Ibu wali murid, bahwa berkaitan dengan Kelangsungan Belajar Mengajar (KBM), maka sudi kiranya Bapak/Ibu berkenan menjadi pembuka jalan kebaikan. Berdasarkan data yang ada pada kami, ada beberapa pembiayaan Bapak/Ibu tertunggak, untuk itu kami bahagia jika tunggakan tersebut bisa segera di penuhi. Pembayaran bisa ditransfer ke <strong>Bank BSI, No Rekening {$bsiAcc}, AN: {$bsiHolder} ({$bill['unit_name']})</strong>. Adapun rinciannya yaitu:
-            </div>
+            <div style='text-align: justify; margin-bottom: 10px;'>{$introParagraph}</div>
 
-            <!-- Tabel 2 Kolom Tunggakan SPP & Non SPP (FR 8001C) -->
             <table class='data-table'>
                 <thead>
                     <tr>
                         <th width='8%'>No</th>
-                        <th width='32%'>Tunggakan SPP (Rp.)</th>
-                        <th width='35%'>Tunggakan Non SPP (Rp)</th>
-                        <th width='25%'>JUMLAH</th>
+                        <th width='32%'>Tunggakan SPP (Rp)</th>
+                        <th width='35%'>Tunggakan Non-SPP (Rp)</th>
+                        <th width='25%'>JUMLAH TOTAL</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -1036,154 +1705,214 @@ class TagihanController extends Controller {
                 </tbody>
             </table>
             <div style='font-size: 9.5pt; font-style: italic; color: #555; margin-bottom: 10px;'>
-                *Data di ambil per tanggal " . SecurityHelper::formatTanggalIndo(date('Y-m-d')) . " / Abaikan surat ini jika sudah dibayar
+                *Data diambil per tanggal " . SecurityHelper::formatTanggalIndo(date('Y-m-d')) . ". Abaikan surat ini apabila pembayaran telah diselesaikan.
             </div>
 
             {$schedText}
 
-            <div style='text-align: justify; margin-bottom: 10px;'>
-                <strong>Kami menunggu respon Bapak/Ibu langkah penyelesaian pembayaran tunggakan diatas dengan menghubungi kami selaku kepala sekolah, di no Hp. {$kepsekPhone}</strong>
-            </div>
+            <div style='text-align: justify; margin-bottom: 10px;'>{$closingCall}</div>
 
-            <div style='text-align: justify; margin-bottom: 15px;'>
-                Demikian yang dapat kami sampaikan, semoga Allah mudahkan kita dalam meraih kebaikan. Atas perhatiannya kami ucapkan Jazaakumullaahu khairan (semoga Allah membalas dengan yang lebih baik).<br>
-                <em style='display: block; margin-top: 6px;'>Wassalamu'alaikum warahmatullahi wabarakaatuh</em>
+            <div style='text-align: justify; margin-bottom: 14px;'>
+                Demikian surat ini kami sampaikan. Atas perhatian dan kerja sama Bapak/Ibu kami ucapkan <em>Jazakumullahu khairan katsiran</em>.<br>
+                <em style='display: block; margin-top: 6px;'>Wassalamu'alaikum warahmatullahi wabarakatuh.</em>
             </div>
 
             <table class='signatures'>
-                <tr>
-                    <td class='sig-box'>&nbsp;</td>
-                    <td class='sig-box'>
-                        Kepala Satuan Pendidikan,<br>
-                        <strong>{$bill['unit_name']}</strong><br><br><br><br>
-                        <strong><u>{$kepsekName}</u></strong>
-                    </td>
-                </tr>
+                {$sigBlock}
             </table>
         </body>
-        </html>
-        ";
-
-        ExportHelper::pdf($html, 'Surat_Panggilan_FR8001C_' . $bill['nis'], 'A4', 'portrait', true);
+        </html>";
     }
 
-    public function printSuratFR8001D(string $id): void {
-        $this->requireRole(['tata_usaha', 'kepala_sekolah', 'deputi_pendidikan']);
-        $billId = (int)$id;
+    /**
+     * Format Baru FR 8001D (2 Dokumen Resmi dalam 1 PDF):
+     * 1. Berita Acara Kesepakatan Pembayaran Tunggakan Biaya Sekolah
+     * 2. Surat Pernyataan Komitmen Pembayaran Tunggakan Biaya Sekolah (Halaman Baru)
+     */
+    private function generateFR8001DHtml(array $bill, bool $isYayasan): string {
+        $unitId = (int)$bill['unit_id'];
+        $billId = (int)$bill['id'];
+        $kepsekInfo = $this->resolveUnitSigner($unitId, 'kepala_sekolah');
+        $deputiInfo = $this->resolveUnitSigner($unitId, 'deputi_pendidikan');
 
-        $bill = Database::fetch(
-            "SELECT b.*, s.nama as student_name, s.nis, COALESCE(NULLIF(s.father_name, ''), NULLIF(s.mother_name, ''), 'Wali Santri') as parent_name, s.parent_phone, s.parent_email, 
-                    s.address as alamat, s.nik, c.name as class_name, u.name as unit_name, u.kop_title, u.kop_subtitle, 
-                    u.address, u.phone, u.email 
-             FROM bills b 
-             JOIN students s ON b.student_id = s.id 
-             JOIN units u ON b.unit_id = u.id 
-             LEFT JOIN class_students cs ON s.id = cs.student_id AND cs.status = 'Aktif' 
-             LEFT JOIN classes c ON cs.class_id = c.id 
-             WHERE b.id = ?",
-            [$billId]
+        $kop = $isYayasan ? $this->renderKopAisEducation() : ExportHelper::renderKop($bill);
+
+        // Cek apakah sudah pernah dibuatkan kesepakatan di bill_installments
+        $inst = Database::fetch(
+            "SELECT * FROM bill_installments WHERE (bill_id = ? OR (student_id = ? AND unit_id = ? AND status = 'Aktif')) ORDER BY id DESC LIMIT 1",
+            [$billId, (int)$bill['student_id'], $unitId]
         );
 
-        if (!$bill) {
-            die('Data tagihan tidak ditemukan.');
+        $parentName    = SecurityHelper::escape(($inst['parent_name'] ?? '') ?: (($bill['parent_name'] ?? '') ?: '................................................................'));
+        $parentKtp     = SecurityHelper::escape(($inst['parent_ktp'] ?? '') ?: (($bill['nik'] ?? '') ?: '................................................................'));
+        $parentAddress = SecurityHelper::escape(($inst['parent_address'] ?? '') ?: (($bill['alamat'] ?? '') ?: '................................................................'));
+        $parentPhone   = SecurityHelper::escape(($inst['parent_phone'] ?? '') ?: (($bill['parent_phone'] ?? '') ?: '................................................................'));
+        $studentName   = SecurityHelper::escape($bill['student_name'] ?? '-');
+        $studentNis    = SecurityHelper::escape($bill['nis'] ?? '-');
+        $className     = SecurityHelper::escape(($inst['student_class'] ?? '') ?: (($bill['class_name'] ?? '') ?: '................................'));
+        $unitName      = SecurityHelper::escape($bill['unit_name'] ?? '-');
+
+        $totalNominal  = (float)($bill['amount'] ?? ($inst['total_debt'] ?? 0));
+        $totalFmt      = number_format($totalNominal, 0, ',', '.');
+        $totalTerbilang = ucfirst($this->terbilang($totalNominal));
+        $todayIndo     = SecurityHelper::formatTanggalIndo(date('Y-m-d'));
+
+        $baNumber = !empty($inst['agreement_number'])
+            ? str_replace('FR8001D', 'BA-KEU/AIS', $inst['agreement_number'])
+            : (sprintf('%03d', $billId) . '/BA-KEU/AIS/' . date('m/Y'));
+
+        $checkLunas = ($inst && $inst['scheme_type'] === 'lunas_tanggal') ? '[ v ]' : '[ &nbsp; ]';
+        $checkCicil = ($inst && $inst['scheme_type'] !== 'lunas_tanggal') ? '[ v ]' : '[ &nbsp; ]';
+        $lunasDateStr = ($inst && !empty($inst['scheme_lunas_date']))
+            ? SecurityHelper::formatTanggalIndo($inst['scheme_lunas_date'])
+            : '........................................................';
+
+        // Bangun daftar Angsuran I..IV bila kesepakatan cicilan sudah ada
+        $angsuranLines = '';
+        $numAngsuran = 4;
+        if ($inst && $inst['scheme_type'] === 'cicil_bulan' && (int)$inst['scheme_months'] > 0) {
+            $numAngsuran = min(12, max(2, (int)$inst['scheme_months']));
+            $perBulan = round($totalNominal / $numAngsuran);
+            $startTs = !empty($inst['scheme_start_date']) ? strtotime($inst['scheme_start_date']) : time();
+            $roman = ['I','II','III','IV','V','VI','VII','VIII','IX','X','XI','XII'];
+            for ($i = 0; $i < $numAngsuran; $i++) {
+                $tgl = SecurityHelper::formatTanggalIndo(date('Y-m-d', strtotime("+{$i} month", $startTs)));
+                $nom = number_format($perBulan, 0, ',', '.');
+                $rom = $roman[$i] ?? ($i + 1);
+                $angsuranLines .= "<tr><td style='width: 140px; padding: 3px 0;'>" . ($i + 1) . ". Angsuran {$rom}</td><td>: Rp <strong>{$nom}</strong> &nbsp;&nbsp; pada tanggal <strong>{$tgl}</strong></td></tr>";
+            }
+        } else {
+            $roman = ['I','II','III','IV'];
+            for ($i = 0; $i < 4; $i++) {
+                $angsuranLines .= "<tr><td style='width: 130px; padding: 4px 0;'>" . ($i + 1) . ". Angsuran {$roman[$i]}</td><td>: Rp ........................................ &nbsp;&nbsp; pada tanggal ........................................................</td></tr>";
+            }
         }
-        $this->assertUnitOwnership('bills', $billId, 'unit_id');
 
-        $kop = ExportHelper::renderKop($bill);
-        $parentName = $bill['parent_name'] ?: '..........................................';
-        $parentKtp = $bill['nik'] ?: '..........................................';
-        $parentAddress = $bill['alamat'] ?: '..........................................';
-        $parentPhone = $bill['parent_phone'] ?: '..........................................';
-        $studentName = $bill['student_name'];
-        $className = $bill['class_name'] ?: '..........................................';
+        $schoolSignerTitle = $isYayasan ? 'Deputi Pendidikan' : 'Kepala Sekolah';
+        $schoolSignerName  = $isYayasan ? SecurityHelper::escape($deputiInfo['nama']) : SecurityHelper::escape($kepsekInfo['nama']);
 
-        $html = "
+        return "
         <html>
         <head>
             <meta charset='UTF-8'>
-            <title>Format Surat Kesepakatan Pembayaran Tunggakan - FR 8001D</title>
+            <title>Berita Acara Kesepakatan &amp; Surat Pernyataan - FR 8001D</title>
             <style>
-                @page { margin: 15mm 20mm 20mm 20mm; }
-                body { font-family: 'Times New Roman', Times, serif; font-size: 12pt; line-height: 1.5; color: #111; }
-                .doc-code { font-size: 10pt; font-weight: normal; margin-bottom: 6px; color: #444; }
-                .title-box { text-align: center; font-weight: bold; font-size: 12.5pt; text-decoration: underline; margin-bottom: 18px; }
-                .form-table { width: 100%; border-collapse: collapse; margin-bottom: 14px; }
-                .form-table td { padding: 3px 2px; vertical-align: top; font-size: 11.5pt; }
-                .options-list { margin-top: 10px; margin-bottom: 20px; line-height: 1.8; }
-                .closing { margin-top: 15px; margin-bottom: 30px; text-align: justify; }
-                .signatures { width: 100%; margin-top: 10px; border-collapse: collapse; page-break-inside: avoid; }
-                .sig-box { width: 50%; text-align: center; vertical-align: top; font-size: 11.5pt; }
+                @page { margin: 14mm 20mm 16mm 20mm; }
+                body { font-family: 'Times New Roman', Times, serif; font-size: 11pt; line-height: 1.48; color: #111; }
+                .doc-title { text-align: center; font-weight: bold; font-size: 12pt; text-transform: uppercase; margin-top: 6px; margin-bottom: 4px; }
+                .doc-number { text-align: center; font-size: 11pt; margin-bottom: 16px; }
+                .section-title { font-weight: bold; margin-top: 12px; margin-bottom: 8px; }
+                .id-table { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
+                .id-table td { padding: 3px 2px; vertical-align: top; }
+                .sig-grid { width: 100%; border-collapse: collapse; margin-top: 18px; page-break-inside: avoid; }
+                .sig-grid th, .sig-grid td { border: 1px solid #94a3b8; padding: 10px 14px; width: 50%; vertical-align: top; text-align: left; }
+                .sig-grid th { background: #f8fafc; font-weight: bold; }
+                .page-break { page-break-before: always; }
             </style>
         </head>
         <body>
-            <div class='doc-code'>7.4 Format Surat Kesepakatan Pembayaran Tunggakan - <strong>FR 8001D</strong></div>
+            <!-- ==================== LEMBAR 1: BERITA ACARA KESEPAKATAN ==================== -->
             {$kop}
 
-            <div class='title-box'>SURAT PERNYATAAN PEMBAYARAN TUNGGAKAN BIAYA SEKOLAH</div>
+            <div class='doc-title'>BERITA ACARA KESEPAKATAN PEMBAYARAN TUNGGAKAN BIAYA SEKOLAH</div>
+            <div class='doc-number'>Nomor: <strong>{$baNumber}</strong></div>
 
-            <div style='margin-bottom: 10px;'>Saya yang bertanda tangan di bawah ini:</div>
+            <div style='text-align: justify; margin-bottom: 10px;'>
+                Pada hari ini, ............................. tanggal ......... bulan ..................... tahun ...................., telah dilaksanakan pertemuan antara pihak Sekolah <strong>Al-Kahfi Islamic School (AIS) &ndash; {$unitName}</strong> dengan Orang Tua / Wali Siswa:
+            </div>
 
-            <table class='form-table'>
+            <div class='section-title'>I. IDENTITAS ORANG TUA / WALI SISWA</div>
+            <table class='id-table' style='margin-left: 14px;'>
+                <tr><td width='28%'>&bull; Nama</td><td width='2%'>:</td><td><strong>{$parentName}</strong></td></tr>
+                <tr><td>&bull; Alamat / Tempat Tinggal</td><td>:</td><td>{$parentAddress}</td></tr>
+                <tr><td>&bull; No. Telepon / HP</td><td>:</td><td>{$parentPhone}</td></tr>
+                <tr><td>&bull; Orang Tua / Wali dari</td><td>:</td><td><strong>{$studentName}</strong> (NIS: {$studentNis} &bull; Kelas: {$className})</td></tr>
+            </table>
+
+            <div class='section-title'>II. POKOK BAHASAN &amp; KESEPAKATAN</div>
+            <div style='text-align: justify; margin-bottom: 10px;'>
+                Berdasarkan catatan Bagian Keuangan sekolah, terdapat total tunggakan biaya pendidikan siswa sebesar <strong>Rp {$totalFmt}</strong> (<em>{$totalTerbilang}</em>) per tanggal <strong>{$todayIndo}</strong>.<br>
+                Dari hasil pertemuan tersebut, pihak Orang Tua / Wali Siswa menyatakan <strong>bersedia dan berkomitmen</strong> untuk menyelesaikan kewajiban pembayaran tersebut dengan skema:
+            </div>
+
+            <div style='margin-left: 14px; margin-bottom: 16px; line-height: 1.8;'>
+                <div>{$checkLunas} <strong>Lunas Sekaligus</strong> pada tanggal: <strong>{$lunasDateStr}</strong></div>
+                <div>{$checkCicil} <strong>Dicicil</strong> dengan rincian skema terlampir pada Surat Pernyataan Komitmen Pembayaran.</div>
+            </div>
+
+            <div style='text-align: justify; margin-bottom: 14px;'>
+                Demikian Berita Acara ini dibuat dengan sebenarnya untuk dipergunakan sebagaimana mestinya dan ditindaklanjuti oleh Bagian Keuangan AIS serta dilaporkan kepada Yayasan Islam Al-Kahfi Batam.
+            </div>
+
+            <div style='margin-bottom: 8px;'>Batam, {$todayIndo}</div>
+
+            <table class='sig-grid'>
                 <tr>
-                    <td width='22%'>Nama</td><td width='2%'>:</td>
-                    <td><strong>{$parentName}</strong></td>
+                    <th>Pihak Orang Tua / Wali</th>
+                    <th>Perwakilan Sekolah</th>
                 </tr>
                 <tr>
-                    <td>No KTP</td><td>:</td>
-                    <td>{$parentKtp}</td>
+                    <td style='height: 75px;'></td>
+                    <td style='height: 75px;'></td>
                 </tr>
                 <tr>
-                    <td>Alamat</td><td>:</td>
-                    <td>{$parentAddress}</td>
-                </tr>
-                <tr>
-                    <td>No Tlp/ HP</td><td>:</td>
-                    <td>{$parentPhone}</td>
+                    <td>( <strong>{$parentName}</strong> )</td>
+                    <td><strong>{$schoolSignerTitle}</strong><br>{$schoolSignerName}</td>
                 </tr>
             </table>
 
-            <div style='margin-top: 10px; margin-bottom: 6px;'>Wali/Orang tua murid dari siswa</div>
-            <table class='form-table'>
-                <tr>
-                    <td width='22%'>Nama</td><td width='2%'>:</td>
-                    <td><strong>{$studentName}</strong> (NIS: {$bill['nis']})</td>
-                </tr>
-                <tr>
-                    <td>Kelas</td><td>:</td>
-                    <td>{$className}</td>
-                </tr>
+            <!-- ==================== LEMBAR 2: SURAT PERNYATAAN KOMITMEN ==================== -->
+            <div class='page-break'></div>
+            {$kop}
+
+            <div class='doc-title' style='margin-bottom: 14px;'>SURAT PERNYATAAN KOMITMEN PEMBAYARAN TUNGGAKAN BIAYA SEKOLAH</div>
+
+            <div style='margin-bottom: 8px;'>Saya yang bertanda tangan di bawah ini:</div>
+            <table class='id-table' style='margin-left: 14px;'>
+                <tr><td width='28%'>&bull; Nama Lengkap</td><td width='2%'>:</td><td><strong>{$parentName}</strong></td></tr>
+                <tr><td>&bull; No. KTP / NIK</td><td>:</td><td>{$parentKtp}</td></tr>
+                <tr><td>&bull; Alamat Domisili</td><td>:</td><td>{$parentAddress}</td></tr>
+                <tr><td>&bull; No. Telepon / HP</td><td>:</td><td>{$parentPhone}</td></tr>
             </table>
 
-            <div style='margin-top: 12px; text-align: justify;'>
-                Dengan ini Insya Alloh akan menyelesaikan tunggakan sesuai dengan surat pemberitahuan dengan cara :
-            </div>
-
-            <div class='options-list'>
-                <div><strong>A.</strong> Membayar lunas pada tanggal ..........................................</div>
-                <div><strong>B.</strong> Dicicil selama ......bulan terhitung mulai tanggal ..........................................</div>
-                <div><strong>C.</strong> Dicicil dengan minimal Rp................../bulan sampai dengan tanggal ..........................................</div>
-            </div>
-
-            <div class='closing'>
-                Demikian surat pernyataan ini diajukan. Atas bantuan dan kerjasama yang diberikan, saya ucapkan <em>jazaakumullaahu khairan</em>.
-            </div>
-
-            <table class='signatures'>
-                <tr>
-                    <td class='sig-box'>&nbsp;</td>
-                    <td class='sig-box'>
-                        Batam, ..........................................<br><br>
-                        Yang mengajukan<br>
-                        <strong>Orangtua</strong><br><br><br><br><br>
-                        ( .......................................... )
-                    </td>
-                </tr>
+            <div style='margin-top: 10px; margin-bottom: 8px;'>Merupakan Orang Tua / Wali dari siswa:</div>
+            <table class='id-table' style='margin-left: 14px;'>
+                <tr><td width='28%'>&bull; Nama Siswa</td><td width='2%'>:</td><td><strong>{$studentName}</strong> (NIS: {$studentNis})</td></tr>
+                <tr><td>&bull; Kelas / Jenjang</td><td>:</td><td>{$className} / {$unitName}</td></tr>
             </table>
+
+            <div style='text-align: justify; margin-top: 10px; margin-bottom: 12px;'>
+                Dengan ini menyatakan dengan sadar dan tanpa paksaan dari pihak manapun, bahwa saya bertekad kuat untuk menyelesaikan seluruh tunggakan biaya sekolah anak saya sebesar <strong>Rp {$totalFmt}</strong> (<em>{$totalTerbilang}</em>) dengan ketentuan/skema pembayaran sebagai berikut:
+            </div>
+
+            <div style='font-weight: bold; margin-bottom: 8px;'>Opsi Pembayaran (Pilih salah satu):</div>
+            <div style='margin-left: 14px; margin-bottom: 12px;'>
+                <div style='margin-bottom: 10px;'>
+                    <strong>{$checkLunas} A. Pembayaran Lunas</strong><br>
+                    <span style='margin-left: 26px; display: inline-block;'>Akan dilunasi seluruhnya paling lambat pada tanggal: <strong>{$lunasDateStr}</strong></span>
+                </div>
+                <div>
+                    <strong>{$checkCicil} B. Pembayaran Dicicil</strong><br>
+                    <span style='margin-left: 26px; display: inline-block; margin-bottom: 4px;'>Akan diangsur dengan skema jadwal sebagai berikut:</span>
+                    <table style='width: 100%; border-collapse: collapse; margin-left: 26px;'>
+                        {$angsuranLines}
+                    </table>
+                </div>
+            </div>
+
+            <div style='text-align: justify; margin-top: 12px; margin-bottom: 16px;'>
+                Demikian surat pernyataan komitmen ini saya buat dengan sebenarnya. Apabila saya lalai atau tidak memenuhi komitmen di atas, saya bersedia menerima ketentuan dan kebijakan administratif yang berlaku di Sekolah Al-Kahfi Islamic School.<br>
+                Atas bantuan, perhatian, dan kerja sama yang diberikan, saya ucapkan <em>Jazakumullahu Khayran</em>.
+            </div>
+
+            <div style='margin-top: 8px;'>
+                Batam, {$todayIndo}<br>
+                Yang Membuat Pernyataan,<br>
+                <em>Orang Tua / Wali Siswa</em><br><br><br><br>
+                ( <strong>{$parentName}</strong> )
+            </div>
         </body>
-        </html>
-        ";
-
-        ExportHelper::pdf($html, 'Form_Kesepakatan_FR8001D_' . $bill['nis'], 'A4', 'portrait', true);
+        </html>";
     }
 
     public function approveKesepakatanFR8001D(): void {
@@ -1447,14 +2176,15 @@ class TagihanController extends Controller {
 
         $bill = Database::fetch(
             "SELECT b.*, s.nama as student_name, s.nis, COALESCE(NULLIF(s.father_name, ''), NULLIF(s.mother_name, ''), 'Wali Santri') as parent_name, s.parent_phone, s.parent_email, 
-                    c.name as class_name, u.name as unit_name, u.phone as unit_phone, u.bank_name, 
-                    u.bank_account, u.bank_holder, ks.nama as kepsek_name 
+                    s.address as alamat, s.nik,
+                    (SELECT c2.name FROM class_students cs2 JOIN classes c2 ON cs2.class_id = c2.id 
+                     WHERE cs2.student_id = s.id AND cs2.status = 'Aktif' AND c2.unit_id = b.unit_id 
+                     ORDER BY cs2.academic_year_id DESC, cs2.id DESC LIMIT 1) as class_name,
+                    u.name as unit_name, u.phone as unit_phone, u.bank_name, 
+                    u.bank_account, u.bank_holder
              FROM bills b 
              JOIN students s ON b.student_id = s.id 
              JOIN units u ON b.unit_id = u.id 
-             LEFT JOIN class_students cs ON s.id = cs.student_id AND cs.status = 'Aktif' 
-             LEFT JOIN classes c ON cs.class_id = c.id 
-             LEFT JOIN employees ks ON u.id = ks.unit_id AND (ks.position LIKE '%Kepala Sekolah%' OR ks.level_posisi LIKE '%Kepala Sekolah%' OR ks.level_posisi LIKE '%Kepsek%' OR ks.level_posisi LIKE '%Kanit%')
              WHERE b.id = ?",
             [$billId]
         );
@@ -1464,136 +2194,7 @@ class TagihanController extends Controller {
         }
         $this->assertUnitOwnership('bills', $billId, 'unit_id');
 
-        // KOP YAYASAN
-        $kop = ExportHelper::renderKopYayasan();
-        $letterNo = $bill['deputi_letter_no'] ?: ('PANG/YAYASAN/' . date('Ym') . '/' . sprintf('%04d', $billId));
-        $bsiAcc = $bill['bank_account'] ?: '1033667414';
-        $bsiHolder = $bill['bank_holder'] ?: $bill['unit_name'];
-        $kepsekName = $bill['kepsek_name'] ?: 'Kepala Sekolah';
-
-        $sppFmt = number_format((float)$bill['amount_spp'], 0, ',', '.');
-        $nonSppFmt = number_format((float)$bill['amount_non_spp'], 0, ',', '.');
-        $totalFmt = number_format((float)$bill['amount'], 0, ',', '.');
-
-        $schedText = '';
-        if (!empty($bill['deputi_schedule_date'])) {
-            $ts = strtotime($bill['deputi_schedule_date']);
-            $schedText = "
-            <div style='margin: 15px 0; padding: 10px 14px; background: #ecfdf5; border-left: 4px solid #059669;'>
-                <strong>Jadwal Pemanggilan Orang Tua di Kantor Yayasan:</strong><br>
-                Hari / Tanggal : <strong>" . SecurityHelper::formatTanggalIndo(date('Y-m-d', $ts)) . "</strong><br>
-                Pukul / Waktu &nbsp;: <strong>" . date('H:i', $ts) . " WIB</strong><br>
-                Tempat &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;: <strong>" . SecurityHelper::escape($bill['deputi_schedule_place'] ?: 'Ruang Rapat Direktorat Pendidikan Yayasan') . "</strong>
-            </div>";
-        }
-
-        $html = "
-        <html>
-        <head>
-            <meta charset='UTF-8'>
-            <title>Format Surat Pemanggilan Orangtua Yayasan - FR 8001C</title>
-            <style>
-                @page { margin: 15mm 20mm 20mm 20mm; }
-                body { font-family: 'Times New Roman', Times, serif; font-size: 11.5pt; line-height: 1.45; color: #111; }
-                .doc-code { font-size: 10pt; font-weight: normal; margin-bottom: 8px; color: #444; }
-                .meta-table { width: 100%; margin-top: 10px; margin-bottom: 12px; }
-                .meta-table td { padding: 2px; vertical-align: top; }
-                .data-table { width: 100%; border-collapse: collapse; margin: 12px 0; }
-                .data-table th, .data-table td { border: 1px solid #222; padding: 6px 8px; font-size: 11pt; }
-                .data-table th { background: #f1f5f9; text-align: center; font-weight: bold; }
-                .signatures { width: 100%; margin-top: 25px; border-collapse: collapse; page-break-inside: avoid; }
-                .sig-box { width: 50%; text-align: center; vertical-align: top; font-size: 11pt; }
-            </style>
-        </head>
-        <body>
-            <div class='doc-code'>7.3 Format Surat Pemanggilan Orangtua - <strong>FR 8001C (Kop Yayasan)</strong></div>
-            {$kop}
-
-            <table class='meta-table'>
-                <tr>
-                    <td width='12%'>No.</td><td width='2%'>:</td><td width='46%'>{$letterNo}</td>
-                    <td width='40%' style='text-align: right;'>Batam, " . SecurityHelper::formatTanggalIndo(date('Y-m-d')) . "</td>
-                </tr>
-                <tr>
-                    <td>Lamp.</td><td>:</td><td>-</td>
-                    <td></td>
-                </tr>
-                <tr>
-                    <td>Perihal</td><td>:</td><td><strong>Pemanggilan Orang Tua / Wali - Tagihan Biaya Sekolah</strong></td>
-                    <td></td>
-                </tr>
-            </table>
-
-            <div style='margin-top: 10px; margin-bottom: 12px;'>
-                Kepada Ykh. :<br>
-                <strong>Orang Tua Dari " . SecurityHelper::escape($bill['student_name']) . "</strong><br>
-                Unit Satuan: {$bill['unit_name']} &ndash; Kelas {$bill['class_name']}<br>
-                Di &ndash; Tempat
-            </div>
-
-            <div style='font-style: italic; margin-bottom: 8px;'>Assalamu'alaikum warahmatullahi wabarakaatuh,</div>
-
-            <div style='text-align: justify; margin-bottom: 8px;'>
-                Segala puji hanyalah milik Allah, kita memujinya dengan nama-nama dan sifat-sifat Nya yang baik, Shalawat dan salam senantiasa tercurah atas junjungan dan panutan hidup kita, Nabi Muhammad Shallallahu'alaihi wa sallam.
-            </div>
-
-            <div style='text-align: justify; margin-bottom: 10px;'>
-                Melalui surat ini Direktorat Pendidikan Yayasan memberitahukan kepada Bapak/Ibu wali murid, bahwa berkaitan dengan kelangsungan belajar mengajar di lingkungan Yayasan Islam Al Kahfi Batam, bersama ini kami sampaikan data pembiayaan yang belum terselesaikan pada rekening Bank BSI, No Rekening {$bsiAcc}, AN: {$bsiHolder} ({$bill['unit_name']}). Rincian kewajiban adalah:
-            </div>
-
-            <!-- Tabel 2 Kolom Tunggakan SPP & Non SPP (FR 8001C) -->
-            <table class='data-table'>
-                <thead>
-                    <tr>
-                        <th width='8%'>No</th>
-                        <th width='32%'>Tunggakan SPP (Rp.)</th>
-                        <th width='35%'>Tunggakan Non SPP (Rp)</th>
-                        <th width='25%'>JUMLAH</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td align='center'>1</td>
-                        <td align='right' style='font-weight: bold;'>Rp {$sppFmt}</td>
-                        <td align='right' style='font-weight: bold;'>Rp {$nonSppFmt}</td>
-                        <td align='right' style='font-weight: bold; color: #b91c1c;'>Rp {$totalFmt}</td>
-                    </tr>
-                </tbody>
-            </table>
-            <div style='font-size: 9.5pt; font-style: italic; color: #555; margin-bottom: 10px;'>
-                *Data di ambil per tanggal " . SecurityHelper::formatTanggalIndo(date('Y-m-d')) . " / Abaikan surat ini jika sudah diselesaikan.
-            </div>
-
-            {$schedText}
-
-            <div style='text-align: justify; margin-bottom: 10px;'>
-                Mengingat pentingnya agenda ini demi kelancaran pendidikan ananda, kami mengharapkan kehadiran Bapak/Ibu tepat waktu di Kantor Yayasan.
-            </div>
-
-            <div style='text-align: justify; margin-bottom: 15px;'>
-                Demikian yang dapat kami sampaikan, atas perhatian dan kehadirannya diucapkan <em>Jazaakumullaahu khairan</em>.<br>
-                <em style='display: block; margin-top: 6px;'>Wassalamu'alaikum warahmatullahi wabarakaatuh</em>
-            </div>
-
-            <!-- Tanda Tangan 2 Pihak: Kepala Sekolah & Deputi Direktur Pendidikan -->
-            <table class='signatures'>
-                <tr>
-                    <td class='sig-box'>
-                        Mengetahui,<br>
-                        <strong>Kepala Satuan Pendidikan</strong><br><br><br><br>
-                        <strong><u>{$kepsekName}</u></strong>
-                    </td>
-                    <td class='sig-box'>
-                        Batam, " . SecurityHelper::formatTanggalIndo(date('Y-m-d')) . "<br>
-                        <strong>Deputi Direktur Pendidikan Yayasan</strong><br><br><br><br>
-                        <strong><u>Ust. Syahidi Rahman, S.Pd.I</u></strong>
-                    </td>
-                </tr>
-            </table>
-        </body>
-        </html>
-        ";
-
+        $html = $this->generateFR8001CHtml($bill, true);
         ExportHelper::pdf($html, 'Surat_Panggilan_Yayasan_FR8001C_' . $bill['nis'], 'A4', 'portrait', true);
     }
 
@@ -1603,12 +2204,15 @@ class TagihanController extends Controller {
 
         $bill = Database::fetch(
             "SELECT b.*, s.nama as student_name, s.nis, COALESCE(NULLIF(s.father_name, ''), NULLIF(s.mother_name, ''), 'Wali Santri') as parent_name, s.parent_phone, s.parent_email, 
-                    s.address as alamat, s.nik, c.name as class_name, u.name as unit_name 
+                    s.address as alamat, s.nik,
+                    (SELECT c2.name FROM class_students cs2 JOIN classes c2 ON cs2.class_id = c2.id 
+                     WHERE cs2.student_id = s.id AND cs2.status = 'Aktif' AND c2.unit_id = b.unit_id 
+                     ORDER BY cs2.academic_year_id DESC, cs2.id DESC LIMIT 1) as class_name,
+                    u.name as unit_name, u.kop_title, u.kop_subtitle, u.address, u.phone, u.email,
+                    u.code, u.level, u.npsn, u.akreditasi, u.nomor_akreditasi, u.nomor_izin_operasional, u.logo_path
              FROM bills b 
              JOIN students s ON b.student_id = s.id 
              JOIN units u ON b.unit_id = u.id 
-             LEFT JOIN class_students cs ON s.id = cs.student_id AND cs.status = 'Aktif' 
-             LEFT JOIN classes c ON cs.class_id = c.id 
              WHERE b.id = ?",
             [$billId]
         );
@@ -1618,99 +2222,8 @@ class TagihanController extends Controller {
         }
         $this->assertUnitOwnership('bills', $billId, 'unit_id');
 
-        $kop = ExportHelper::renderKopYayasan();
-        $parentName = $bill['parent_name'] ?: '..........................................';
-        $parentKtp = $bill['nik'] ?: '..........................................';
-        $parentAddress = $bill['alamat'] ?: '..........................................';
-        $parentPhone = $bill['parent_phone'] ?: '..........................................';
-
-        $html = "
-        <html>
-        <head>
-            <meta charset='UTF-8'>
-            <title>Format Surat Kesepakatan Pembayaran Tunggakan Yayasan - FR 8001D</title>
-            <style>
-                @page { margin: 15mm 20mm 20mm 20mm; }
-                body { font-family: 'Times New Roman', Times, serif; font-size: 12pt; line-height: 1.5; color: #111; }
-                .doc-code { font-size: 10pt; font-weight: normal; margin-bottom: 6px; color: #444; }
-                .title-box { text-align: center; font-weight: bold; font-size: 12.5pt; text-decoration: underline; margin-bottom: 18px; }
-                .form-table { width: 100%; border-collapse: collapse; margin-bottom: 14px; }
-                .form-table td { padding: 3px 2px; vertical-align: top; font-size: 11.5pt; }
-                .options-list { margin-top: 10px; margin-bottom: 20px; line-height: 1.8; }
-                .closing { margin-top: 15px; margin-bottom: 30px; text-align: justify; }
-                .signatures { width: 100%; margin-top: 10px; border-collapse: collapse; page-break-inside: avoid; }
-                .sig-box { width: 50%; text-align: center; vertical-align: top; font-size: 11.5pt; }
-            </style>
-        </head>
-        <body>
-            <div class='doc-code'>7.4 Format Surat Kesepakatan Pembayaran Tunggakan - <strong>FR 8001D (Kop Yayasan)</strong></div>
-            {$kop}
-
-            <div class='title-box'>SURAT PERNYATAAN PEMBAYARAN TUNGGAKAN BIAYA SEKOLAH</div>
-
-            <div style='margin-bottom: 10px;'>Saya yang bertanda tangan di bawah ini:</div>
-
-            <table class='form-table'>
-                <tr>
-                    <td width='22%'>Nama</td><td width='2%'>:</td>
-                    <td><strong>{$parentName}</strong></td>
-                </tr>
-                <tr>
-                    <td>No KTP</td><td>:</td>
-                    <td>{$parentKtp}</td>
-                </tr>
-                <tr>
-                    <td>Alamat</td><td>:</td>
-                    <td>{$parentAddress}</td>
-                </tr>
-                <tr>
-                    <td>No Tlp/ HP</td><td>:</td>
-                    <td>{$parentPhone}</td>
-                </tr>
-            </table>
-
-            <div style='margin-top: 10px; margin-bottom: 6px;'>Wali/Orang tua murid dari siswa</div>
-            <table class='form-table'>
-                <tr>
-                    <td width='22%'>Nama</td><td width='2%'>:</td>
-                    <td><strong>{$bill['student_name']}</strong> (NIS: {$bill['nis']})</td>
-                </tr>
-                <tr>
-                    <td>Unit / Kelas</td><td>:</td>
-                    <td>{$bill['unit_name']} &ndash; Kelas " . ($bill['class_name'] ?: 'Aktif') . "</td>
-                </tr>
-            </table>
-
-            <div style='margin-top: 12px; text-align: justify;'>
-                Dengan ini Insya Alloh akan menyelesaikan tunggakan sesuai dengan surat pemberitahuan dengan cara :
-            </div>
-
-            <div class='options-list'>
-                <div><strong>A.</strong> Membayar lunas pada tanggal ..........................................</div>
-                <div><strong>B.</strong> Dicicil selama ......bulan terhitung mulai tanggal ..........................................</div>
-                <div><strong>C.</strong> Dicicil dengan minimal Rp................../bulan sampai dengan tanggal ..........................................</div>
-            </div>
-
-            <div class='closing'>
-                Demikian surat pernyataan ini diajukan. Atas bantuan dan kerjasama yang diberikan, saya ucapkan <em>jazaakumullaahu khairan</em>.
-            </div>
-
-            <table class='signatures'>
-                <tr>
-                    <td class='sig-box'>&nbsp;</td>
-                    <td class='sig-box'>
-                        Batam, ..........................................<br><br>
-                        Yang mengajukan<br>
-                        <strong>Orangtua</strong><br><br><br><br><br>
-                        ( .......................................... )
-                    </td>
-                </tr>
-            </table>
-        </body>
-        </html>
-        ";
-
-        ExportHelper::pdf($html, 'Form_Kesepakatan_Yayasan_FR8001D_' . $bill['nis'], 'A4', 'portrait', true);
+        $html = $this->generateFR8001DHtml($bill, true);
+        ExportHelper::pdf($html, 'Berita_Acara_dan_Pernyataan_Yayasan_FR8001D_' . $bill['nis'], 'A4', 'portrait', true);
     }
 
     public function markSelesaiDeputi(): void {
@@ -1754,21 +2267,29 @@ class TagihanController extends Controller {
     // =========================================================================
     public function cicilanList(): void {
         $this->requireRole(['tata_usaha', 'kepala_sekolah', 'deputi_pendidikan', 'keuangan_yayasan']);
+        self::ensureSignedColumns();
         $unitId = Auth::unitId();
 
         // Kueri TIDAK difilter oleh academic_year_id!
         // Data tetap ada melintasi pergantian tahun ajaran sampai lunas.
         $installments = Database::fetchAll(
-            "SELECT i.*, s.nama as student_name, s.nis, s.parent_email, c.name as class_name, 
-                    u.name as unit_name, u_app.full_name as approver_name 
+            "SELECT i.*, s.nama as student_name, s.nis, s.parent_email,
+                    COALESCE(
+                        (SELECT c2.name FROM class_students cs2 JOIN classes c2 ON cs2.class_id = c2.id 
+                         WHERE cs2.student_id = s.id AND cs2.status = 'Aktif' AND c2.unit_id = i.unit_id 
+                         ORDER BY cs2.academic_year_id DESC, cs2.id DESC LIMIT 1),
+                        i.student_class,
+                        'Aktif'
+                    ) as class_name,
+                    u.name as unit_name, u_app.full_name as approver_name,
+                    b.signed_fr8001c_path, b.signed_fr8001d_path
              FROM bill_installments i 
              JOIN students s ON i.student_id = s.id 
              JOIN units u ON i.unit_id = u.id 
-             LEFT JOIN class_students cs ON s.id = cs.student_id AND cs.status = 'Aktif' 
-             LEFT JOIN classes c ON cs.class_id = c.id 
+             LEFT JOIN bills b ON i.bill_id = b.id
              LEFT JOIN users u_app ON i.approved_by_user_id = u_app.id 
              WHERE i.unit_id = ? 
-             ORDER BY FIELD(i.status, 'Aktif', 'Lunas', 'Batal') ASC, i.created_at DESC",
+             ORDER BY FIELD(i.status, 'Aktif', 'Lunas', 'Batal') ASC, class_name ASC, s.nama ASC",
             [$unitId]
         );
 
@@ -1824,8 +2345,11 @@ class TagihanController extends Controller {
         $unitId = Auth::unitId();
 
         $installmentId = (int)($_POST['installment_id'] ?? 0);
-        $amount = max(0, (float)str_replace(['Rp', '.', ' '], '', $_POST['amount'] ?? '0'));
+        $amount = $this->parseRupiah($_POST['amount'] ?? '0');
         $paymentDate = trim($_POST['payment_date'] ?? date('Y-m-d'));
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $paymentDate)) {
+            $paymentDate = date('Y-m-d');
+        }
         $paymentMethod = trim($_POST['payment_method'] ?? 'Cash');
         $notes = trim($_POST['notes'] ?? '');
 
@@ -1842,10 +2366,21 @@ class TagihanController extends Controller {
             return;
         }
 
-        if ($amount > (float)$installment['remaining_debt']) {
-            $this->setFlash('warning', 'Nominal pembayaran melebihi sisa tunggakan (' . SecurityHelper::formatRupiah((float)$installment['remaining_debt']) . ').');
+        $currentRemaining = round((float)$installment['remaining_debt'], 2);
+        if ($amount > ($currentRemaining + 1)) {
+            $this->setFlash('warning', 'Nominal pembayaran melebihi sisa tunggakan (' . SecurityHelper::formatRupiah($currentRemaining) . ').');
             $this->redirect(Auth::baseUrl() . '/tagihan/cicilan');
             return;
+        }
+
+        // Pastikan pelunasan pas (termasuk selisih pembulatan < Rp 1) langsung mengunci status LUNAS
+        if ($amount >= $currentRemaining) {
+            $amount = $currentRemaining;
+            $newRemaining = 0.0;
+            $newStatus = 'Lunas';
+        } else {
+            $newRemaining = max(0.0, round($currentRemaining - $amount, 2));
+            $newStatus = ($newRemaining <= 0.0) ? 'Lunas' : 'Aktif';
         }
 
         $receiptNumber = 'KW-CICIL/' . date('Ym') . '/' . sprintf('%04d', rand(100, 9999));
@@ -1858,8 +2393,6 @@ class TagihanController extends Controller {
         );
 
         $newPaidTotal = (float)$installment['paid_total'] + $amount;
-        $newRemaining = (float)$installment['total_debt'] - $newPaidTotal;
-        $newStatus = ($newRemaining <= 0) ? 'Lunas' : 'Aktif';
 
         Database::execute(
             "UPDATE bill_installments 
@@ -1867,10 +2400,10 @@ class TagihanController extends Controller {
                  remaining_debt = ?, 
                  status = ? 
              WHERE id = ?",
-            [$newPaidTotal, max(0, $newRemaining), $newStatus, $installmentId]
+            [$newPaidTotal, $newRemaining, $newStatus, $installmentId]
         );
 
-        // Jika lunas dan memiliki referensi bill_id, update status bills
+        // Jika lunas, perbarui status bill terkait (dan tagihan tertunggak siswa yang sudah tertutup)
         if ($newStatus === 'Lunas' && !empty($installment['bill_id'])) {
             Database::execute(
                 "UPDATE bills 
@@ -1886,6 +2419,7 @@ class TagihanController extends Controller {
             'installment_id' => $installmentId,
             'receipt'        => $receiptNumber,
             'amount'         => $amount,
+            'remaining'      => $newRemaining,
             'status'         => $newStatus
         ]);
 
@@ -1893,44 +2427,14 @@ class TagihanController extends Controller {
         $this->redirect(Auth::baseUrl() . '/tagihan/cicilan');
     }
 
-    public function printKartuCicilanPdf(string $id): void {
-        $this->requireRole(['tata_usaha', 'kepala_sekolah', 'deputi_pendidikan', 'orang_tua']);
-        $installmentId = (int)$id;
-
-        $installment = Database::fetch(
-            "SELECT i.*, s.nama as student_name, s.nis, s.parent_email, c.name as class_name, 
-                    u.name as unit_name, u.kop_title, u.kop_subtitle, u.address, u.phone, u.email as unit_email,
-                    u_app.full_name as approver_name 
-             FROM bill_installments i 
-             JOIN students s ON i.student_id = s.id 
-             JOIN units u ON i.unit_id = u.id 
-             LEFT JOIN class_students cs ON s.id = cs.student_id AND cs.status = 'Aktif' 
-             LEFT JOIN classes c ON cs.class_id = c.id 
-             LEFT JOIN users u_app ON i.approved_by_user_id = u_app.id 
-             WHERE i.id = ?",
-            [$installmentId]
-        );
-
-        if (!$installment) {
-            die('Data cicilan tidak ditemukan.');
-        }
-        $this->assertStudentAccess((int)$installment['student_id']);
-
-        // Ambil histori pembayaran angsuran
-        $payments = Database::fetchAll(
-            "SELECT p.*, u.full_name as receiver_name 
-             FROM bill_installment_payments p 
-             JOIN users u ON p.received_by_user_id = u.id 
-             WHERE p.installment_id = ? 
-             ORDER BY p.payment_date ASC, p.id ASC",
-            [$installmentId]
-        );
-
+    private function generateKartuCicilanHtml(array $installment, array $payments): string {
         $kop = ($installment['approved_by_level'] === 'deputi_pendidikan')
             ? ExportHelper::renderKopYayasan()
             : ExportHelper::renderKop($installment);
 
-        // Skema Text
+        $tuEmp = $this->resolveUnitSigner((int)$installment['unit_id'], 'tata_usaha');
+        $tuName = SecurityHelper::escape($tuEmp['nama']);
+
         $skemaDesc = '';
         if ($installment['scheme_type'] === 'lunas_tanggal') {
             $skemaDesc = 'Membayar lunas pada tanggal: <strong>' . SecurityHelper::formatTanggalIndo($installment['scheme_lunas_date']) . '</strong>';
@@ -1941,14 +2445,15 @@ class TagihanController extends Controller {
         }
 
         $totalTunggakan = number_format((float)$installment['total_debt'], 0, ',', '.');
-        $totalTerbayar = number_format((float)$installment['paid_total'], 0, ',', '.');
-        $sisaHutang = number_format((float)$installment['remaining_debt'], 0, ',', '.');
+        $totalTerbayar  = number_format((float)$installment['paid_total'], 0, ',', '.');
+        $sisaHutang     = number_format((float)$installment['remaining_debt'], 0, ',', '.');
+        $totalBerjalan  = (float)$installment['paid_total'] + (float)$installment['remaining_debt'];
 
         $rowsHtml = '';
         if (empty($payments)) {
             $rowsHtml = "<tr><td colspan='6' align='center' style='padding: 18px; color: #64748b; font-style: italic;'>Belum ada rekaman angsuran pembayaran yang disetorkan.</td></tr>";
         } else {
-            $runningBalance = (float)$installment['total_debt'];
+            $runningBalance = $totalBerjalan;
             foreach ($payments as $idx => $p) {
                 $runningBalance -= (float)$p['amount'];
                 $rowsHtml .= "
@@ -1967,11 +2472,11 @@ class TagihanController extends Controller {
             ? "<span style='padding: 4px 12px; background: #dcfce7; color: #15803d; border: 1px solid #86efac; border-radius: 4px; font-weight: bold;'>LUNAS</span>"
             : "<span style='padding: 4px 12px; background: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5; border-radius: 4px; font-weight: bold;'>SEDANG DICICIL (AKTIF)</span>";
 
-        $html = "
+        return "
         <html>
         <head>
             <meta charset='UTF-8'>
-            <title>Buku & Kartu Cicilan Pembayaran Tunggakan</title>
+            <title>Buku &amp; Kartu Cicilan Pembayaran Tunggakan</title>
             <style>
                 @page { margin: 15mm 18mm 18mm 18mm; }
                 body { font-family: 'Times New Roman', Times, serif; font-size: 11pt; line-height: 1.4; color: #111; }
@@ -1979,7 +2484,6 @@ class TagihanController extends Controller {
                 .card-subtitle { text-align: center; font-size: 10pt; color: #475569; margin-bottom: 16px; }
                 .meta-table { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
                 .meta-table td { padding: 3px 4px; vertical-align: top; font-size: 10.5pt; }
-                .summary-box { width: 100%; margin: 12px 0; border: 1px solid #cbd5e1; border-radius: 6px; padding: 10px; background: #f8fafc; }
                 .ledger-table { width: 100%; border-collapse: collapse; margin-top: 14px; }
                 .ledger-table th, .ledger-table td { border: 1px solid #334155; padding: 6px 8px; font-size: 10.5pt; }
                 .ledger-table th { background: #f1f5f9; text-align: center; font-weight: bold; }
@@ -2002,7 +2506,7 @@ class TagihanController extends Controller {
                 </tr>
                 <tr>
                     <td>Kelas / Unit</td><td>:</td>
-                    <td>" . SecurityHelper::escape($installment['class_name'] ?? 'Aktif') . " &ndash; {$installment['unit_name']}</td>
+                    <td>" . SecurityHelper::escape($installment['class_name'] ?? 'Aktif') . " &ndash; " . SecurityHelper::escape($installment['unit_name']) . "</td>
                     <td>Tgl Kesepakatan</td><td>:</td>
                     <td>" . SecurityHelper::formatTanggalIndo($installment['agreement_date']) . "</td>
                 </tr>
@@ -2018,11 +2522,10 @@ class TagihanController extends Controller {
                 </tr>
             </table>
 
-            <!-- Ringkasan Saldo Hutang -->
             <table style='width: 100%; border-collapse: collapse; margin-top: 6px; margin-bottom: 12px;'>
                 <tr>
                     <td style='width: 33.3%; padding: 8px; background: #f1f5f9; border: 1px solid #cbd5e1; text-align: center;'>
-                        <span style='font-size: 9pt; color: #64748b; text-transform: uppercase;'>Total Tunggakan Awal</span><br>
+                        <span style='font-size: 9pt; color: #64748b; text-transform: uppercase;'>Nominal Awal Perjanjian</span><br>
                         <strong style='font-size: 13pt; color: #0f172a;'>Rp {$totalTunggakan}</strong>
                     </td>
                     <td style='width: 33.3%; padding: 8px; background: #ecfdf5; border: 1px solid #a7f3d0; text-align: center;'>
@@ -2036,7 +2539,6 @@ class TagihanController extends Controller {
                 </tr>
             </table>
 
-            <!-- Tabel Histori Angsuran Cicilan -->
             <table class='ledger-table'>
                 <thead>
                     <tr>
@@ -2056,22 +2558,61 @@ class TagihanController extends Controller {
             <table class='signatures'>
                 <tr>
                     <td class='sig-box'>
-                        Mengetahui & Menyetujui,<br>
+                        Mengetahui &amp; Menyetujui,<br>
                         <strong>Orang Tua / Wali Santri</strong><br><br><br><br>
                         ( <strong>" . SecurityHelper::escape($installment['parent_name']) . "</strong> )
                     </td>
                     <td class='sig-box'>
                         Batam, " . SecurityHelper::formatTanggalIndo(date('Y-m-d')) . "<br>
                         Bagian Keuangan / Tata Usaha,<br>
-                        <strong>{$installment['unit_name']}</strong><br><br><br><br>
-                        ( .................................................. )
+                        <strong>" . SecurityHelper::escape($installment['unit_name']) . "</strong><br><br><br><br>
+                        ( <strong>{$tuName}</strong> )
                     </td>
                 </tr>
             </table>
         </body>
-        </html>
-        ";
+        </html>";
+    }
 
+    public function printKartuCicilanPdf(string $id): void {
+        $this->requireRole(['tata_usaha', 'kepala_sekolah', 'deputi_pendidikan', 'orang_tua']);
+        $installmentId = (int)$id;
+
+        $installment = Database::fetch(
+            "SELECT i.*, s.nama as student_name, s.nis, s.parent_email,
+                    COALESCE(
+                        (SELECT c2.name FROM class_students cs2 JOIN classes c2 ON cs2.class_id = c2.id 
+                         WHERE cs2.student_id = s.id AND cs2.status = 'Aktif' AND c2.unit_id = i.unit_id 
+                         ORDER BY cs2.academic_year_id DESC, cs2.id DESC LIMIT 1),
+                        i.student_class,
+                        'Aktif'
+                    ) as class_name,
+                    u.name as unit_name, u.kop_title, u.kop_subtitle, u.address, u.phone, u.email as unit_email,
+                    u.code, u.level, u.npsn, u.akreditasi, u.nomor_akreditasi, u.nomor_izin_operasional, u.logo_path,
+                    u_app.full_name as approver_name 
+             FROM bill_installments i 
+             JOIN students s ON i.student_id = s.id 
+             JOIN units u ON i.unit_id = u.id 
+             LEFT JOIN users u_app ON i.approved_by_user_id = u_app.id 
+             WHERE i.id = ?",
+            [$installmentId]
+        );
+
+        if (!$installment) {
+            die('Data cicilan tidak ditemukan.');
+        }
+        $this->assertStudentAccess((int)$installment['student_id']);
+
+        $payments = Database::fetchAll(
+            "SELECT p.*, u.full_name as receiver_name 
+             FROM bill_installment_payments p 
+             JOIN users u ON p.received_by_user_id = u.id 
+             WHERE p.installment_id = ? 
+             ORDER BY p.payment_date ASC, p.id ASC",
+            [$installmentId]
+        );
+
+        $html = $this->generateKartuCicilanHtml($installment, $payments);
         ExportHelper::pdf($html, 'Buku_Kartu_Cicilan_' . $installment['nis'] . '_' . date('Ymd'), 'A4', 'portrait', true);
     }
 
@@ -2081,7 +2622,16 @@ class TagihanController extends Controller {
         $unitId = Auth::unitId();
 
         $installment = Database::fetch(
-            "SELECT i.*, s.nama as student_name, s.nis, s.parent_email, u.name as unit_name 
+            "SELECT i.*, s.nama as student_name, s.nis, s.parent_email,
+                    COALESCE(
+                        (SELECT c2.name FROM class_students cs2 JOIN classes c2 ON cs2.class_id = c2.id 
+                         WHERE cs2.student_id = s.id AND cs2.status = 'Aktif' AND c2.unit_id = i.unit_id 
+                         ORDER BY cs2.academic_year_id DESC, cs2.id DESC LIMIT 1),
+                        i.student_class,
+                        'Aktif'
+                    ) as class_name,
+                    u.name as unit_name, u.kop_title, u.kop_subtitle, u.address, u.phone, u.email as unit_email,
+                    u.code, u.level, u.npsn, u.akreditasi, u.nomor_akreditasi, u.nomor_izin_operasional, u.logo_path
              FROM bill_installments i 
              JOIN students s ON i.student_id = s.id 
              JOIN units u ON i.unit_id = u.id 
@@ -2089,68 +2639,66 @@ class TagihanController extends Controller {
             [$installmentId, $unitId]
         );
 
-        if (!$installment || empty($installment['parent_email'])) {
+        if (!$installment || empty(trim($installment['parent_email'] ?? ''))) {
             $this->setFlash('warning', 'Data cicilan atau email orang tua tidak tersedia.');
             $this->redirect(Auth::baseUrl() . '/tagihan/cicilan');
             return;
         }
 
+        $payments = Database::fetchAll(
+            "SELECT p.*, u.full_name as receiver_name 
+             FROM bill_installment_payments p 
+             JOIN users u ON p.received_by_user_id = u.id 
+             WHERE p.installment_id = ? 
+             ORDER BY p.payment_date ASC, p.id ASC",
+            [$installmentId]
+        );
+
         $smtp = $this->getSmtpConfig($unitId);
         if ($smtp) {
             try {
+                @ini_set('memory_limit', '512M');
+                @set_time_limit(120);
+
                 $mail = new PHPMailer(true);
-                $mail->isSMTP();
-                $mail->Host       = trim($smtp['host']);
-                $mail->SMTPAuth   = true;
-                $mail->Username   = trim($smtp['username']);
-                $mail->Password   = $smtp['password'];
-                $mail->Timeout    = 25;
-                $mail->CharSet    = 'UTF-8';
-
-                $port = (int)($smtp['port'] ?: 587);
-                $enc  = strtolower(trim($smtp['encryption'] ?? ''));
-                if ($enc === 'ssl' || $port === 465) {
-                    $mail->SMTPSecure = PHPMailer::ENCRYPTION_SMTPS;
-                    $mail->Port       = $port ?: 465;
-                } elseif ($enc === 'tls' || $port === 587) {
-                    $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
-                    $mail->Port       = $port ?: 587;
-                } else {
-                    $mail->SMTPSecure  = false;
-                    $mail->SMTPAutoTLS = false;
-                    $mail->Port        = $port ?: 25;
-                }
-
-                $mail->SMTPOptions = [
-                    'ssl' => [
-                        'verify_peer'       => false,
-                        'verify_peer_name'  => false,
-                        'allow_self_signed' => true,
-                    ]
-                ];
+                $this->configureMailer($mail, $smtp);
 
                 $fromEmail = !empty($smtp['from_email']) ? trim($smtp['from_email']) : trim($smtp['username']);
                 $fromName  = !empty($smtp['from_name']) ? trim($smtp['from_name']) : ($installment['unit_name'] ?? 'Tata Usaha');
+                $parentEmail = trim($installment['parent_email']);
                 $mail->setFrom($fromEmail, $fromName);
-                $mail->addAddress(trim($installment['parent_email']), $installment['student_name']);
+                $mail->addAddress($parentEmail, $installment['student_name']);
                 $mail->isHTML(true);
                 $mail->Subject = "[Kartu Cicilan Pembayaran SPP] " . $installment['student_name'] . " - " . $installment['unit_name'];
                 $mail->Body = "
                     <div style='font-family: Arial, sans-serif; line-height: 1.6; max-width: 600px; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;'>
-                        <h3 style='color: #0f766e;'>Buku & Kartu Kontrol Cicilan Tunggakan</h3>
+                        <h3 style='color: #0f766e;'>Buku &amp; Kartu Kontrol Cicilan Tunggakan</h3>
                         <p>Yth. Orang Tua dari ananda <strong>" . htmlspecialchars($installment['student_name']) . "</strong>,</p>
                         <p>Berikut ringkasan status cicilan pembayaran sekolah berdasarkan kesepakatan <strong>" . htmlspecialchars($installment['agreement_number']) . "</strong>:</p>
                         <ul>
-                            <li>Total Tunggakan Awal: <strong>" . SecurityHelper::formatRupiah((float)$installment['total_debt']) . "</strong></li>
+                            <li>Nominal Awal Perjanjian: <strong>" . SecurityHelper::formatRupiah((float)$installment['total_debt']) . "</strong></li>
                             <li>Total Telah Dibayar: <strong style='color: #059669;'>" . SecurityHelper::formatRupiah((float)$installment['paid_total']) . "</strong></li>
                             <li>Sisa Saldo Tunggakan: <strong style='color: #b91c1c;'>" . SecurityHelper::formatRupiah((float)$installment['remaining_debt']) . "</strong></li>
                             <li>Status: <strong>" . htmlspecialchars($installment['status']) . "</strong></li>
                         </ul>
-                        <p>Silakan mengunduh Buku/Kartu Cicilan resmi melalui tautan portal orang tua atau loket Tata Usaha sekolah.</p>
+                        <p>Dokumen resmi <strong>Kartu Buku Kontrol Cicilan (PDF)</strong> telah kami lampirkan pada email ini.</p>
                         <p><em>Jazakumullah Khairan Katsiran.</em></p>
                     </div>";
+
+                // Lampirkan PDF Buku & Kartu Cicilan
+                try {
+                    $htmlPdf = $this->generateKartuCicilanHtml($installment, $payments);
+                    $pdfBytes = ExportHelper::getPdfBytes($htmlPdf, 'A4', 'portrait');
+                    if (!empty($pdfBytes)) {
+                        $cleanNis = preg_replace('/[^a-zA-Z0-9_\-]/', '_', $installment['nis']);
+                        $mail->addStringAttachment($pdfBytes, 'Kartu_Cicilan_' . $cleanNis . '_' . date('Ymd') . '.pdf', 'base64', 'application/pdf');
+                    }
+                } catch (\Throwable $pdfEx) {
+                    error_log('Gagal membuat lampiran PDF Kartu Cicilan: ' . $pdfEx->getMessage());
+                }
+
                 $mail->send();
-                $this->setFlash('success', 'Informasi Kartu Cicilan berhasil dikirim ke email orang tua (' . htmlspecialchars(trim($installment['parent_email'])) . ').');
+                $this->setFlash('success', 'Informasi & lampiran PDF Kartu Cicilan berhasil dikirim ke email orang tua (' . htmlspecialchars($parentEmail) . ').');
             } catch (\Throwable $e) {
                 $err = !empty($mail->ErrorInfo) ? $mail->ErrorInfo : $e->getMessage();
                 $this->setFlash('danger', 'Gagal mengirim email: ' . htmlspecialchars($err));
@@ -2160,6 +2708,131 @@ class TagihanController extends Controller {
         }
 
         $this->redirect(Auth::baseUrl() . '/tagihan/cicilan');
+    }
+
+    /**
+     * Ekspor Backup Offline data Tagihan FR 8001A, Buku Cicilan FR 8001D, dan Histori Pembayaran ke Excel Multi-Sheet (.xlsx).
+     */
+    public function exportOfflineBackup(): void {
+        $this->requireRole(['tata_usaha', 'kepala_sekolah', 'deputi_pendidikan', 'operator_yayasan']);
+        $unitId = Auth::unitId();
+        $taId = Auth::academicYearId();
+
+        $isAllUnits = ($unitId <= 0);
+        $unitFilterSql = $isAllUnits ? '' : ' AND b.unit_id = ? ';
+        $billParams = $isAllUnits ? [$taId] : [$taId, $unitId];
+
+        $bills = Database::fetchAll(
+            "SELECT b.*, u.name as unit_name, s.nis, s.nama as student_name, s.gender,
+                    (SELECT c2.name FROM class_students cs2 JOIN classes c2 ON cs2.class_id = c2.id 
+                     WHERE cs2.student_id = s.id AND cs2.status = 'Aktif' AND c2.unit_id = b.unit_id 
+                     ORDER BY cs2.academic_year_id DESC, cs2.id DESC LIMIT 1) as class_name
+             FROM bills b
+             JOIN students s ON b.student_id = s.id
+             JOIN units u ON b.unit_id = u.id
+             WHERE b.academic_year_id = ? {$unitFilterSql}
+             ORDER BY u.id ASC, class_name ASC, s.nama ASC",
+            $billParams
+        );
+
+        $instSql = $isAllUnits ? '' : ' WHERE i.unit_id = ? ';
+        $instParams = $isAllUnits ? [] : [$unitId];
+        $installments = Database::fetchAll(
+            "SELECT i.*, u.name as unit_name, s.nis, s.nama as student_name
+             FROM bill_installments i
+             JOIN students s ON i.student_id = s.id
+             JOIN units u ON i.unit_id = u.id
+             {$instSql}
+             ORDER BY u.id ASC, i.status ASC, s.nama ASC",
+            $instParams
+        );
+
+        $paySql = $isAllUnits ? '' : ' WHERE i.unit_id = ? ';
+        $payments = Database::fetchAll(
+            "SELECT p.*, i.agreement_number, s.nis, s.nama as student_name, u.name as unit_name, usr.full_name as receiver_name
+             FROM bill_installment_payments p
+             JOIN bill_installments i ON p.installment_id = i.id
+             JOIN students s ON i.student_id = s.id
+             JOIN units u ON i.unit_id = u.id
+             JOIN users usr ON p.received_by_user_id = usr.id
+             {$paySql}
+             ORDER BY p.payment_date DESC, p.id DESC",
+            $instParams
+        );
+
+        $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+
+        // Sheet 1: Tagihan FR 8001A
+        $s1 = $spreadsheet->getActiveSheet();
+        $s1->setTitle('Tagihan FR8001A');
+        $h1 = ['No', 'Unit', 'Kelas', 'NIS', 'Nama Siswa', 'L/P', 'Buku Paket', 'Kegiatan', 'Komite', 'Mutu', 'SPP', 'Uang Ujian', 'Tunggakan Lalu', 'Total Tagihan', 'Status', 'Tahap Alur', 'Catatan'];
+        foreach ($h1 as $cIdx => $h) {
+            $s1->setCellValue(\PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($cIdx + 1) . '1', SecurityHelper::cleanFormula($h));
+        }
+        $rowNum = 2;
+        foreach ($bills as $i => $b) {
+            $det = json_decode($b['items_detail'] ?? '{}', true) ?: [];
+            $vals = [
+                $i + 1, $b['unit_name'], $b['class_name'] ?? '-', $b['nis'], $b['student_name'], $b['gender'] ?? 'L',
+                (float)($det['buku_paket'] ?? 0), (float)($det['kegiatan_siswa'] ?? 0), (float)($det['komite'] ?? 0),
+                (float)($det['peningkatan_mutu'] ?? 0), (float)($det['spp'] ?? 0), (float)($det['uang_ujian'] ?? 0),
+                (float)($det['tunggakan_lalu'] ?? 0), (float)$b['amount'], $b['status'], $b['pipeline_stage'], $b['notes'] ?? ''
+            ];
+            foreach ($vals as $cIdx => $v) {
+                $s1->setCellValue(\PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($cIdx + 1) . $rowNum, is_numeric($v) ? $v : SecurityHelper::cleanFormula((string)$v));
+            }
+            $rowNum++;
+        }
+
+        // Sheet 2: Buku Cicilan FR 8001D
+        $s2 = $spreadsheet->createSheet();
+        $s2->setTitle('Buku Cicilan FR8001D');
+        $h2 = ['No', 'Unit', 'No Kesepakatan', 'NIS', 'Nama Siswa', 'Orang Tua', 'No KTP', 'HP', 'Nominal Anchor Awal', 'Total Dibayar', 'Sisa Tunggakan', 'Status', 'Tgl Akad'];
+        foreach ($h2 as $cIdx => $h) {
+            $s2->setCellValue(\PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($cIdx + 1) . '1', SecurityHelper::cleanFormula($h));
+        }
+        $rowNum = 2;
+        foreach ($installments as $i => $ins) {
+            $vals = [
+                $i + 1, $ins['unit_name'], $ins['agreement_number'], $ins['nis'], $ins['student_name'],
+                $ins['parent_name'], $ins['parent_ktp'] ?? '-', $ins['parent_phone'] ?? '-',
+                (float)$ins['total_debt'], (float)$ins['paid_total'], (float)$ins['remaining_debt'],
+                $ins['status'], $ins['agreement_date']
+            ];
+            foreach ($vals as $cIdx => $v) {
+                $s2->setCellValue(\PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($cIdx + 1) . $rowNum, is_numeric($v) ? $v : SecurityHelper::cleanFormula((string)$v));
+            }
+            $rowNum++;
+        }
+
+        // Sheet 3: Histori Angsuran
+        $s3 = $spreadsheet->createSheet();
+        $s3->setTitle('Histori Angsuran');
+        $h3 = ['No', 'Unit', 'No Kuitansi', 'No Kesepakatan', 'NIS', 'Nama Siswa', 'Tanggal Bayar', 'Nominal Bayar', 'Metode', 'Penerima TU', 'Catatan'];
+        foreach ($h3 as $cIdx => $h) {
+            $s3->setCellValue(\PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($cIdx + 1) . '1', SecurityHelper::cleanFormula($h));
+        }
+        $rowNum = 2;
+        foreach ($payments as $i => $p) {
+            $vals = [
+                $i + 1, $p['unit_name'], $p['receipt_number'], $p['agreement_number'], $p['nis'], $p['student_name'],
+                $p['payment_date'], (float)$p['amount'], $p['payment_method'], $p['receiver_name'], $p['notes'] ?? ''
+            ];
+            foreach ($vals as $cIdx => $v) {
+                $s3->setCellValue(\PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($cIdx + 1) . $rowNum, is_numeric($v) ? $v : SecurityHelper::cleanFormula((string)$v));
+            }
+            $rowNum++;
+        }
+
+        $spreadsheet->setActiveSheetIndex(0);
+        if (ob_get_length()) ob_end_clean();
+        $fname = 'Backup_Offline_Keuangan_Tagihan_' . date('Ymd_His') . '.xlsx';
+        header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        header('Content-Disposition: attachment;filename="' . $fname . '"');
+        header('Cache-Control: max-age=0');
+        $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
+        $writer->save('php://output');
+        exit;
     }
 
     // =========================================================================
