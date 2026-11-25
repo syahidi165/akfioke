@@ -15,6 +15,7 @@ class SupervisiController extends Controller {
     // --- 1. JADWAL SUPERVISI ---
     public function jadwal(): void {
         $this->requireRole(['kepala_sekolah', 'waka_kurikulum', 'deputi_pendidikan']);
+        \App\Controllers\MasterController::ensureUserRolesUnitColumn();
         $unitId = Auth::unitId();
         $taId = Auth::academicYearId();
 
@@ -22,7 +23,7 @@ class SupervisiController extends Controller {
             "SELECT ss.*, t.nama as teacher_name, t.nipy as teacher_nipy, 
                     s.nama as supervisor_name, sub.name as subject_name, c.name as class_name 
              FROM supervisi_sessions ss 
-             JOIN employees t ON ss.teacher_id = t.id AND t.unit_id = ss.unit_id AND t.is_deleted = 0 AND t.status = 'Aktif'
+             JOIN employees t ON ss.teacher_id = t.id AND t.is_deleted = 0 AND t.status = 'Aktif'
              JOIN employees s ON ss.supervisor_id = s.id AND s.is_deleted = 0
              JOIN subjects sub ON ss.subject_id = sub.id 
              JOIN classes c ON ss.class_id = c.id 
@@ -32,13 +33,24 @@ class SupervisiController extends Controller {
         );
 
         $teachers = Database::fetchAll(
-            "SELECT * FROM employees 
-             WHERE unit_id = ? AND is_deleted = 0 AND status = 'Aktif'
-               AND (position LIKE '%Guru%' OR level_posisi LIKE '%Guru%' OR position LIKE '%Waka%' OR level_posisi LIKE '%Waka%' OR position LIKE '%Tutor%' OR level_posisi LIKE '%Tutor%')
-               AND level_posisi NOT IN ('Direktur Pendidikan', 'Deputi Direktur', 'Kepala Sekolah', 'Tata Usaha Keuangan', 'Cleaning Services', 'Security', 'Operator Sekolah')
-               AND position NOT IN ('Direktur Pendidikan', 'Deputi Direktur', 'Kepala Sekolah', 'Tata Usaha Keuangan', 'Cleaning Services', 'Security', 'Operator Sekolah')
-             ORDER BY nama ASC", 
-            [$unitId]
+            "SELECT DISTINCT e.* FROM employees e
+             WHERE e.is_deleted = 0 AND e.status = 'Aktif'
+               AND (
+                   (
+                       e.unit_id = ?
+                       AND (e.position LIKE '%Guru%' OR e.level_posisi LIKE '%Guru%' OR e.position LIKE '%Waka%' OR e.level_posisi LIKE '%Waka%' OR e.position LIKE '%Tutor%' OR e.level_posisi LIKE '%Tutor%')
+                       AND e.level_posisi NOT IN ('Direktur Pendidikan', 'Deputi Direktur', 'Kepala Sekolah', 'Tata Usaha Keuangan', 'Cleaning Services', 'Security', 'Operator Sekolah')
+                       AND (e.position IS NULL OR e.position NOT IN ('Direktur Pendidikan', 'Deputi Direktur', 'Kepala Sekolah', 'Tata Usaha Keuangan', 'Cleaning Services', 'Security', 'Operator Sekolah'))
+                   )
+                   OR EXISTS (
+                       SELECT 1 FROM user_roles urx
+                       JOIN roles rx ON urx.role_id = rx.id
+                       WHERE urx.user_id = e.user_id AND urx.unit_id = ?
+                         AND rx.name IN ('guru_mapel', 'guru_diniyah', 'guru_tahfidz', 'guru_tk', 'guru_mapel_kbtk', 'walas', 'tutor_siswa', 'tutor_sebaya')
+                   )
+               )
+             ORDER BY e.nama ASC", 
+            [$unitId, $unitId]
         );
 
         $supervisors = Database::fetchAll(

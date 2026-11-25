@@ -124,6 +124,31 @@ $posCode = $assessment['position_code'] ?? '';
     </div>
 </div>
 
+<?php if (!empty($crossUnitAssignments)): ?>
+    <?php $isKsPos = str_starts_with($posCode, 'KANIT') || str_contains($posCode, 'KEPSEK') || str_contains($posCode, 'KEPALA'); ?>
+    <div class="alert alert-info" style="margin-bottom: 20px; border-left: 4px solid #0284c7; font-size: 13px; line-height: 1.55;">
+        <div style="display: flex; align-items: flex-start; gap: 10px;">
+            <i class="fa-solid fa-diagram-project" style="margin-top: 3px; color: #0284c7;"></i>
+            <div>
+                <strong>Informasi Penugasan Lintas Unit (1 Rapor AKFI Unit Induk):</strong>
+                Pegawai ini juga bertugas lintas unit sebagai:
+                <?php foreach ($crossUnitAssignments as $ca): ?>
+                    <span class="badge badge-info" style="margin: 2px 4px 2px 0;">
+                        <?= SecurityHelper::escape($ca['role_display']) ?> — <?= SecurityHelper::escape($ca['unit_code'] ?: $ca['unit_name']) ?>
+                    </span>
+                <?php endforeach; ?>
+                <div style="margin-top: 4px; color: #334155;">
+                    <?php if ($isKsPos): ?>
+                        Penilaian tetap menggunakan <strong>1 Rapor AKFI Kepala Sekolah Unit Induk</strong>; tugas mengajar di unit lain bersifat bantuan operasional di luar KPI Kepala Sekolah.
+                    <?php else: ?>
+                        Data Bagian A (rata-rata nilai KKM, skor supervisi, perangkat ajar, &amp; halaqah) sudah terakumulasi otomatis lintas unit, sedangkan penilaian Sikap (Bagian B) &amp; Absensi (Bagian C) tetap disahkan oleh Atasan Unit Induk.
+                    <?php endif; ?>
+                </div>
+            </div>
+        </div>
+    </div>
+<?php endif; ?>
+
 <div class="form-layout-grid">
     <!-- KOLOM KIRI: FORMULIR PENILAIAN -->
     <div>

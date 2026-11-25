@@ -119,22 +119,19 @@ class Auth {
         // Session Regeneration (Hardening Sesi)
         session_regenerate_id(true);
 
-        // Ambil roles user
-        $roles = Database::fetchAll(
-            "SELECT r.*, ur.is_primary FROM roles r 
-             JOIN user_roles ur ON r.id = ur.role_id 
-             WHERE ur.user_id = ? ORDER BY ur.is_primary DESC, r.id ASC",
-            [$user['id']]
-        );
+        // Ambil data pegawai bila ada (untuk unit_id default / homebase)
+        $employee = Database::fetch("SELECT * FROM employees WHERE user_id = ? AND is_deleted = 0", [$user['id']]);
+        // Ambil data siswa bila ada
+        $student = Database::fetch("SELECT * FROM students WHERE student_user_id = ?", [$user['id']]);
+        $homebaseUnitId = $user['unit_id'] ?? ($employee['unit_id'] ?? ($student['unit_id'] ?? null));
+        $homebaseUnitId = $homebaseUnitId !== null ? (int)$homebaseUnitId : null;
+
+        // Ambil roles user lengkap dengan konteks unit (homebase & lintas unit)
+        $roles = self::fetchUserRolesWithUnits((int)$user['id'], $homebaseUnitId);
 
         if (empty($roles)) {
             return ['success' => false, 'message' => 'Akun Anda belum memiliki peran (role) yang ditugaskan.'];
         }
-
-        // Ambil data pegawai bila ada (untuk unit_id default)
-        $employee = Database::fetch("SELECT * FROM employees WHERE user_id = ? AND is_deleted = 0", [$user['id']]);
-        // Ambil data siswa bila ada
-        $student = Database::fetch("SELECT * FROM students WHERE student_user_id = ?", [$user['id']]);
 
         // Tentukan Tahun Ajaran Aktif
         $activeTa = Database::fetch("SELECT * FROM academic_years WHERE is_active = 1 LIMIT 1");
@@ -157,11 +154,9 @@ class Auth {
         $_SESSION['academic_year_only_name'] = $activeTa ? $activeTa['name'] : '2027/2028';
         $_SESSION['academic_year_semester'] = $activeTa ? $activeTa['semester'] : 'Ganjil';
 
-        $primaryRole = $roles[0]['name'] ?? '';
-        $isYayasanRole = in_array($primaryRole, ['operator_yayasan', 'direktur_pendidikan', 'deputi_pendidikan', 'ketua_yayasan', 'pembina_yayasan'], true);
-        $_SESSION['unit_id'] = $isYayasanRole ? null : ($user['unit_id'] ?? ($employee['unit_id'] ?? ($student['unit_id'] ?? null)));
+        $_SESSION['unit_id'] = $roles[0]['effective_unit_id'] ?? null;
 
-        AuditLog::log('LOGIN_SUCCESS', 'users', $user['id'], null, ['active_role' => $roles[0]['name']]);
+        AuditLog::log('LOGIN_SUCCESS', 'users', $user['id'], null, ['active_role' => $roles[0]['name'], 'unit_id' => $_SESSION['unit_id']]);
 
         return [
             'success'               => true,
@@ -170,28 +165,114 @@ class Auth {
         ];
     }
 
-    public static function switchRole(int $roleId): bool {
+    /**
+     * Ambil seluruh peran milik user lengkap dengan konteks Unit Induk vs Lintas Unit.
+     */
+    private static function fetchUserRolesWithUnits(int $userId, ?int $homebaseUnitId): array {
+        try {
+            if (class_exists('\App\Controllers\MasterController')) {
+                \App\Controllers\MasterController::ensureUserRolesUnitColumn();
+            }
+            $rows = Database::fetchAll(
+                "SELECT r.*, ur.is_primary, COALESCE(ur.unit_id, 0) as role_unit_id,
+                        u.name as role_unit_name, u.code as role_unit_code
+                 FROM roles r
+                 JOIN user_roles ur ON r.id = ur.role_id
+                 LEFT JOIN units u ON ur.unit_id = u.id
+                 WHERE ur.user_id = ?
+                 ORDER BY ur.is_primary DESC, COALESCE(ur.unit_id, 0) ASC, r.id ASC",
+                [$userId]
+            );
+        } catch (\Throwable $e) {
+            $rows = Database::fetchAll(
+                "SELECT r.*, ur.is_primary, 0 as role_unit_id, NULL as role_unit_name, NULL as role_unit_code
+                 FROM roles r
+                 JOIN user_roles ur ON r.id = ur.role_id
+                 WHERE ur.user_id = ?
+                 ORDER BY ur.is_primary DESC, r.id ASC",
+                [$userId]
+            );
+        }
+
+        $homeUnit = null;
+        if ($homebaseUnitId !== null && $homebaseUnitId > 0) {
+            $homeUnit = Database::fetch("SELECT id, code, name FROM units WHERE id = ?", [$homebaseUnitId]);
+        }
+
+        $yayasanRoles = [
+            'operator_yayasan', 'direktur_pendidikan', 'deputi_pendidikan',
+            'hrd', 'direktur_pengadaan', 'direktur_sarpras',
+            'ketua_yayasan', 'pembina_yayasan'
+        ];
+
+        $result = [];
+        foreach ($rows as $r) {
+            $rUnitId = (int)($r['role_unit_id'] ?? 0);
+            $isYayasan = in_array($r['name'], $yayasanRoles, true);
+            $effectiveUnitId = $isYayasan ? null : ($rUnitId > 0 ? $rUnitId : $homebaseUnitId);
+            $effectiveUnitCode = '';
+            $effectiveUnitName = '';
+
+            if (!$isYayasan) {
+                if ($rUnitId > 0 && !empty($r['role_unit_name'])) {
+                    $effectiveUnitCode = (string)($r['role_unit_code'] ?? '');
+                    $effectiveUnitName = (string)($r['role_unit_name'] ?? '');
+                } elseif ($homeUnit) {
+                    $effectiveUnitCode = (string)($homeUnit['code'] ?? '');
+                    $effectiveUnitName = (string)($homeUnit['name'] ?? '');
+                }
+            }
+
+            $r['role_unit_id'] = $rUnitId;
+            $r['is_yayasan_role'] = $isYayasan;
+            $r['effective_unit_id'] = $effectiveUnitId;
+            $r['effective_unit_code'] = $effectiveUnitCode;
+            $r['effective_unit_name'] = $effectiveUnitName;
+            $r['is_cross_unit'] = (!$isYayasan && $rUnitId > 0 && $homebaseUnitId && $rUnitId !== $homebaseUnitId);
+            $r['role_key'] = $r['id'] . ':' . $rUnitId;
+            $result[] = $r;
+        }
+
+        return $result;
+    }
+
+    public static function switchRole(int $roleId, ?int $roleUnitId = null): bool {
         self::startSession();
         if (empty($_SESSION['roles'])) {
             return false;
         }
 
+        $matched = null;
         foreach ($_SESSION['roles'] as $r) {
             if ((int)$r['id'] === $roleId) {
-                $_SESSION['active_role'] = $r;
-                $isYayasan = in_array($r['name'], ['operator_yayasan', 'direktur_pendidikan', 'deputi_pendidikan', 'ketua_yayasan', 'pembina_yayasan'], true);
-                if ($isYayasan) {
-                    $_SESSION['unit_id'] = null;
-                } else {
-                    $u = Database::fetch("SELECT unit_id FROM users WHERE id = ?", [$_SESSION['user_id']]);
-                    $emp = Database::fetch("SELECT unit_id FROM employees WHERE user_id = ? AND is_deleted = 0", [$_SESSION['user_id']]);
-                    $std = Database::fetch("SELECT unit_id FROM students WHERE student_user_id = ?", [$_SESSION['user_id']]);
-                    $_SESSION['unit_id'] = $u['unit_id'] ?? ($emp['unit_id'] ?? ($std['unit_id'] ?? null));
+                if ($roleUnitId === null || (int)($r['role_unit_id'] ?? 0) === $roleUnitId) {
+                    $matched = $r;
+                    break;
                 }
-                session_regenerate_id(true);
-                AuditLog::log('SWITCH_ROLE', 'roles', $roleId, null, ['new_role' => $r['name']]);
-                return true;
+                if ($matched === null) {
+                    $matched = $r;
+                }
             }
+        }
+
+        if ($matched) {
+            $_SESSION['active_role'] = $matched;
+            if (!empty($matched['is_yayasan_role']) || in_array($matched['name'], ['operator_yayasan', 'direktur_pendidikan', 'deputi_pendidikan', 'ketua_yayasan', 'pembina_yayasan'], true)) {
+                $_SESSION['unit_id'] = null;
+            } elseif (array_key_exists('effective_unit_id', $matched) && $matched['effective_unit_id'] !== null) {
+                $_SESSION['unit_id'] = (int)$matched['effective_unit_id'];
+            } else {
+                $u = Database::fetch("SELECT unit_id FROM users WHERE id = ?", [$_SESSION['user_id']]);
+                $emp = Database::fetch("SELECT unit_id FROM employees WHERE user_id = ? AND is_deleted = 0", [$_SESSION['user_id']]);
+                $std = Database::fetch("SELECT unit_id FROM students WHERE student_user_id = ?", [$_SESSION['user_id']]);
+                $_SESSION['unit_id'] = $u['unit_id'] ?? ($emp['unit_id'] ?? ($std['unit_id'] ?? null));
+            }
+            session_regenerate_id(true);
+            AuditLog::log('SWITCH_ROLE', 'roles', $roleId, null, [
+                'new_role' => $matched['name'],
+                'unit_id'  => $_SESSION['unit_id']
+            ]);
+            return true;
         }
         return false;
     }
@@ -576,13 +657,14 @@ class Auth {
             return ['success' => false, 'message' => 'Pengguna target tidak ditemukan atau sedang dinonaktifkan.'];
         }
 
-        // Ambil peran user target
-        $roles = Database::fetchAll(
-            "SELECT r.*, ur.is_primary FROM roles r 
-             JOIN user_roles ur ON r.id = ur.role_id 
-             WHERE ur.user_id = ? ORDER BY ur.is_primary DESC, r.id ASC",
-            [$targetUser['id']]
-        );
+        // Ambil data pegawai/siswa untuk unit_id (homebase)
+        $employee = Database::fetch("SELECT * FROM employees WHERE user_id = ? AND is_deleted = 0", [$targetUser['id']]);
+        $student = Database::fetch("SELECT * FROM students WHERE student_user_id = ?", [$targetUser['id']]);
+        $homebaseUnitId = $targetUser['unit_id'] ?? ($employee['unit_id'] ?? ($student['unit_id'] ?? null));
+        $homebaseUnitId = $homebaseUnitId !== null ? (int)$homebaseUnitId : null;
+
+        // Ambil peran user target lengkap dengan konteks unit
+        $roles = self::fetchUserRolesWithUnits((int)$targetUser['id'], $homebaseUnitId);
 
         if (empty($roles)) {
             return ['success' => false, 'message' => 'Pengguna target belum memiliki peran (role) yang ditugaskan.'];
@@ -596,10 +678,6 @@ class Auth {
             $_SESSION['impersonator_unit_id'] = $_SESSION['unit_id'] ?? null;
         }
 
-        // Ambil data pegawai/siswa untuk unit_id
-        $employee = Database::fetch("SELECT * FROM employees WHERE user_id = ? AND is_deleted = 0", [$targetUser['id']]);
-        $student = Database::fetch("SELECT * FROM students WHERE student_user_id = ?", [$targetUser['id']]);
-
         // Alihkan sesi ke user target
         $_SESSION['user_id'] = (int)$targetUser['id'];
         $_SESSION['user_username'] = $targetUser['username'];
@@ -609,10 +687,7 @@ class Auth {
         $_SESSION['roles'] = $roles;
         $_SESSION['active_role'] = $roles[0];
         $_SESSION['last_activity'] = time();
-
-        $primaryRole = $roles[0]['name'] ?? '';
-        $isYayasanRole = in_array($primaryRole, ['operator_yayasan', 'direktur_pendidikan', 'deputi_pendidikan', 'ketua_yayasan', 'pembina_yayasan'], true);
-        $_SESSION['unit_id'] = $isYayasanRole ? null : ($targetUser['unit_id'] ?? ($employee['unit_id'] ?? ($student['unit_id'] ?? null)));
+        $_SESSION['unit_id'] = $roles[0]['effective_unit_id'] ?? null;
 
         session_regenerate_id(true);
 
@@ -645,12 +720,9 @@ class Auth {
             return ['success' => false, 'message' => 'Data pengguna asal tidak ditemukan di database.'];
         }
 
-        $roles = Database::fetchAll(
-            "SELECT r.*, ur.is_primary FROM roles r 
-             JOIN user_roles ur ON r.id = ur.role_id 
-             WHERE ur.user_id = ? ORDER BY ur.is_primary DESC, r.id ASC",
-            [$origUserId]
-        );
+        $origEmp = Database::fetch("SELECT unit_id FROM employees WHERE user_id = ? AND is_deleted = 0", [$origUserId]);
+        $origHomeUnit = $origUser['unit_id'] ?? ($origEmp['unit_id'] ?? null);
+        $roles = self::fetchUserRolesWithUnits($origUserId, $origHomeUnit !== null ? (int)$origHomeUnit : null);
 
         $opRole = null;
         foreach ($roles as $r) {

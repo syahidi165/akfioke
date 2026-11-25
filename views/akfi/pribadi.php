@@ -76,6 +76,31 @@ $badgeGrade = match($grade) {
     </div>
 </div>
 
+<?php if (!empty($crossUnitAssignments)): ?>
+    <?php $isKsTpl = str_contains(strtoupper($assessment['position_name'] ?? ''), 'KEPALA'); ?>
+    <div class="alert alert-info" style="margin-bottom: 20px; border-left: 4px solid #0284c7; font-size: 13px; line-height: 1.55;">
+        <div style="display: flex; align-items: flex-start; gap: 10px;">
+            <i class="fa-solid fa-diagram-project" style="margin-top: 3px; color: #0284c7;"></i>
+            <div>
+                <strong>Penugasan Lintas Unit Aktif (Kebijakan 1 Rapor AKFI):</strong>
+                Anda tercatat memiliki tugas tambahan lintas unit:
+                <?php foreach ($crossUnitAssignments as $ca): ?>
+                    <span class="badge badge-info" style="margin: 2px 4px 2px 0;">
+                        <?= SecurityHelper::escape($ca['role_display']) ?> — <?= SecurityHelper::escape($ca['unit_code'] ?: $ca['unit_name']) ?>
+                    </span>
+                <?php endforeach; ?>
+                <div style="margin-top: 4px; color: #334155;">
+                    <?php if ($isKsTpl): ?>
+                        Rapor AKFI Anda tetap menggunakan <strong>1 rapor tunggal Kepala Sekolah Unit Induk</strong> (KPI kepemimpinan unit induk; penugasan mengajar di unit lain bersifat bantuan operasional).
+                    <?php else: ?>
+                        Rapor AKFI Anda tetap dinilai dalam <strong>1 rapor tunggal Unit Induk</strong>, dengan capaian mengajar, nilai KKM, supervisi kelas, administrasi, dan halaqah dari seluruh unit terakumulasi otomatis ke Bagian A.
+                    <?php endif; ?>
+                </div>
+            </div>
+        </div>
+    </div>
+<?php endif; ?>
+
 <!-- 5 STAT CARDS (STATS-GRID) -->
 <div class="stats-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px;">
     <!-- Stat 1: Status Alur -->

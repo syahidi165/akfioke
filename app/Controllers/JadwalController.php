@@ -87,13 +87,18 @@ class JadwalController extends Controller {
             [$unitId]
         );
 
-        // Ambil Semua Guru di Unit Ini
+        // Ambil Semua Guru di Unit Ini (termasuk penugasan lintas unit)
+        \App\Controllers\MasterController::ensureUserRolesUnitColumn();
         $teachers = Database::fetchAll(
-            "SELECT id, nipy, nama, level_posisi 
-             FROM employees 
-             WHERE unit_id = ? AND is_deleted = 0 AND status = 'Aktif' 
-             ORDER BY nama ASC",
-            [$unitId]
+            "SELECT e.id, e.nipy, e.nama, e.level_posisi 
+             FROM employees e
+             WHERE e.is_deleted = 0 AND e.status = 'Aktif'
+               AND (
+                   e.unit_id = ?
+                   OR EXISTS (SELECT 1 FROM user_roles urx WHERE urx.user_id = e.user_id AND urx.unit_id = ?)
+               )
+             ORDER BY e.nama ASC",
+            [$unitId, $unitId]
         );
 
         // Ambil Khusus Guru Tahfidz di Unit Ini (untuk selector halaqah & filter radar)
@@ -105,10 +110,14 @@ class JadwalController extends Controller {
              LEFT JOIN users u ON e.user_id = u.id 
              LEFT JOIN user_roles ur ON u.id = ur.user_id 
              LEFT JOIN roles r ON ur.role_id = r.id 
-             WHERE e.unit_id = ? AND e.is_deleted = 0 AND e.status = 'Aktif' 
+             WHERE e.is_deleted = 0 AND e.status = 'Aktif'
+               AND (
+                   e.unit_id = ?
+                   OR EXISTS (SELECT 1 FROM user_roles urx WHERE urx.user_id = e.user_id AND urx.unit_id = ?)
+               )
                AND (e.level_posisi LIKE '%Tahfidz%' OR s.type IN ('Tahfidz', 'Tahsin') OR r.name IN ('guru_tahfidz', 'koor_tahfidz'))
              ORDER BY e.nama ASC",
-            [$unitId]
+            [$unitId, $unitId]
         );
         // Fallback jika belum ada mapping khusus, gunakan semua guru
         if (empty($tahfidzTeachers)) {
@@ -601,6 +610,7 @@ class JadwalController extends Controller {
         $isTahfidzOnly = !empty($_GET['is_tahfidz_only']);
 
         // Ambil daftar guru (bisa difilter khusus Guru Tahfidz jika radar dijalankan dari konteks tahfidz)
+        \App\Controllers\MasterController::ensureUserRolesUnitColumn();
         if ($isTahfidzOnly) {
             $allTeachers = Database::fetchAll(
                 "SELECT DISTINCT e.id, e.nipy, e.nama, e.level_posisi 
@@ -610,18 +620,26 @@ class JadwalController extends Controller {
                  LEFT JOIN users u ON e.user_id = u.id 
                  LEFT JOIN user_roles ur ON u.id = ur.user_id 
                  LEFT JOIN roles r ON ur.role_id = r.id 
-                 WHERE e.unit_id = ? AND e.is_deleted = 0 AND e.status = 'Aktif' 
+                 WHERE e.is_deleted = 0 AND e.status = 'Aktif'
+                   AND (
+                       e.unit_id = ?
+                       OR EXISTS (SELECT 1 FROM user_roles urx WHERE urx.user_id = e.user_id AND urx.unit_id = ?)
+                   )
                    AND (e.level_posisi LIKE '%Tahfidz%' OR s.type IN ('Tahfidz', 'Tahsin') OR r.name IN ('guru_tahfidz', 'koor_tahfidz'))
                  ORDER BY e.nama ASC",
-                [$unitId]
+                [$unitId, $unitId]
             );
         } else {
             $allTeachers = Database::fetchAll(
-                "SELECT id, nipy, nama, level_posisi 
-                 FROM employees 
-                 WHERE unit_id = ? AND is_deleted = 0 AND status = 'Aktif' 
-                 ORDER BY nama ASC",
-                [$unitId]
+                "SELECT e.id, e.nipy, e.nama, e.level_posisi 
+                 FROM employees e
+                 WHERE e.is_deleted = 0 AND e.status = 'Aktif'
+                   AND (
+                       e.unit_id = ?
+                       OR EXISTS (SELECT 1 FROM user_roles urx WHERE urx.user_id = e.user_id AND urx.unit_id = ?)
+                   )
+                 ORDER BY e.nama ASC",
+                [$unitId, $unitId]
             );
         }
 

@@ -235,4 +235,12 @@ try {
     echo "[SKIP] Migrasi RAPBS/Indikator Deputi: " . $e->getMessage() . "\n";
 }
 
+// 12. Migrasi Penugasan Peran Lintas Unit (user_roles.unit_id)
+try {
+    require_once __DIR__ . '/migrate_cross_unit_roles.php';
+    echo "[OK] Migrasi user_roles.unit_id selesai.\n";
+} catch (\Throwable $e) {
+    echo "[SKIP] Migrasi Lintas Unit: " . $e->getMessage() . "\n";
+}
+
 echo "=== MIGRASI SELESAI DENGAN SUKSES! ===\n";

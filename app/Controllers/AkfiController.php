@@ -79,15 +79,37 @@ class AkfiController extends Controller {
 
         $savedItems = !empty($assessment['items_json']) ? json_decode($assessment['items_json'], true) : [];
         $autoData = $this->collectAutoData($assessment);
+        $crossUnitAssignments = $this->getCrossUnitAssignments($userId, (int)($emp['unit_id'] ?? $assessment['unit_id'] ?? 0));
 
         $this->view('akfi/pribadi', [
-            'pageTitle'  => 'Penilaian Kinerja AKFI Pribadi',
-            'employee'   => $emp,
-            'assessment' => $assessment,
-            'items'      => $items,
-            'savedItems' => $savedItems,
-            'autoData'   => $autoData
+            'pageTitle'            => 'Penilaian Kinerja AKFI Pribadi',
+            'employee'             => $emp,
+            'assessment'           => $assessment,
+            'items'                => $items,
+            'savedItems'           => $savedItems,
+            'autoData'             => $autoData,
+            'crossUnitAssignments' => $crossUnitAssignments
         ]);
+    }
+
+    private function getCrossUnitAssignments(int $userId, int $homebaseUnitId): array {
+        if ($userId <= 0) {
+            return [];
+        }
+        try {
+            \App\Controllers\MasterController::ensureUserRolesUnitColumn();
+            return Database::fetchAll(
+                "SELECT u.code as unit_code, u.name as unit_name, r.display_name as role_display, r.name as role_name
+                 FROM user_roles ur
+                 JOIN units u ON ur.unit_id = u.id
+                 JOIN roles r ON ur.role_id = r.id
+                 WHERE ur.user_id = ? AND ur.unit_id > 0 AND ur.unit_id != ?
+                 ORDER BY u.id ASC, r.display_name ASC",
+                [$userId, $homebaseUnitId]
+            );
+        } catch (\Throwable $e) {
+            return [];
+        }
     }
 
     public function selfSubmit(): void {
@@ -329,13 +351,15 @@ class AkfiController extends Controller {
 
         // Auto-Data Collector: kalkulasi otomatis data riil dari sistem
         $autoData = $this->collectAutoData($assessment);
+        $crossUnitAssignments = $this->getCrossUnitAssignments((int)($assessment['user_id'] ?? 0), (int)($assessment['emp_unit_id'] ?? $assessment['unit_id'] ?? 0));
 
         $this->view('akfi/form_penilaian', [
-            'pageTitle'  => 'Form Penilaian Kinerja AKFI: ' . $assessment['nama'],
-            'assessment' => $assessment,
-            'items'      => $items,
-            'savedItems' => $savedItems,
-            'autoData'   => $autoData
+            'pageTitle'            => 'Form Penilaian Kinerja AKFI: ' . $assessment['nama'],
+            'assessment'           => $assessment,
+            'items'                => $items,
+            'savedItems'           => $savedItems,
+            'autoData'             => $autoData,
+            'crossUnitAssignments' => $crossUnitAssignments
         ]);
     }
 

@@ -61,6 +61,23 @@ if (!$isYayasanOfficer && !empty($currentUnit['logo_path'])) {
         </form>
 
         <!-- Role Switcher (Pengalih Role Aktif) -->
+        <?php
+        $hasMultiUnitRole = false;
+        $seenUnitLabels = [];
+        foreach ($userRoles as $chkR) {
+            if (!empty($chkR['is_cross_unit'])) {
+                $hasMultiUnitRole = true;
+                break;
+            }
+            if (!empty($chkR['effective_unit_id'])) {
+                $seenUnitLabels[(int)$chkR['effective_unit_id']] = true;
+            }
+        }
+        if (count($seenUnitLabels) > 1) {
+            $hasMultiUnitRole = true;
+        }
+        $activeRoleUnitId = (int)($activeRole['role_unit_id'] ?? 0);
+        ?>
         <?php if (count($userRoles) > 1): ?>
             <form method="POST" action="<?= $baseUrl ?>/switch-role" class="header-switch-form">
                 <?= $csrfField ?>
@@ -69,8 +86,19 @@ if (!$isYayasanOfficer && !empty($currentUnit['logo_path'])) {
                 </label>
                 <select name="role_id" id="roleSelectDesktop" class="header-select header-select-role" onchange="this.form.submit()">
                     <?php foreach ($userRoles as $r): ?>
-                        <option value="<?= $r['id'] ?>" <?= ((int)$r['id'] === (int)$activeRole['id']) ? 'selected' : '' ?>>
-                            <?= SecurityHelper::escape($r['display_name']) ?>
+                        <?php
+                        $rUnitId = (int)($r['role_unit_id'] ?? 0);
+                        $isSelected = ((int)$r['id'] === (int)$activeRole['id'] && $rUnitId === $activeRoleUnitId);
+                        $unitBadgeTxt = '';
+                        if ($hasMultiUnitRole && empty($r['is_yayasan_role'])) {
+                            $uLabel = $r['effective_unit_code'] ?: ($r['effective_unit_name'] ?? '');
+                            if (!empty($uLabel)) {
+                                $unitBadgeTxt = ' — ' . $uLabel . (!empty($r['is_cross_unit']) ? ' (Lintas Unit)' : ' (Induk)');
+                            }
+                        }
+                        ?>
+                        <option value="<?= (int)$r['id'] ?>:<?= $rUnitId ?>" <?= $isSelected ? 'selected' : '' ?>>
+                            <?= SecurityHelper::escape($r['display_name'] . $unitBadgeTxt) ?>
                         </option>
                     <?php endforeach; ?>
                 </select>
@@ -202,8 +230,19 @@ if (!$isYayasanOfficer && !empty($currentUnit['logo_path'])) {
                 <i class="fa-solid fa-repeat mobile-ctx-icon"></i>
                 <select name="role_id" class="mobile-ctx-select" onchange="this.form.submit()">
                     <?php foreach ($userRoles as $r): ?>
-                        <option value="<?= $r['id'] ?>" <?= ((int)$r['id'] === (int)$activeRole['id']) ? 'selected' : '' ?>>
-                            <?= SecurityHelper::escape($r['display_name']) ?>
+                        <?php
+                        $rUnitId = (int)($r['role_unit_id'] ?? 0);
+                        $isSelected = ((int)$r['id'] === (int)$activeRole['id'] && $rUnitId === $activeRoleUnitId);
+                        $unitBadgeTxt = '';
+                        if ($hasMultiUnitRole && empty($r['is_yayasan_role'])) {
+                            $uLabel = $r['effective_unit_code'] ?: ($r['effective_unit_name'] ?? '');
+                            if (!empty($uLabel)) {
+                                $unitBadgeTxt = ' — ' . $uLabel . (!empty($r['is_cross_unit']) ? ' (Lintas)' : '');
+                            }
+                        }
+                        ?>
+                        <option value="<?= (int)$r['id'] ?>:<?= $rUnitId ?>" <?= $isSelected ? 'selected' : '' ?>>
+                            <?= SecurityHelper::escape($r['display_name'] . $unitBadgeTxt) ?>
                         </option>
                     <?php endforeach; ?>
                 </select>

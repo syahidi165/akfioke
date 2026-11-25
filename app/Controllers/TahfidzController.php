@@ -672,7 +672,18 @@ class TahfidzController extends Controller {
             ];
         }
 
-        $tutors = Database::fetchAll("SELECT id, nama FROM employees WHERE unit_id = ? AND is_deleted = 0 ORDER BY nama ASC", [$unitId]);
+        \App\Controllers\MasterController::ensureUserRolesUnitColumn();
+        $tutors = Database::fetchAll(
+            "SELECT e.id, e.nama 
+             FROM employees e 
+             WHERE e.is_deleted = 0 
+               AND (
+                   e.unit_id = ? 
+                   OR EXISTS (SELECT 1 FROM user_roles urx WHERE urx.user_id = e.user_id AND urx.unit_id = ?)
+               )
+             ORDER BY e.nama ASC", 
+            [$unitId, $unitId]
+        );
         $unassignedStudents = Database::fetchAll(
             "SELECT s.*, c.name as class_name FROM students s 
              LEFT JOIN class_students cs ON s.id = cs.student_id AND cs.status = 'Aktif' 

@@ -96,6 +96,12 @@ if (!function_exists('isNavActive')) {
                 </a>
             </div>
             <div class="nav-item">
+                <a href="<?= $baseUrl ?>/master/cross-unit" class="nav-link <?= isNavActive('/master/cross-unit', $currentPath) ?>">
+                    <i class="fa-solid fa-diagram-project"></i>
+                    <span class="nav-text">Penugasan Lintas Unit</span>
+                </a>
+            </div>
+            <div class="nav-item">
                 <a href="<?= $baseUrl ?>/master/turnover" class="nav-link <?= isNavActive('/master/turnover', $currentPath) ?>">
                     <i class="fa-solid fa-people-arrows"></i>
                     <span class="nav-text">Mutasi & Turnover</span>

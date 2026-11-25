@@ -158,7 +158,12 @@ foreach ($assignments as $asg) {
                                 <tr class="asg-row">
                                     <td style="text-align: center;"><?= $idx + 1 ?></td>
                                     <td>
-                                        <div style="font-weight: 600; color: var(--text-main, #0f172a);"><?= SecurityHelper::escape($asg['teacher_name']) ?></div>
+                                        <div style="font-weight: 600; color: var(--text-main, #0f172a);">
+                                            <?= SecurityHelper::escape($asg['teacher_name']) ?>
+                                            <?php if (!empty($asg['emp_unit_id']) && (int)$asg['emp_unit_id'] !== (int)$unitId): ?>
+                                                <span class="badge badge-info" style="font-size: 10px; margin-left: 4px;">Lintas Unit (<?= SecurityHelper::escape($asg['homebase_unit_code'] ?: 'Unit Lain') ?>)</span>
+                                            <?php endif; ?>
+                                        </div>
                                         <div style="font-size: 0.8rem; color: var(--text-muted, #64748b);">
                                             NIPY: <?= SecurityHelper::escape($asg['teacher_nipy'] ?: '-') ?> &bull; <?= SecurityHelper::escape($asg['teacher_position'] ?: 'Guru') ?>
                                         </div>
@@ -374,7 +379,10 @@ foreach ($assignments as $asg) {
                     <select name="employee_id" class="form-control" required>
                         <option value="">-- Pilih Guru Pengampu --</option>
                         <?php foreach ($teachers as $t): ?>
-                            <option value="<?= $t['id'] ?>"><?= SecurityHelper::escape($t['nama']) ?> (<?= SecurityHelper::escape($t['position']) ?>)</option>
+                            <?php $isCross = !empty($t['emp_unit_id']) && (int)$t['emp_unit_id'] !== (int)$unitId; ?>
+                            <option value="<?= $t['id'] ?>">
+                                <?= SecurityHelper::escape($t['nama']) ?> (<?= SecurityHelper::escape($t['position'] ?: 'Guru') ?>)<?= $isCross ? ' [Lintas Unit: ' . SecurityHelper::escape($t['homebase_unit_code'] ?: 'Lainnya') . ']' : '' ?>
+                            </option>
                         <?php endforeach; ?>
                     </select>
                 </div>

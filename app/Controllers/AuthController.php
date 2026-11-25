@@ -113,11 +113,18 @@ class AuthController extends Controller {
 
     public function switchRole(): void {
         Auth::requireAuth();
-        $roleId = (int)($_POST['role_id'] ?? 0);
-        if ($roleId > 0) {
-            Auth::switchRole($roleId);
+        $rawRole = trim((string)($_POST['role_id'] ?? ''));
+        if (strpos($rawRole, ':') !== false) {
+            [$rId, $rUnitId] = array_pad(explode(':', $rawRole, 2), 2, '0');
+            $roleId = (int)$rId;
+            $roleUnitId = (int)$rUnitId;
+        } else {
+            $roleId = (int)$rawRole;
+            $roleUnitId = null;
         }
-        $referer = $_SERVER['HTTP_REFERER'] ?? (Auth::baseUrl() . '/dashboard');
+        if ($roleId > 0) {
+            Auth::switchRole($roleId, $roleUnitId);
+        }
         $this->redirect(Auth::baseUrl() . '/dashboard');
     }
 

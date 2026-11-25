@@ -4023,28 +4023,40 @@ class MasterController extends Controller {
 
     public function subjects(): void {
         $this->requireRole(['operator_sekolah', 'operator_yayasan']);
+        self::ensureUserRolesUnitColumn();
         $unitId = Auth::hasRole('operator_sekolah') ? Auth::unitId() : (int)($_GET['unit_id'] ?? Auth::unitId());
 
         $subjects = Database::fetchAll("SELECT * FROM subjects WHERE unit_id = ? ORDER BY type ASC, name ASC", [$unitId]);
         $teachers = Database::fetchAll(
-            "SELECT e.id, e.nama, e.level_posisi, e.position 
+            "SELECT e.id, e.nama, e.level_posisi, e.position, e.unit_id as emp_unit_id, eu.code as homebase_unit_code
              FROM employees e
+             LEFT JOIN units eu ON e.unit_id = eu.id
              LEFT JOIN users u ON e.user_id = u.id
              LEFT JOIN user_roles ur ON u.id = ur.user_id
              LEFT JOIN roles r ON ur.role_id = r.id
-             WHERE e.unit_id = ? AND e.is_deleted = 0 AND e.status = 'Aktif'
+             WHERE e.is_deleted = 0 AND e.status = 'Aktif'
+               AND (
+                   e.unit_id = ?
+                   OR EXISTS (
+                       SELECT 1 FROM user_roles urx
+                       WHERE urx.user_id = e.user_id AND urx.unit_id = ?
+                   )
+               )
                AND (
                    EXISTS (
                        SELECT 1 FROM user_roles ur2 
                        JOIN roles r2 ON ur2.role_id = r2.id 
-                       WHERE ur2.user_id = e.user_id AND r2.name IN (
-                           'walas', 'guru_kelas', 'guru_mapel', 'guru_diniyah', 'guru_tahfidz', 
-                           'guru_tk', 'guru_mapel_kbtk', 'guru_supervisor', 
-                           'waka_kurikulum', 'waka_kesiswaan', 'koor_tahfidz', 'tutor_siswa', 'tutor_sebaya'
-                       )
+                       WHERE ur2.user_id = e.user_id
+                         AND (ur2.unit_id = 0 OR ur2.unit_id IS NULL OR ur2.unit_id = ?)
+                         AND r2.name IN (
+                             'walas', 'guru_kelas', 'guru_mapel', 'guru_diniyah', 'guru_tahfidz', 
+                             'guru_tk', 'guru_mapel_kbtk', 'guru_supervisor', 
+                             'waka_kurikulum', 'waka_kesiswaan', 'koor_tahfidz', 'tutor_siswa', 'tutor_sebaya'
+                         )
                    )
                    OR (
-                       (e.position LIKE '%Guru%' OR e.level_posisi LIKE '%Guru%' 
+                       e.unit_id = ?
+                       AND (e.position LIKE '%Guru%' OR e.level_posisi LIKE '%Guru%' 
                         OR e.position LIKE '%Wali%' OR e.level_posisi LIKE '%Wali%' 
                         OR e.position LIKE '%Walas%' OR e.level_posisi LIKE '%Walas%' 
                         OR e.position LIKE '%Waka%' OR e.level_posisi LIKE '%Waka%' 
@@ -4054,20 +4066,22 @@ class MasterController extends Controller {
                        AND (e.position IS NULL OR e.position NOT IN ('Direktur Pendidikan', 'Deputi Direktur', 'Kepala Sekolah', 'Tata Usaha Keuangan', 'Cleaning Services', 'Security', 'Operator Sekolah'))
                    )
                )
-             GROUP BY e.id, e.nama, e.level_posisi, e.position
+             GROUP BY e.id, e.nama, e.level_posisi, e.position, e.unit_id, eu.code
              ORDER BY e.nama ASC", 
-            [$unitId]
+            [$unitId, $unitId, $unitId, $unitId]
         );
         $classes = Database::fetchAll("SELECT id, name FROM classes WHERE unit_id = ? AND academic_year_id = ? ORDER BY name ASC", [$unitId, Auth::academicYearId()]);
         
         $assignments = Database::fetchAll(
             "SELECT ts.id, ts.employee_id, ts.subject_id, ts.class_id, ts.academic_year_id,
                     e.nama as teacher_name, e.nipy as teacher_nipy, e.position as teacher_position,
+                    e.unit_id as emp_unit_id, eu.code as homebase_unit_code,
                     s.name as subject_name, s.code as subject_code, s.type as subject_type,
                     c.name as class_name
              FROM teacher_subjects ts
              JOIN subjects s ON ts.subject_id = s.id
-             JOIN employees e ON ts.employee_id = e.id AND e.unit_id = s.unit_id AND e.is_deleted = 0 AND e.status = 'Aktif'
+             JOIN employees e ON ts.employee_id = e.id AND e.is_deleted = 0 AND e.status = 'Aktif'
+             LEFT JOIN units eu ON e.unit_id = eu.id
              JOIN classes c ON ts.class_id = c.id
              WHERE s.unit_id = ? AND ts.academic_year_id = ?
              ORDER BY c.name ASC, s.name ASC, e.nama ASC",
@@ -4129,8 +4143,18 @@ class MasterController extends Controller {
         $taId = Auth::academicYearId();
 
         if ($employeeId && $subjectId && $classId) {
-            // Validasi isolasi unit: guru, mapel, dan kelas harus sama-sama berada di unit sekolah yang bersangkutan
-            $emp = Database::fetch("SELECT id, nama FROM employees WHERE id = ? AND unit_id = ? AND is_deleted = 0", [$employeeId, $unitId]);
+            self::ensureUserRolesUnitColumn();
+            // Validasi isolasi unit: guru berasal dari unit sekolah ini atau memiliki penugasan lintas unit ke unit ini
+            $emp = Database::fetch(
+                "SELECT e.id, e.nama 
+                 FROM employees e 
+                 WHERE e.id = ? AND e.is_deleted = 0 AND e.status = 'Aktif'
+                   AND (
+                       e.unit_id = ? 
+                       OR EXISTS (SELECT 1 FROM user_roles urx WHERE urx.user_id = e.user_id AND urx.unit_id = ?)
+                   )",
+                [$employeeId, $unitId, $unitId]
+            );
             $sub = Database::fetch("SELECT id, name FROM subjects WHERE id = ? AND unit_id = ?", [$subjectId, $unitId]);
             $cls = Database::fetch("SELECT id, name FROM classes WHERE id = ? AND unit_id = ?", [$classId, $unitId]);
 
@@ -4232,7 +4256,7 @@ class MasterController extends Controller {
                   LEFT JOIN employees e ON u.id = e.user_id 
                   LEFT JOIN units u_unit ON u.unit_id = u_unit.id
                   LEFT JOIN units e_unit ON e.unit_id = e_unit.id
-                  WHERE 1=1 ";
+                  WHERE COALESCE(ur.unit_id, 0) = 0 ";
         
         $params = [];
         if ($unitFilter !== null) {
@@ -4509,8 +4533,9 @@ class MasterController extends Controller {
             }
         }
 
-        // Cek apakah peran sudah dimiliki pengguna
-        $hasRole = Database::fetch("SELECT 1 FROM user_roles WHERE user_id = ? AND role_id = ?", [$userId, $roleId]);
+        self::ensureUserRolesUnitColumn();
+        // Cek apakah peran sudah dimiliki pengguna pada unit induk
+        $hasRole = Database::fetch("SELECT 1 FROM user_roles WHERE user_id = ? AND role_id = ? AND COALESCE(unit_id, 0) = 0", [$userId, $roleId]);
         if ($hasRole) {
             $this->setFlash('warning', "Pengguna telah memiliki peran '{$targetRole['display_name']}'.");
             $this->redirect(Auth::baseUrl() . '/users/school-accounts');
@@ -4522,7 +4547,7 @@ class MasterController extends Controller {
         $isPrimary = ($primaryCount === 0) ? 1 : 0;
 
         Database::execute(
-            "INSERT INTO user_roles (user_id, role_id, is_primary) VALUES (?, ?, ?) 
+            "INSERT INTO user_roles (user_id, role_id, unit_id, is_primary) VALUES (?, ?, 0, ?) 
              ON DUPLICATE KEY UPDATE is_primary = VALUES(is_primary)",
             [$userId, $roleId, $isPrimary]
         );
@@ -4574,7 +4599,7 @@ class MasterController extends Controller {
             return;
         }
 
-        Database::execute("DELETE FROM user_roles WHERE user_id = ? AND role_id = ?", [$userId, $roleId]);
+        Database::execute("DELETE FROM user_roles WHERE user_id = ? AND role_id = ? AND COALESCE(unit_id, 0) = 0", [$userId, $roleId]);
 
         $hasPrimary = Database::fetch("SELECT role_id FROM user_roles WHERE user_id = ? AND is_primary = 1", [$userId]);
         if (!$hasPrimary) {
@@ -5346,5 +5371,160 @@ class MasterController extends Controller {
         }
 
         $this->redirect(Auth::baseUrl() . '/settings/switch-permissions');
+    }
+
+    // --- 7D. PENUGASAN PERAN LINTAS UNIT (1 PEGAWAI = 1 RAPOR AKFI INDUK) ---
+    public static function ensureUserRolesUnitColumn(): void {
+        static $checked = false;
+        if ($checked) {
+            return;
+        }
+        $checked = true;
+
+        try {
+            $col = Database::fetch(
+                "SELECT COUNT(*) as c FROM information_schema.COLUMNS 
+                 WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'user_roles' AND COLUMN_NAME = 'unit_id'"
+            );
+            if ((int)($col['c'] ?? 0) === 0) {
+                $indexes = Database::fetchAll("SHOW INDEX FROM `user_roles`");
+                $idxNames = array_unique(array_column($indexes, 'Key_name'));
+                if (!in_array('idx_ur_user_id', $idxNames, true)) {
+                    Database::execute("ALTER TABLE `user_roles` ADD INDEX `idx_ur_user_id` (`user_id`)");
+                }
+                if (!in_array('idx_ur_role_id', $idxNames, true)) {
+                    Database::execute("ALTER TABLE `user_roles` ADD INDEX `idx_ur_role_id` (`role_id`)");
+                }
+                Database::execute("ALTER TABLE `user_roles` ADD COLUMN `unit_id` INT NOT NULL DEFAULT 0 AFTER `role_id`");
+                Database::execute("ALTER TABLE `user_roles` DROP PRIMARY KEY, ADD PRIMARY KEY (`user_id`, `role_id`, `unit_id`)");
+                Database::execute("ALTER TABLE `user_roles` ADD INDEX `idx_ur_unit_id` (`unit_id`)");
+            }
+        } catch (\Throwable $e) {
+            error_log('Gagal memastikan kolom user_roles.unit_id: ' . $e->getMessage());
+        }
+    }
+
+    public function crossUnitAssignments(): void {
+        $this->requireRole('operator_yayasan');
+        self::ensureUserRolesUnitColumn();
+
+        $allowedRoleNames = [
+            'guru_mapel', 'guru_diniyah', 'guru_tahfidz', 'guru_tk', 'guru_mapel_kbtk',
+            'walas', 'guru_supervisor', 'tutor_siswa', 'tutor_sebaya', 'koor_tahfidz',
+            'waka_kurikulum', 'waka_kesiswaan', 'panitia_lomba', 'tata_usaha'
+        ];
+        $inRoles = "'" . implode("','", $allowedRoleNames) . "'";
+
+        $assignments = Database::fetchAll("
+            SELECT ur.user_id, ur.role_id, ur.unit_id as target_unit_id,
+                   e.id as employee_id, e.nama, e.nipy, e.position, e.unit_id as homebase_unit_id,
+                   uh.code as homebase_code, uh.name as homebase_name,
+                   ut.code as target_code, ut.name as target_name,
+                   r.name as role_name, r.display_name as role_display
+            FROM user_roles ur
+            JOIN users u ON ur.user_id = u.id
+            JOIN employees e ON e.user_id = u.id AND e.is_deleted = 0
+            JOIN roles r ON ur.role_id = r.id
+            JOIN units ut ON ur.unit_id = ut.id
+            LEFT JOIN units uh ON e.unit_id = uh.id
+            WHERE ur.unit_id > 0 AND (e.unit_id IS NULL OR ur.unit_id != e.unit_id)
+            ORDER BY e.nama ASC, ut.id ASC, r.display_name ASC
+        ");
+
+        $employees = Database::fetchAll("
+            SELECT e.id, e.user_id, e.nama, e.nipy, e.level_posisi, e.position, e.unit_id,
+                   u_unit.code as unit_code, u_unit.name as unit_name
+            FROM employees e
+            JOIN users usr ON e.user_id = usr.id AND usr.is_active = 1
+            LEFT JOIN units u_unit ON e.unit_id = u_unit.id
+            WHERE e.is_deleted = 0 AND e.status = 'Aktif'
+            ORDER BY e.nama ASC
+        ");
+
+        $units = Database::fetchAll("SELECT id, code, name FROM units WHERE is_active = 1 AND deleted_at IS NULL ORDER BY id ASC");
+        $roles = Database::fetchAll("SELECT id, name, display_name FROM roles WHERE name IN ({$inRoles}) ORDER BY display_name ASC");
+
+        $this->view('master/cross_unit', [
+            'pageTitle'   => 'Penugasan Peran Lintas Unit',
+            'assignments' => $assignments,
+            'employees'   => $employees,
+            'units'       => $units,
+            'roles'       => $roles
+        ]);
+    }
+
+    public function saveCrossUnitAssignment(): void {
+        $this->requireRole('operator_yayasan');
+        self::ensureUserRolesUnitColumn();
+
+        $employeeId = (int)($_POST['employee_id'] ?? 0);
+        $targetUnitId = (int)($_POST['target_unit_id'] ?? 0);
+        $roleId = (int)($_POST['role_id'] ?? 0);
+
+        $emp = Database::fetch("SELECT id, user_id, nama, unit_id FROM employees WHERE id = ? AND is_deleted = 0", [$employeeId]);
+        $unit = Database::fetch("SELECT id, name, code FROM units WHERE id = ? AND is_active = 1 AND deleted_at IS NULL", [$targetUnitId]);
+        $role = Database::fetch("SELECT id, name, display_name FROM roles WHERE id = ?", [$roleId]);
+
+        $allowedRoleNames = [
+            'guru_mapel', 'guru_diniyah', 'guru_tahfidz', 'guru_tk', 'guru_mapel_kbtk',
+            'walas', 'guru_supervisor', 'tutor_siswa', 'tutor_sebaya', 'koor_tahfidz',
+            'waka_kurikulum', 'waka_kesiswaan', 'panitia_lomba', 'tata_usaha'
+        ];
+
+        if (!$emp || empty($emp['user_id']) || !$unit || !$role) {
+            $this->setFlash('danger', 'Data pegawai (yang memiliki akun login), unit tujuan, atau peran tidak valid.');
+            $this->redirect(Auth::baseUrl() . '/master/cross-unit');
+            return;
+        }
+
+        if (!in_array($role['name'], $allowedRoleNames, true)) {
+            $this->setFlash('danger', 'Peran yang dipilih tidak dapat ditugaskan sebagai peran lintas unit.');
+            $this->redirect(Auth::baseUrl() . '/master/cross-unit');
+            return;
+        }
+
+        if ((int)$emp['unit_id'] === $targetUnitId) {
+            $this->setFlash('warning', 'Unit tujuan sama dengan Unit Induk pegawai. Untuk peran di unit induk, gunakan menu Akun Operator Sekolah.');
+            $this->redirect(Auth::baseUrl() . '/master/cross-unit');
+            return;
+        }
+
+        Database::execute(
+            "INSERT INTO user_roles (user_id, role_id, unit_id, is_primary) VALUES (?, ?, ?, 0)
+             ON DUPLICATE KEY UPDATE is_primary = is_primary",
+            [(int)$emp['user_id'], $roleId, $targetUnitId]
+        );
+
+        AuditLog::log('ASSIGN_CROSS_UNIT_ROLE', 'user_roles', (int)$emp['user_id'], null, [
+            'employee_id'    => $employeeId,
+            'target_unit_id' => $targetUnitId,
+            'role_name'      => $role['name']
+        ]);
+
+        $this->setFlash('success', "Berhasil menugaskan {$emp['nama']} sebagai {$role['display_name']} di {$unit['name']} (Rapor AKFI tetap 1 pada Unit Induk).");
+        $this->redirect(Auth::baseUrl() . '/master/cross-unit');
+    }
+
+    public function deleteCrossUnitAssignment(): void {
+        $this->requireRole('operator_yayasan');
+        self::ensureUserRolesUnitColumn();
+
+        $userId = (int)($_POST['user_id'] ?? 0);
+        $roleId = (int)($_POST['role_id'] ?? 0);
+        $targetUnitId = (int)($_POST['target_unit_id'] ?? 0);
+
+        if ($userId > 0 && $roleId > 0 && $targetUnitId > 0) {
+            Database::execute(
+                "DELETE FROM user_roles WHERE user_id = ? AND role_id = ? AND unit_id = ? AND unit_id > 0",
+                [$userId, $roleId, $targetUnitId]
+            );
+            AuditLog::log('REVOKE_CROSS_UNIT_ROLE', 'user_roles', $userId, null, [
+                'role_id'        => $roleId,
+                'target_unit_id' => $targetUnitId
+            ]);
+            $this->setFlash('success', 'Penugasan lintas unit berhasil dicabut.');
+        }
+
+        $this->redirect(Auth::baseUrl() . '/master/cross-unit');
     }
 }

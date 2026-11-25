@@ -160,6 +160,9 @@ Router::post('/settings/app/save', [MasterController::class, 'saveAppSettings'])
 Router::get('/settings/switch-permissions', [MasterController::class, 'switchPermissions']);
 Router::post('/settings/switch-permissions/save', [MasterController::class, 'saveSwitchPermissions']);
 Router::post('/settings/switch-permissions/revoke', [MasterController::class, 'revokeSwitchPermissions']);
+Router::get('/master/cross-unit', [MasterController::class, 'crossUnitAssignments']);
+Router::post('/master/cross-unit/save', [MasterController::class, 'saveCrossUnitAssignment']);
+Router::post('/master/cross-unit/delete', [MasterController::class, 'deleteCrossUnitAssignment']);
 
 // 5. Administrasi Dokumen (Upload & Multi-Frequency Approval)
 Router::get('/administrasi/ks', [AdministrasiController::class, 'ksUploads']);
