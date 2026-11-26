@@ -88,10 +88,12 @@ class TagihanController extends Controller {
     private function resolveUnitSigner(int $unitId, string $roleName): array {
         if ($roleName === 'tata_usaha') {
             $emp = Database::fetch(
-                "SELECT e.nama, e.nipy, e.contact_phone as phone
+                "SELECT e.nama, e.nipy, e.contact_phone as phone,
+                        COALESCE(NULLIF(e.signature_path, ''), NULLIF(u.signature_path, '')) as signature_path
                  FROM employees e
                  JOIN user_roles ur ON e.user_id = ur.user_id
                  JOIN roles r ON ur.role_id = r.id
+                 LEFT JOIN users u ON e.user_id = u.id
                  WHERE e.is_deleted = 0 AND e.status = 'Aktif'
                    AND r.name = 'tata_usaha'
                    AND (e.unit_id = ? OR ur.unit_id = ?)
@@ -101,26 +103,32 @@ class TagihanController extends Controller {
             );
             if (!$emp) {
                 $emp = Database::fetch(
-                    "SELECT nama, nipy, contact_phone as phone FROM employees
-                     WHERE unit_id = ? AND is_deleted = 0 AND status = 'Aktif'
-                       AND (level_posisi LIKE '%Tata Usaha%' OR position LIKE '%Tata Usaha%')
-                     ORDER BY id ASC LIMIT 1",
+                    "SELECT e.nama, e.nipy, e.contact_phone as phone,
+                            COALESCE(NULLIF(e.signature_path, ''), NULLIF(u.signature_path, '')) as signature_path
+                     FROM employees e
+                     LEFT JOIN users u ON e.user_id = u.id
+                     WHERE e.unit_id = ? AND e.is_deleted = 0 AND e.status = 'Aktif'
+                       AND (e.level_posisi LIKE '%Tata Usaha%' OR e.position LIKE '%Tata Usaha%')
+                     ORDER BY e.id ASC LIMIT 1",
                     [$unitId]
                 );
             }
             return [
-                'nama'  => $emp['nama'] ?? 'Staff Tata Usaha',
-                'nipy'  => $emp['nipy'] ?? '-',
-                'phone' => $emp['phone'] ?? ''
+                'nama'           => $emp['nama'] ?? 'Staff Tata Usaha',
+                'nipy'           => $emp['nipy'] ?? '-',
+                'phone'          => $emp['phone'] ?? '',
+                'signature_path' => $emp['signature_path'] ?? ''
             ];
         }
 
         if ($roleName === 'kepala_sekolah') {
             $emp = Database::fetch(
-                "SELECT e.nama, e.nipy, e.contact_phone as phone
+                "SELECT e.nama, e.nipy, e.contact_phone as phone,
+                        COALESCE(NULLIF(e.signature_path, ''), NULLIF(u.signature_path, '')) as signature_path
                  FROM employees e
                  JOIN user_roles ur ON e.user_id = ur.user_id
                  JOIN roles r ON ur.role_id = r.id
+                 LEFT JOIN users u ON e.user_id = u.id
                  WHERE e.is_deleted = 0 AND e.status = 'Aktif'
                    AND r.name = 'kepala_sekolah'
                    AND (e.unit_id = ? OR ur.unit_id = ?)
@@ -130,24 +138,31 @@ class TagihanController extends Controller {
             );
             if (!$emp) {
                 $emp = Database::fetch(
-                    "SELECT nama, nipy, contact_phone as phone FROM employees
-                     WHERE unit_id = ? AND is_deleted = 0 AND status = 'Aktif'
-                       AND (position LIKE '%Kepala Sekolah%' OR level_posisi LIKE '%Kepala Sekolah%' OR level_posisi LIKE '%Kepsek%' OR level_posisi LIKE '%Kanit%')
-                     ORDER BY id ASC LIMIT 1",
+                    "SELECT e.nama, e.nipy, e.contact_phone as phone,
+                            COALESCE(NULLIF(e.signature_path, ''), NULLIF(u.signature_path, '')) as signature_path
+                     FROM employees e
+                     LEFT JOIN users u ON e.user_id = u.id
+                     WHERE e.unit_id = ? AND e.is_deleted = 0 AND e.status = 'Aktif'
+                       AND (e.position LIKE '%Kepala Sekolah%' OR e.level_posisi LIKE '%Kepala Sekolah%' OR e.level_posisi LIKE '%Kepsek%' OR e.level_posisi LIKE '%Kanit%')
+                     ORDER BY e.id ASC LIMIT 1",
                     [$unitId]
                 );
             }
             return [
-                'nama'  => $emp['nama'] ?? 'Kepala Sekolah',
-                'nipy'  => $emp['nipy'] ?? '-',
-                'phone' => $emp['phone'] ?? ''
+                'nama'           => $emp['nama'] ?? 'Kepala Sekolah',
+                'nipy'           => $emp['nipy'] ?? '-',
+                'phone'          => $emp['phone'] ?? '',
+                'signature_path' => $emp['signature_path'] ?? ''
             ];
         }
 
         if ($roleName === 'deputi_pendidikan') {
             try {
                 $dep = Database::fetch(
-                    "SELECT COALESCE(e.nama, u.full_name) as nama, COALESCE(e.nipy, '-') as nipy, COALESCE(e.contact_phone, u.phone, '') as phone
+                    "SELECT COALESCE(e.nama, u.full_name) as nama,
+                            COALESCE(e.nipy, '-') as nipy,
+                            COALESCE(e.contact_phone, u.phone, '') as phone,
+                            COALESCE(NULLIF(e.signature_path, ''), NULLIF(u.signature_path, '')) as signature_path
                      FROM deputi_units du
                      JOIN users u ON du.user_id = u.id AND u.is_active = 1
                      LEFT JOIN employees e ON e.user_id = u.id AND e.is_deleted = 0
@@ -156,13 +171,21 @@ class TagihanController extends Controller {
                     [$unitId]
                 );
                 if ($dep && !empty($dep['nama'])) {
-                    return $dep;
+                    return [
+                        'nama'           => $dep['nama'],
+                        'nipy'           => $dep['nipy'] ?? '-',
+                        'phone'          => $dep['phone'] ?? '',
+                        'signature_path' => $dep['signature_path'] ?? ''
+                    ];
                 }
             } catch (\Throwable $e) {
                 // Abaikan jika tabel deputi_units belum dibuat
             }
             $depFallback = Database::fetch(
-                "SELECT COALESCE(e.nama, u.full_name) as nama, COALESCE(e.nipy, '-') as nipy, COALESCE(e.contact_phone, u.phone, '') as phone
+                "SELECT COALESCE(e.nama, u.full_name) as nama,
+                        COALESCE(e.nipy, '-') as nipy,
+                        COALESCE(e.contact_phone, u.phone, '') as phone,
+                        COALESCE(NULLIF(e.signature_path, ''), NULLIF(u.signature_path, '')) as signature_path
                  FROM users u
                  JOIN user_roles ur ON u.id = ur.user_id
                  JOIN roles r ON ur.role_id = r.id
@@ -171,13 +194,64 @@ class TagihanController extends Controller {
                  ORDER BY u.id ASC LIMIT 1"
             );
             return [
-                'nama'  => $depFallback['nama'] ?? 'Deputi Direktur Pendidikan',
-                'nipy'  => $depFallback['nipy'] ?? '-',
-                'phone' => $depFallback['phone'] ?? ''
+                'nama'           => $depFallback['nama'] ?? 'Deputi Direktur Pendidikan',
+                'nipy'           => $depFallback['nipy'] ?? '-',
+                'phone'          => $depFallback['phone'] ?? '',
+                'signature_path' => $depFallback['signature_path'] ?? ''
             ];
         }
 
-        return ['nama' => '-', 'nipy' => '-', 'phone' => ''];
+        return ['nama' => '-', 'nipy' => '-', 'phone' => '', 'signature_path' => ''];
+    }
+
+    /**
+     * Render gambar tanda tangan digital (base64 inline untuk Dompdf) atau spasi kosong jika belum ada.
+     */
+    private function renderSignatureImageHtml(?string $sigPath, int $heightPx = 58): string {
+        $sigPath = trim((string)$sigPath);
+        if ($sigPath === '') {
+            return "<div style='height: {$heightPx}px;'></div>";
+        }
+
+        $relPath = ltrim(str_replace('\\', '/', $sigPath), '/');
+        $baseCandidates = [
+            dirname(__DIR__, 2) . '/public',
+            dirname(__DIR__, 2) . '/storage',
+            dirname(__DIR__, 2)
+        ];
+
+        $foundFile = null;
+        foreach ($baseCandidates as $baseDir) {
+            $realBase = realpath($baseDir);
+            if ($realBase === false) {
+                continue;
+            }
+            $candidate = $realBase . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relPath);
+            $realFile = realpath($candidate);
+            if ($realFile !== false && is_file($realFile) && strpos($realFile, $realBase . DIRECTORY_SEPARATOR) === 0) {
+                $foundFile = $realFile;
+                break;
+            }
+        }
+
+        if ($foundFile !== null && is_readable($foundFile)) {
+            $ext = strtolower(pathinfo($foundFile, PATHINFO_EXTENSION));
+            $mime = match ($ext) {
+                'jpg', 'jpeg' => 'image/jpeg',
+                'png'         => 'image/png',
+                'webp'        => 'image/webp',
+                'gif'         => 'image/gif',
+                default       => 'image/png'
+            };
+            $raw = @file_get_contents($foundFile);
+            if ($raw !== false && $raw !== '') {
+                $data = base64_encode($raw);
+                $imgMaxH = max(36, $heightPx - 4);
+                return "<div style='height: {$heightPx}px; margin: 4px 0; text-align: center;'><img src='data:{$mime};base64,{$data}' style='max-height: {$imgMaxH}px; max-width: 150px; object-fit: contain;' /></div>";
+            }
+        }
+
+        return "<div style='height: {$heightPx}px;'></div>";
     }
 
     private function terbilang(float $angka): string {
@@ -1206,6 +1280,7 @@ class TagihanController extends Controller {
         $tuEmp = $this->resolveUnitSigner((int)$bill['unit_id'], 'tata_usaha');
         $tuName = $tuEmp['nama'];
         $tuNipy = $tuEmp['nipy'];
+        $tuSigHtml = $this->renderSignatureImageHtml($tuEmp['signature_path'] ?? null, 60);
 
         // Render Kop Surat standar dual logo
         $kopHtml = ExportHelper::renderKop($bill);
@@ -1309,7 +1384,7 @@ class TagihanController extends Controller {
                     <td style='width: 45%; text-align: center; line-height: 1.4;'>
                         Bagian Tata Usaha & Keuangan<br>
                         <strong>" . SecurityHelper::escape($bill['unit_name']) . "</strong>
-                        <br><br><br><br><br>
+                        {$tuSigHtml}
                         <strong><u>" . SecurityHelper::escape($tuName) . "</u></strong><br>
                         <span>NIPY. " . SecurityHelper::escape($tuNipy) . "</span>
                     </td>
@@ -2323,18 +2398,23 @@ class TagihanController extends Controller {
             ? "Mengingat pentingnya penyelesaian administrasi pendidikan ananda, kami mengharapkan kehadiran Bapak/Ibu sesuai jadwal tersebut di atas."
             : "<strong>Kami menunggu konfirmasi Bapak/Ibu terkait rencana penyelesaian pembayaran tunggakan tersebut atau menghubungi Kepala Sekolah di nomor HP {$kepsekPhone}.</strong>";
 
+        $kepsekSigHtml = $this->renderSignatureImageHtml($kepsekInfo['signature_path'] ?? null, 58);
+        $deputiSigHtml = $this->renderSignatureImageHtml($deputiInfo['signature_path'] ?? null, 58);
+
         $sigBlock = $isYayasan
             ? "<tr>
                     <td class='sig-box'>
                         Mengetahui,<br>
                         <strong>Kepala Satuan Pendidikan</strong><br>
-                        {$unitName}<br><br><br><br>
+                        {$unitName}
+                        {$kepsekSigHtml}
                         <strong><u>{$kepsekName}</u></strong>
                     </td>
                     <td class='sig-box'>
                         Batam, " . SecurityHelper::formatTanggalIndo(date('Y-m-d')) . "<br>
                         <strong>Deputi Direktur Pendidikan Yayasan</strong><br>
-                        Al-Kahfi Islamic School Batam<br><br><br><br>
+                        Al-Kahfi Islamic School Batam
+                        {$deputiSigHtml}
                         <strong><u>{$deputiName}</u></strong>
                     </td>
                </tr>"
@@ -2342,7 +2422,8 @@ class TagihanController extends Controller {
                     <td class='sig-box'>&nbsp;</td>
                     <td class='sig-box'>
                         Kepala Satuan Pendidikan,<br>
-                        <strong>{$unitName}</strong><br><br><br><br>
+                        <strong>{$unitName}</strong>
+                        {$kepsekSigHtml}
                         <strong><u>{$kepsekName}</u></strong>
                     </td>
                </tr>";
@@ -2497,6 +2578,10 @@ class TagihanController extends Controller {
 
         $schoolSignerTitle = $isYayasan ? 'Deputi Pendidikan' : 'Kepala Sekolah';
         $schoolSignerName  = $isYayasan ? SecurityHelper::escape($deputiInfo['nama']) : SecurityHelper::escape($kepsekInfo['nama']);
+        $schoolSignerSigHtml = $this->renderSignatureImageHtml(
+            $isYayasan ? ($deputiInfo['signature_path'] ?? null) : ($kepsekInfo['signature_path'] ?? null),
+            64
+        );
 
         return "
         <html>
@@ -2560,7 +2645,7 @@ class TagihanController extends Controller {
                 </tr>
                 <tr>
                     <td style='height: 75px;'></td>
-                    <td style='height: 75px;'></td>
+                    <td style='height: 75px; text-align: center; vertical-align: middle;'>{$schoolSignerSigHtml}</td>
                 </tr>
                 <tr>
                     <td>( <strong>{$parentName}</strong> )</td>
@@ -3203,6 +3288,7 @@ class TagihanController extends Controller {
 
         $tuEmp = $this->resolveUnitSigner((int)$installment['unit_id'], 'tata_usaha');
         $tuName = SecurityHelper::escape($tuEmp['nama']);
+        $tuSigHtml = $this->renderSignatureImageHtml($tuEmp['signature_path'] ?? null, 58);
 
         $skemaDesc = '';
         if ($installment['scheme_type'] === 'lunas_tanggal') {
@@ -3334,7 +3420,8 @@ class TagihanController extends Controller {
                     <td class='sig-box'>
                         Batam, " . SecurityHelper::formatTanggalIndo(date('Y-m-d')) . "<br>
                         Bagian Keuangan / Tata Usaha,<br>
-                        <strong>" . SecurityHelper::escape($installment['unit_name']) . "</strong><br><br><br><br>
+                        <strong>" . SecurityHelper::escape($installment['unit_name']) . "</strong>
+                        {$tuSigHtml}
                         ( <strong>{$tuName}</strong> )
                     </td>
                 </tr>
