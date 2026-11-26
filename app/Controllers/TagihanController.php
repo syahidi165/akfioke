@@ -374,8 +374,8 @@ class TagihanController extends Controller {
 
         $headers = [
             'No Urut', 'Induk', 'Nama Siswa', 'Kelas', 'L/P', 'Nama Orang Tua/Wali', 'Nomor HP Orang Tua/Wali',
-            'Buku Paket (Rp)', 'Kegiatan Siswa (Rp)', 'Komite (Rp)', 'Peningkatan Mutu (Rp)',
-            'SPP (Rp)', 'Uang Ujian (Rp)', 'Tunggakan Tahun Lalu (Rp)', 'Seragam (Rp)', 'Uang Gedung (Rp)', 'JUMLAH (Rp)'
+            'Buku Paket (Rp)', 'Gedung (Rp)', 'Kegiatan Siswa (Rp)', 'Komite (Rp)', 'Peningkatan Mutu (Rp)',
+            'Seragam (Rp)', 'SPP (Rp)', 'Uang Ujian (Rp)', 'Tunggakan Tahun Lalu (Rp)', 'JUMLAH (Rp)'
         ];
 
         $rows = [];
@@ -393,14 +393,14 @@ class TagihanController extends Controller {
                 $st['parent_name'] ?? 'Wali Santri',
                 $st['parent_phone'] ?? '',
                 0, // Buku Paket
+                0, // Gedung
                 0, // Kegiatan Siswa
                 0, // Komite
                 0, // Peningkatan Mutu
+                0, // Seragam
                 0, // SPP
                 0, // Uang Ujian
                 0, // Tunggakan Tahun Lalu
-                0, // Seragam
-                0, // Uang Gedung
                 0  // Total Jumlah
             ];
         }
@@ -510,11 +510,10 @@ class TagihanController extends Controller {
             }
         }
 
-        // Deteksi format Braja vs FR 8001A
+        // Deteksi format Braja vs FR 8001A serta pemetaan dinamis kolom header FR 8001A
         $isBraja = false;
         $hasClassCol = false;
-        $frSeragamCol = null;
-        $frGedungCol = null;
+        $frHeaderMap = [];
         foreach ($rows as $rCheck) {
             $colA = trim((string)($rCheck['A'] ?? ''));
             $colB = trim((string)($rCheck['B'] ?? ''));
@@ -532,10 +531,27 @@ class TagihanController extends Controller {
             if (strtolower($colA) === 'no urut') {
                 foreach ($rCheck as $colLet => $hdrVal) {
                     $lowHdr = strtolower(trim((string)$hdrVal));
-                    if (str_contains($lowHdr, 'seragam')) {
-                        $frSeragamCol = $colLet;
+                    if ($lowHdr === '') continue;
+                    if (str_contains($lowHdr, 'kelas')) {
+                        $frHeaderMap['kelas'] = $colLet;
+                    } elseif (str_contains($lowHdr, 'buku paket')) {
+                        $frHeaderMap['bp'] = $colLet;
                     } elseif (str_contains($lowHdr, 'gedung')) {
-                        $frGedungCol = $colLet;
+                        $frHeaderMap['gd'] = $colLet;
+                    } elseif (str_contains($lowHdr, 'kegiatan')) {
+                        $frHeaderMap['ks'] = $colLet;
+                    } elseif (str_contains($lowHdr, 'komite')) {
+                        $frHeaderMap['km'] = $colLet;
+                    } elseif (str_contains($lowHdr, 'mutu')) {
+                        $frHeaderMap['pm'] = $colLet;
+                    } elseif (str_contains($lowHdr, 'seragam')) {
+                        $frHeaderMap['sr'] = $colLet;
+                    } elseif (str_contains($lowHdr, 'spp')) {
+                        $frHeaderMap['spp'] = $colLet;
+                    } elseif (str_contains($lowHdr, 'ujian')) {
+                        $frHeaderMap['uj'] = $colLet;
+                    } elseif (str_contains($lowHdr, 'tunggakan')) {
+                        $frHeaderMap['tl'] = $colLet;
                     }
                 }
             }
@@ -659,26 +675,28 @@ class TagihanController extends Controller {
                     }
                 }
 
-                $colKeys = $hasClassCol
-                    ? ['kelas' => 'D', 'bp' => 'H', 'ks' => 'I', 'km' => 'J', 'pm' => 'K', 'spp' => 'L', 'uj' => 'M', 'tl' => 'N']
-                    : ['kelas' => null, 'bp' => 'G', 'ks' => 'H', 'km' => 'I', 'pm' => 'J', 'spp' => 'K', 'uj' => 'L', 'tl' => 'M'];
+                // Gunakan peta kolom dinamis dari header FR 8001A, atau fallback ke urutan standar baru (H..P) / lama (G..M)
+                $defaultCols = $hasClassCol
+                    ? ['kelas' => 'D', 'bp' => 'H', 'gd' => 'I', 'ks' => 'J', 'km' => 'K', 'pm' => 'L', 'sr' => 'M', 'spp' => 'N', 'uj' => 'O', 'tl' => 'P']
+                    : ['kelas' => null, 'bp' => 'G', 'gd' => null, 'ks' => 'H', 'km' => 'I', 'pm' => 'J', 'sr' => null, 'spp' => 'K', 'uj' => 'L', 'tl' => 'M'];
+                $colKeys = !empty($frHeaderMap) ? array_merge($defaultCols, $frHeaderMap) : $defaultCols;
 
-                $excelClass      = $colKeys['kelas'] ? trim((string)($row[$colKeys['kelas']] ?? '')) : $currentClass;
-                $bukuPaket       = $this->parseRupiah($row[$colKeys['bp']] ?? '0');
-                $kegiatanSiswa   = $this->parseRupiah($row[$colKeys['ks']] ?? '0');
-                $komite          = $this->parseRupiah($row[$colKeys['km']] ?? '0');
-                $peningkatanMutu = $this->parseRupiah($row[$colKeys['pm']] ?? '0');
-                $spp             = $this->parseRupiah($row[$colKeys['spp']] ?? '0');
-                $uangUjian       = $this->parseRupiah($row[$colKeys['uj']] ?? '0');
-                $tunggakanLalu   = $this->parseRupiah($row[$colKeys['tl']] ?? '0');
+                $excelClass      = !empty($colKeys['kelas']) ? trim((string)($row[$colKeys['kelas']] ?? '')) : $currentClass;
+                $bukuPaket       = !empty($colKeys['bp'])  ? $this->parseRupiah($row[$colKeys['bp']] ?? '0') : 0.0;
+                $kegiatanSiswa   = !empty($colKeys['ks'])  ? $this->parseRupiah($row[$colKeys['ks']] ?? '0') : 0.0;
+                $komite          = !empty($colKeys['km'])  ? $this->parseRupiah($row[$colKeys['km']] ?? '0') : 0.0;
+                $peningkatanMutu = !empty($colKeys['pm'])  ? $this->parseRupiah($row[$colKeys['pm']] ?? '0') : 0.0;
+                $spp             = !empty($colKeys['spp']) ? $this->parseRupiah($row[$colKeys['spp']] ?? '0') : 0.0;
+                $uangUjian       = !empty($colKeys['uj'])  ? $this->parseRupiah($row[$colKeys['uj']] ?? '0') : 0.0;
+                $tunggakanLalu   = !empty($colKeys['tl'])  ? $this->parseRupiah($row[$colKeys['tl']] ?? '0') : 0.0;
 
-                if ($frSeragamCol !== null) {
-                    $vSeragam = $this->parseRupiah($row[$frSeragamCol] ?? '0');
-                    if ($vSeragam > 0) $customMap['Seragam'] = ($customMap['Seragam'] ?? 0.0) + $vSeragam;
+                if (!empty($colKeys['gd'])) {
+                    $vGedung = $this->parseRupiah($row[$colKeys['gd']] ?? '0');
+                    if ($vGedung > 0) $customMap['Gedung'] = ($customMap['Gedung'] ?? 0.0) + $vGedung;
                 }
-                if ($frGedungCol !== null) {
-                    $vGedung = $this->parseRupiah($row[$frGedungCol] ?? '0');
-                    if ($vGedung > 0) $customMap['Uang Gedung'] = ($customMap['Uang Gedung'] ?? 0.0) + $vGedung;
+                if (!empty($colKeys['sr'])) {
+                    $vSeragam = $this->parseRupiah($row[$colKeys['sr']] ?? '0');
+                    if ($vSeragam > 0) $customMap['Seragam'] = ($customMap['Seragam'] ?? 0.0) + $vSeragam;
                 }
             }
 
