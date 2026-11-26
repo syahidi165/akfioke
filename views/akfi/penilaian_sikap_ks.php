@@ -19,12 +19,15 @@ use Core\CSRF;
         <label style="font-weight: 600; font-size: 13px; margin-bottom: 8px; display: block;">Pilih Kepala Satuan Pendidikan yang Dinilai:</label>
         <div style="display: flex; gap: 8px; flex-wrap: wrap;">
             <?php foreach ($allKs as $ks): 
-                $isActive = $selectedAssessment && $selectedAssessment['employee_id'] == $ks['employee_id'];
+                $isActive = $selectedAssessment && (int)$selectedAssessment['id'] === (int)$ks['assessment_id'];
             ?>
-                <a href="<?= $baseUrl ?>/akfi/penilaian-sikap-ks?emp_id=<?= $ks['employee_id'] ?>" 
+                <a href="<?= $baseUrl ?>/akfi/penilaian-sikap-ks?assessment_id=<?= (int)$ks['assessment_id'] ?>" 
                    class="btn <?= $isActive ? 'btn-primary' : 'btn-outline' ?>" style="font-size: 13px;">
                     <i class="fa-solid fa-user-tie"></i> 
                     <?= SecurityHelper::escape($ks['unit_code']) ?> - <?= SecurityHelper::escape($ks['nama']) ?>
+                    <?php if (!empty($ks['is_cross_unit'])): ?>
+                        <span class="badge" style="background: #ede9fe; color: #6d28d9; font-size: 10px; margin-left: 4px;">Rangkap</span>
+                    <?php endif; ?>
                     <?php if (!empty($ks['sikap_score']) && (float)$ks['sikap_score'] > 0): ?>
                         <span class="badge badge-success" style="font-size: 10px; margin-left: 4px;">✓ <?= number_format((float)$ks['sikap_score'], 1) ?></span>
                     <?php endif; ?>
@@ -192,7 +195,7 @@ use Core\CSRF;
             </div>
 
             <!-- Kalkulasi Realtime -->
-            <div class="card" style="background: #f0fdf4; border: 1px solid #bbf7d0;">
+            <div class="card" style="background: #f0fdf4; border: 1px solid #bbf7d0; margin-bottom: 16px;">
                 <div class="card-body" style="padding: 16px;">
                     <div style="font-weight: 700; color: #166534; font-size: 14px; margin-bottom: 8px;">
                         <i class="fa-solid fa-calculator"></i> Simulasi Skor Sikap
@@ -206,6 +209,28 @@ use Core\CSRF;
                     </div>
                 </div>
             </div>
+
+            <?php if (!empty($crossUnitSummary)): ?>
+                <div class="card" style="background: #f0fdfa; border: 1px solid #99f6e4;">
+                    <div class="card-body" style="padding: 16px;">
+                        <div style="font-weight: 700; color: #0f766e; font-size: 13.5px; margin-bottom: 8px;">
+                            <i class="fa-solid fa-layer-group"></i> Rata-Rata Live <?= (int)$crossUnitSummary['unit_count'] ?> Unit (KS Rangkap)
+                        </div>
+                        <div style="font-size: 12px; color: #334155; line-height: 1.6;">
+                            <?php foreach ($crossUnitSummary['assessments'] as $cu): ?>
+                                <div style="display: flex; justify-content: space-between; border-bottom: 1px dashed #cbd5e1; padding: 3px 0;">
+                                    <span><?= SecurityHelper::escape($cu['unit_code'] ?: $cu['unit_name']) ?></span>
+                                    <strong><?= number_format((float)$cu['total_score'], 2) ?> (<?= SecurityHelper::escape($cu['letter_grade']) ?>)</strong>
+                                </div>
+                            <?php endforeach; ?>
+                            <div style="display: flex; justify-content: space-between; margin-top: 6px; font-weight: 800; color: #047857; font-size: 13.5px;">
+                                <span>Nilai Akhir Rata-Rata:</span>
+                                <span><?= number_format((float)$crossUnitSummary['avg_total'], 2) ?> (<?= SecurityHelper::escape($crossUnitSummary['avg_grade']) ?>)</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            <?php endif; ?>
         </div>
     </div>
 <?php endif; ?>

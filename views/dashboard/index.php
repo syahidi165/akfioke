@@ -261,6 +261,113 @@ use Core\SecurityHelper;
         </div>
     </div>
 
+    <!-- RINGKASAN AKUMULASI TUNGGAKAN UNIT BINAAN (SPP, NON-SPP & TOTAL KESELURUHAN) -->
+    <div style="margin-bottom: 24px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 10px;">
+            <div>
+                <h2 style="font-size: 17px; font-weight: 700; color: #1e293b; margin: 0; display: flex; align-items: center; gap: 8px;">
+                    <i class="fa-solid fa-file-invoice-dollar" style="color: #be185d;"></i>
+                    Rekapitulasi Tunggakan Biaya Pendidikan Unit Binaan
+                </h2>
+                <div style="font-size: 12.5px; color: var(--text-muted);">
+                    Akumulasi tagihan berstatus Tertunggak dari seluruh <?= count($tunggakanByUnit ?? []) ?> unit binaan Anda pada Tahun Ajaran aktif (dipisahkan SPP vs Non-SPP)
+                </div>
+            </div>
+            <a href="<?= Auth::baseUrl() ?>/tagihan/eskalasi-deputi" class="btn btn-outline btn-sm" style="color: #be185d; border-color: rgba(190, 24, 93, 0.35); font-weight: 600;">
+                <i class="fa-solid fa-triangle-exclamation" style="margin-right: 4px;"></i> Buka Eskalasi Penagihan
+            </a>
+        </div>
+
+        <div class="grid-cols-3" style="margin-bottom: 16px;">
+            <div class="stat-card" style="border-left: 4px solid #0284c7;">
+                <div class="stat-icon blue"><i class="fa-solid fa-receipt"></i></div>
+                <div>
+                    <div class="stat-value" style="color: #0369a1; font-size: 20px;"><?= SecurityHelper::formatRupiah($totalTunggakanSppBinaan ?? 0) ?></div>
+                    <div class="stat-label">Total Tunggakan SPP (Unit Binaan)</div>
+                </div>
+            </div>
+            <div class="stat-card" style="border-left: 4px solid #d97706;">
+                <div class="stat-icon amber"><i class="fa-solid fa-layer-group"></i></div>
+                <div>
+                    <div class="stat-value" style="color: #b45309; font-size: 20px;"><?= SecurityHelper::formatRupiah($totalTunggakanNonSppBinaan ?? 0) ?></div>
+                    <div class="stat-label">Total Tunggakan Non-SPP (Unit Binaan)</div>
+                </div>
+            </div>
+            <div class="stat-card" style="border-left: 4px solid #be185d;">
+                <div class="stat-icon rose"><i class="fa-solid fa-sack-dollar"></i></div>
+                <div>
+                    <div class="stat-value" style="color: #be185d; font-size: 20px;"><?= SecurityHelper::formatRupiah($totalTunggakanKeseluruhanBinaan ?? 0) ?></div>
+                    <div class="stat-label">
+                        Total Tunggakan Keseluruhan
+                        <span class="badge" style="background: #fce7f3; color: #9d174d; font-size: 10.5px; margin-left: 4px;"><?= number_format((int)($totalSiswaTertunggakBinaan ?? 0)) ?> Santri</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card" style="border: 1px solid #e2e8f0; box-shadow: 0 2px 6px rgba(0,0,0,0.04);">
+            <div class="card-body" style="padding: 0;">
+                <div class="table-responsive">
+                    <table class="table" style="margin-bottom: 0;">
+                        <thead>
+                            <tr style="background: #f8fafc;">
+                                <th>Satuan Pendidikan Binaan</th>
+                                <th style="text-align: center;">Santri Tertunggak</th>
+                                <th style="text-align: center;">Rasio Tunggakan</th>
+                                <th style="text-align: right;">Tunggakan SPP (Rp)</th>
+                                <th style="text-align: right;">Tunggakan Non-SPP (Rp)</th>
+                                <th style="text-align: right;">Total Unit (Rp)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php if (empty($tunggakanByUnit)): ?>
+                                <tr><td colspan="6" style="text-align: center; padding: 20px; color: #64748b;">Belum ada unit binaan yang ditetapkan.</td></tr>
+                            <?php else: ?>
+                                <?php foreach ($tunggakanByUnit as $tu): ?>
+                                    <tr>
+                                        <td>
+                                            <strong style="color: #0f172a;"><?= SecurityHelper::escape($tu['unit_name']) ?></strong>
+                                            <div style="font-size: 11px; color: #64748b;">Santri Aktif: <?= number_format($tu['total_siswa']) ?> Siswa</div>
+                                        </td>
+                                        <td style="text-align: center; font-weight: 600; color: <?= $tu['unpaid_students'] > 0 ? '#be185d' : '#16a34a' ?>;">
+                                            <?= number_format($tu['unpaid_students']) ?> Santri
+                                        </td>
+                                        <td style="text-align: center;">
+                                            <span class="badge <?= $tu['ratio_pct'] <= 10 ? 'badge-success' : ($tu['ratio_pct'] <= 25 ? 'badge-warning' : 'badge-danger') ?>" style="font-size: 11px;">
+                                                <?= number_format((float)$tu['ratio_pct'], 1) ?>%
+                                            </span>
+                                        </td>
+                                        <td style="text-align: right; font-family: monospace; font-weight: 600; color: #0369a1;">
+                                            <?= SecurityHelper::formatRupiah($tu['spp']) ?>
+                                        </td>
+                                        <td style="text-align: right; font-family: monospace; font-weight: 600; color: #b45309;">
+                                            <?= SecurityHelper::formatRupiah($tu['non_spp']) ?>
+                                        </td>
+                                        <td style="text-align: right; font-family: monospace; font-weight: 700; color: #be185d;">
+                                            <?= SecurityHelper::formatRupiah($tu['total']) ?>
+                                        </td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            <?php endif; ?>
+                        </tbody>
+                        <?php if (!empty($tunggakanByUnit)): ?>
+                            <tfoot>
+                                <tr style="background: #fdf2f8; font-weight: 700; border-top: 2px solid #fbcfe8;">
+                                    <td style="color: #831843;">TOTAL AKUMULASI UNIT BINAAN</td>
+                                    <td style="text-align: center; color: #831843;"><?= number_format((int)($totalSiswaTertunggakBinaan ?? 0)) ?> Santri</td>
+                                    <td style="text-align: center;">-</td>
+                                    <td style="text-align: right; font-family: monospace; color: #0369a1;"><?= SecurityHelper::formatRupiah($totalTunggakanSppBinaan ?? 0) ?></td>
+                                    <td style="text-align: right; font-family: monospace; color: #b45309;"><?= SecurityHelper::formatRupiah($totalTunggakanNonSppBinaan ?? 0) ?></td>
+                                    <td style="text-align: right; font-family: monospace; font-size: 14px; color: #be185d;"><?= SecurityHelper::formatRupiah($totalTunggakanKeseluruhanBinaan ?? 0) ?></td>
+                                </tr>
+                            </tfoot>
+                        <?php endif; ?>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- 1. MONITORING & PERSENTASE KEHADIRAN SETIAP SEKOLAH -->
     <div style="margin-bottom: 24px;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">

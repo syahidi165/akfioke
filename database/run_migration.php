@@ -243,4 +243,12 @@ try {
     echo "[SKIP] Migrasi Lintas Unit: " . $e->getMessage() . "\n";
 }
 
+// 13. Migrasi Rapor AKFI Lintas Unit (uq_emp_unit_akfi_year)
+try {
+    require_once __DIR__ . '/migrate_akfi_cross_unit_avg.php';
+    echo "[OK] Migrasi Rapor AKFI Lintas Unit (uq_emp_unit_akfi_year) selesai.\n";
+} catch (\Throwable $e) {
+    echo "[SKIP] Migrasi AKFI Lintas Unit: " . $e->getMessage() . "\n";
+}
+
 echo "=== MIGRASI SELESAI DENGAN SUKSES! ===\n";

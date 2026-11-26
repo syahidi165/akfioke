@@ -13,8 +13,189 @@ use Core\Notification;
 class AkfiController extends Controller {
 
     // --- 1. PENILAIAN PRIBADI (SELF ASSESSMENT & STATUS) ---
+    public static function ensureUnitScopedUniqueKey(): void {
+        static $checked = false;
+        if ($checked) {
+            return;
+        }
+        $checked = true;
+        try {
+            $indexes = Database::fetchAll("SHOW INDEX FROM `akfi_assessments`");
+            $indexNames = array_values(array_unique(array_column($indexes, 'Key_name')));
+            if (!in_array('uq_emp_unit_akfi_year', $indexNames, true)) {
+                Database::execute("ALTER TABLE `akfi_assessments` ADD UNIQUE KEY `uq_emp_unit_akfi_year` (`employee_id`, `unit_id`, `academic_year_id`)");
+            }
+            if (in_array('uq_emp_akfi_year', $indexNames, true)) {
+                Database::execute("ALTER TABLE `akfi_assessments` DROP INDEX `uq_emp_akfi_year`");
+            }
+        } catch (\Throwable $e) {
+            error_log('Gagal memastikan indeks uq_emp_unit_akfi_year pada akfi_assessments: ' . $e->getMessage());
+        }
+    }
+
+    private function calculateGradeFromScore(float $score, ?array $tpl = null): string {
+        $aMin = isset($tpl['grade_a_min']) ? (float)$tpl['grade_a_min'] : 90.0;
+        $bMin = isset($tpl['grade_b_min']) ? (float)$tpl['grade_b_min'] : 80.0;
+        $cMin = isset($tpl['grade_c_min']) ? (float)$tpl['grade_c_min'] : 70.0;
+        $dMin = isset($tpl['grade_d_min']) ? (float)$tpl['grade_d_min'] : 60.0;
+        if ($score >= $aMin) return 'A';
+        if ($score >= $bMin) return 'B';
+        if ($score >= $cMin) return 'C';
+        if ($score >= $dMin) return 'D';
+        return 'E';
+    }
+
+    /**
+     * Ambil seluruh satuan pendidikan penugasan pegawai (Unit Induk + penugasan Lintas Unit aktif).
+     */
+    private function getEmployeeAssignedUnits(array $emp): array {
+        $homebaseUnitId = (int)($emp['unit_id'] ?? 0);
+        $userId = (int)($emp['user_id'] ?? 0);
+        $assigned = [];
+
+        if ($homebaseUnitId > 0) {
+            $uHome = Database::fetch("SELECT id, code, name, level FROM units WHERE id = ?", [$homebaseUnitId]);
+            if ($uHome) {
+                $assigned[$homebaseUnitId] = [
+                    'unit_id'       => $homebaseUnitId,
+                    'unit_code'     => $uHome['code'] ?? '',
+                    'unit_name'     => $uHome['name'] ?? ('Unit #' . $homebaseUnitId),
+                    'unit_level'    => $uHome['level'] ?? '',
+                    'is_homebase'   => true,
+                    'roles'         => [],
+                    'role_displays' => []
+                ];
+            }
+        }
+
+        if ($userId > 0) {
+            try {
+                \App\Controllers\MasterController::ensureUserRolesUnitColumn();
+                $roleRows = Database::fetchAll(
+                    "SELECT ur.unit_id, r.name as role_name, r.display_name as role_display,
+                            u.code as unit_code, u.name as unit_name, u.level as unit_level
+                     FROM user_roles ur
+                     JOIN roles r ON ur.role_id = r.id
+                     LEFT JOIN units u ON ur.unit_id = u.id
+                     WHERE ur.user_id = ?
+                     ORDER BY COALESCE(ur.unit_id, 0) ASC, ur.is_primary DESC",
+                    [$userId]
+                );
+                foreach ($roleRows as $rr) {
+                    $uId = !empty($rr['unit_id']) ? (int)$rr['unit_id'] : $homebaseUnitId;
+                    if ($uId <= 0 || empty($rr['role_name'])) {
+                        continue;
+                    }
+                    if (!isset($assigned[$uId])) {
+                        if (empty($rr['unit_name'])) {
+                            $uRow = Database::fetch("SELECT id, code, name, level FROM units WHERE id = ?", [$uId]);
+                            if (!$uRow) continue;
+                            $rr['unit_code'] = $uRow['code'];
+                            $rr['unit_name'] = $uRow['name'];
+                            $rr['unit_level'] = $uRow['level'];
+                        }
+                        $assigned[$uId] = [
+                            'unit_id'       => $uId,
+                            'unit_code'     => $rr['unit_code'] ?? '',
+                            'unit_name'     => $rr['unit_name'] ?? ('Unit #' . $uId),
+                            'unit_level'    => $rr['unit_level'] ?? '',
+                            'is_homebase'   => ($uId === $homebaseUnitId),
+                            'roles'         => [],
+                            'role_displays' => []
+                        ];
+                    }
+                    if (!in_array($rr['role_name'], $assigned[$uId]['roles'], true)) {
+                        $assigned[$uId]['roles'][] = $rr['role_name'];
+                        $assigned[$uId]['role_displays'][] = $rr['role_display'];
+                    }
+                }
+            } catch (\Throwable $e) {
+                // Abaikan jika user_roles.unit_id belum ada
+            }
+        }
+
+        // Pastikan Unit Induk selalu berada di urutan pertama
+        uasort($assigned, static function ($a, $b) {
+            if ($a['is_homebase'] !== $b['is_homebase']) {
+                return $a['is_homebase'] ? -1 : 1;
+            }
+            return $a['unit_id'] <=> $b['unit_id'];
+        });
+
+        return array_values($assigned);
+    }
+
+    /**
+     * Hitung ringkasan nilai akhir rata-rata live untuk pegawai/KS yang memiliki >1 rapor unit pada TA yang sama.
+     */
+    private function computeCrossUnitAverageSummary(int $empId, int $taId): ?array {
+        if ($empId <= 0 || $taId <= 0) {
+            return null;
+        }
+        $rows = Database::fetchAll(
+            "SELECT a.id, a.employee_id, a.unit_id, a.academic_year_id, a.template_id, a.status,
+                    a.kinerja_score, a.sikap_score, a.absensi_score, a.total_score, a.letter_grade,
+                    u.code as unit_code, u.name as unit_name,
+                    e.unit_id as emp_homebase_unit_id,
+                    t.position_name, t.position_code
+             FROM akfi_assessments a
+             JOIN employees e ON a.employee_id = e.id
+             JOIN units u ON a.unit_id = u.id
+             JOIN akfi_templates t ON a.template_id = t.id
+             WHERE a.employee_id = ? AND a.academic_year_id = ?
+             ORDER BY CASE WHEN a.unit_id = e.unit_id THEN 0 ELSE 1 END, u.id ASC",
+            [$empId, $taId]
+        );
+
+        if (count($rows) <= 1) {
+            return null;
+        }
+
+        $n = count($rows);
+        $sumKinerja = 0.0;
+        $sumSikap   = 0.0;
+        $sumAbsensi = 0.0;
+        $sumTotal   = 0.0;
+        $finalCount = 0;
+        $approvedCount = 0;
+
+        foreach ($rows as &$r) {
+            $sumKinerja += (float)$r['kinerja_score'];
+            $sumSikap   += (float)$r['sikap_score'];
+            $sumAbsensi += (float)$r['absensi_score'];
+            $sumTotal   += (float)$r['total_score'];
+            $r['is_homebase'] = ((int)$r['unit_id'] === (int)$r['emp_homebase_unit_id']);
+            if ($r['status'] === 'Final') {
+                $finalCount++;
+                $approvedCount++;
+            } elseif ($r['status'] === 'Disetujui_Atasan') {
+                $approvedCount++;
+            }
+        }
+        unset($r);
+
+        $avgKinerja = round($sumKinerja / $n, 2);
+        $avgSikap   = round($sumSikap / $n, 2);
+        $avgAbsensi = round($sumAbsensi / $n, 2);
+        $avgTotal   = round($sumTotal / $n, 2);
+
+        return [
+            'unit_count'     => $n,
+            'assessments'    => $rows,
+            'avg_kinerja'    => $avgKinerja,
+            'avg_sikap'      => $avgSikap,
+            'avg_absensi'    => $avgAbsensi,
+            'avg_total'      => $avgTotal,
+            'avg_grade'      => $this->calculateGradeFromScore($avgTotal),
+            'final_count'    => $finalCount,
+            'approved_count' => $approvedCount,
+            'all_final'      => ($finalCount === $n)
+        ];
+    }
+
     public function pribadi(): void {
         $this->requireAuth();
+        self::ensureUnitScopedUniqueKey();
         $userId = Auth::id();
         $taId = Auth::academicYearId();
         $unitId = Auth::unitId();
@@ -33,6 +214,37 @@ class AkfiController extends Controller {
         }
 
         $empId = (int)$emp['id'];
+        $assignedUnits = $this->getEmployeeAssignedUnits($emp);
+
+        // Pastikan tiap unit penugasan memiliki record akfi_assessments di tahun ajaran aktif
+        foreach ($assignedUnits as $au) {
+            $uId = (int)$au['unit_id'];
+            $existsUnit = Database::fetch(
+                "SELECT id FROM akfi_assessments WHERE employee_id = ? AND unit_id = ? AND academic_year_id = ?",
+                [$empId, $uId, $taId]
+            );
+            if (!$existsUnit) {
+                $tplId = $this->matchTemplateForEmployee($emp, $uId, $au['roles'] ?? []);
+                Database::execute(
+                    "INSERT INTO akfi_assessments (employee_id, unit_id, academic_year_id, template_id, status)
+                     VALUES (?, ?, ?, ?, 'Draft')",
+                    [$empId, $uId, $taId, $tplId]
+                );
+            }
+        }
+
+        $requestedUnitId = (int)($_GET['unit_id'] ?? 0);
+        $assignedUnitIds = array_column($assignedUnits, 'unit_id');
+        if ($requestedUnitId > 0 && in_array($requestedUnitId, $assignedUnitIds, true)) {
+            $targetUnitId = $requestedUnitId;
+        } elseif ($unitId > 0 && in_array($unitId, $assignedUnitIds, true)) {
+            $targetUnitId = $unitId;
+        } elseif (!empty($emp['unit_id'])) {
+            $targetUnitId = (int)$emp['unit_id'];
+        } else {
+            $targetUnitId = (int)($assignedUnitIds[0] ?? 0);
+        }
+
         $assessment = Database::fetch(
             "SELECT a.*, t.position_name, t.bobot_kinerja, t.bobot_sikap, t.bobot_absensi,
                     sup.full_name as superior_name, hr.full_name as hr_name,
@@ -43,31 +255,24 @@ class AkfiController extends Controller {
              LEFT JOIN academic_years ay ON a.academic_year_id = ay.id
              LEFT JOIN users sup ON a.superior_signed_by = sup.id
              LEFT JOIN users hr ON a.hr_signed_by = hr.id
-             WHERE a.employee_id = ? AND a.academic_year_id = ?",
-            [$empId, $taId]
+             WHERE a.employee_id = ? AND a.unit_id = ? AND a.academic_year_id = ?",
+            [$empId, $targetUnitId, $taId]
         );
 
-        // Jika belum ada record penilaian di tahun ajaran aktif, inisialisasi otomatis
         if (!$assessment) {
-            $templateId = $this->matchTemplateForEmployee($emp);
-            Database::execute(
-                "INSERT INTO akfi_assessments (employee_id, unit_id, academic_year_id, template_id, status) 
-                 VALUES (?, ?, ?, ?, 'Draft')",
-                [$empId, $emp['unit_id'] ?: $unitId, $taId, $templateId]
-            );
-            $assessmentId = Database::lastInsertId();
             $assessment = Database::fetch(
                 "SELECT a.*, t.position_name, t.bobot_kinerja, t.bobot_sikap, t.bobot_absensi,
                         sup.full_name as superior_name, hr.full_name as hr_name,
                         u.name as unit_name, ay.name as academic_year_name, ay.semester
-                 FROM akfi_assessments a 
-                 JOIN akfi_templates t ON a.template_id = t.id 
+                 FROM akfi_assessments a
+                 JOIN akfi_templates t ON a.template_id = t.id
                  LEFT JOIN units u ON a.unit_id = u.id
                  LEFT JOIN academic_years ay ON a.academic_year_id = ay.id
                  LEFT JOIN users sup ON a.superior_signed_by = sup.id
                  LEFT JOIN users hr ON a.hr_signed_by = hr.id
-                 WHERE a.id = ?",
-                [$assessmentId]
+                 WHERE a.employee_id = ? AND a.academic_year_id = ?
+                 ORDER BY CASE WHEN a.unit_id = ? THEN 0 ELSE 1 END, a.id ASC LIMIT 1",
+                [$empId, $taId, $emp['unit_id'] ?? 0]
             );
         }
 
@@ -80,6 +285,7 @@ class AkfiController extends Controller {
         $savedItems = !empty($assessment['items_json']) ? json_decode($assessment['items_json'], true) : [];
         $autoData = $this->collectAutoData($assessment);
         $crossUnitAssignments = $this->getCrossUnitAssignments($userId, (int)($emp['unit_id'] ?? $assessment['unit_id'] ?? 0));
+        $crossUnitSummary = $this->computeCrossUnitAverageSummary($empId, $taId);
 
         $this->view('akfi/pribadi', [
             'pageTitle'            => 'Penilaian Kinerja AKFI Pribadi',
@@ -88,7 +294,9 @@ class AkfiController extends Controller {
             'items'                => $items,
             'savedItems'           => $savedItems,
             'autoData'             => $autoData,
-            'crossUnitAssignments' => $crossUnitAssignments
+            'crossUnitAssignments' => $crossUnitAssignments,
+            'assignedUnits'        => $assignedUnits,
+            'crossUnitSummary'     => $crossUnitSummary
         ]);
     }
 
@@ -169,22 +377,23 @@ class AkfiController extends Controller {
             Notification::send((int)$kepsekUser['id'], 'Pengajuan AKFI Baru', 'Pegawai telah mengajukan penilaian mandiri AKFI dan siap dinilai atasan.', 'info', '/akfi/assess/' . $assessmentId);
         }
 
-        AuditLog::log('SELF_SUBMIT_AKFI', 'akfi_assessments', $assessmentId, null, ['self_scores' => count($selfScores)]);
+        AuditLog::log('SELF_SUBMIT_AKFI', 'akfi_assessments', $assessmentId, null, ['self_scores' => count($selfScores), 'unit_id' => $unitId]);
         $this->setFlash('success', 'Penilaian mandiri berhasil diajukan ke atasan langsung.');
-        $this->redirect(Auth::baseUrl() . '/akfi/pribadi');
+        $this->redirect(Auth::baseUrl() . '/akfi/pribadi?unit_id=' . $unitId);
     }
 
     // --- 2. PENILAIAN BAWAHAN (SUPERIOR DASHBOARD & FORM) ---
     public function penilaianBawahan(): void {
         $this->requireRole(['kepala_sekolah', 'waka_kurikulum', 'waka_kesiswaan', 'deputi_pendidikan', 'direktur_pendidikan', 'hrd', 'tata_usaha']);
+        self::ensureUnitScopedUniqueKey();
         $unitId = Auth::unitId();
         $taId = Auth::academicYearId();
         $role = Auth::activeRoleName();
 
         if ($role === 'kepala_sekolah' || $role === 'waka_kurikulum' || $role === 'waka_kesiswaan') {
-            // Auto-inisialisasi draft penilaian untuk semua bawahan aktif di satuan unit jika belum dibuat
+            // Auto-inisialisasi draft penilaian untuk semua bawahan aktif di unit ini (Unit Induk + Guru Lintas Unit)
             $activeSubordinates = Database::fetchAll(
-                "SELECT e.* FROM employees e 
+                "SELECT e.* FROM employees e
                  WHERE e.unit_id = ? AND e.is_deleted = 0 AND e.status = 'Aktif'
                    AND e.position NOT LIKE '%Kepala Sekolah%' AND e.position NOT LIKE '%Kepsek%'
                    AND e.level_posisi NOT LIKE '%Kepala Sekolah%' AND e.level_posisi NOT LIKE '%Kepsek%' AND e.level_posisi NOT LIKE '%Kanit%'
@@ -194,45 +403,77 @@ class AkfiController extends Controller {
 
             foreach ($activeSubordinates as $sub) {
                 $exists = Database::fetch(
-                    "SELECT id FROM akfi_assessments WHERE employee_id = ? AND academic_year_id = ?",
-                    [$sub['id'], $taId]
+                    "SELECT id FROM akfi_assessments WHERE employee_id = ? AND unit_id = ? AND academic_year_id = ?",
+                    [$sub['id'], $unitId, $taId]
                 );
                 if (!$exists) {
-                    $templateId = $this->matchTemplateForEmployee($sub);
+                    $templateId = $this->matchTemplateForEmployee($sub, $unitId);
                     Database::execute(
-                        "INSERT INTO akfi_assessments (employee_id, unit_id, academic_year_id, template_id, status) 
+                        "INSERT INTO akfi_assessments (employee_id, unit_id, academic_year_id, template_id, status)
                          VALUES (?, ?, ?, ?, 'Draft')",
                         [$sub['id'], $unitId, $taId, $templateId]
                     );
                 }
             }
+
+            // Guru / Staf Lintas Unit yang ditugaskan operasional pada unit ini (bukan sebagai Kepala Sekolah di unit ini)
+            try {
+                \App\Controllers\MasterController::ensureUserRolesUnitColumn();
+                $crossSubs = Database::fetchAll(
+                    "SELECT e.*, GROUP_CONCAT(DISTINCT r.name) as unit_role_names
+                     FROM employees e
+                     JOIN user_roles ur ON e.user_id = ur.user_id
+                     JOIN roles r ON ur.role_id = r.id
+                     WHERE ur.unit_id = ? AND e.unit_id != ?
+                       AND e.is_deleted = 0 AND e.status = 'Aktif'
+                       AND r.name != 'kepala_sekolah'
+                       AND e.level_posisi NOT LIKE '%Direktur%' AND e.position NOT LIKE '%Direktur%'
+                     GROUP BY e.id",
+                    [$unitId, $unitId]
+                );
+                foreach ($crossSubs as $cSub) {
+                    $existsCross = Database::fetch(
+                        "SELECT id FROM akfi_assessments WHERE employee_id = ? AND unit_id = ? AND academic_year_id = ?",
+                        [$cSub['id'], $unitId, $taId]
+                    );
+                    if (!$existsCross) {
+                        $unitRolesArr = array_filter(explode(',', (string)($cSub['unit_role_names'] ?? '')));
+                        $templateId = $this->matchTemplateForEmployee($cSub, $unitId, $unitRolesArr);
+                        Database::execute(
+                            "INSERT INTO akfi_assessments (employee_id, unit_id, academic_year_id, template_id, status)
+                             VALUES (?, ?, ?, ?, 'Draft')",
+                            [$cSub['id'], $unitId, $taId, $templateId]
+                        );
+                    }
+                }
+            } catch (\Throwable $e) {
+                // Abaikan jika user_roles.unit_id belum ada
+            }
         }
 
-        $query = "SELECT a.*, e.nama, e.nipy, e.position, u.name as unit_name, t.position_name, t.position_code 
-                  FROM akfi_assessments a 
-                  JOIN employees e ON a.employee_id = e.id 
-                  JOIN units u ON a.unit_id = u.id 
-                  JOIN akfi_templates t ON a.template_id = t.id 
+        $query = "SELECT a.*, e.nama, e.nipy, e.position, e.unit_id as emp_homebase_unit_id,
+                         u.name as unit_name, hu.name as homebase_unit_name, hu.code as homebase_unit_code,
+                         t.position_name, t.position_code
+                  FROM akfi_assessments a
+                  JOIN employees e ON a.employee_id = e.id
+                  JOIN units u ON a.unit_id = u.id
+                  LEFT JOIN units hu ON e.unit_id = hu.id
+                  JOIN akfi_templates t ON a.template_id = t.id
                   WHERE a.academic_year_id = ? ";
         $params = [$taId];
 
         if ($role === 'kepala_sekolah' || $role === 'waka_kurikulum' || $role === 'waka_kesiswaan') {
-            $query .= "AND a.unit_id = ? 
-                       AND e.unit_id = ?
+            $query .= "AND a.unit_id = ?
                        AND e.is_deleted = 0
                        AND e.status = 'Aktif'
-                       AND t.position_code NOT LIKE 'KANIT%' 
-                       AND e.position NOT LIKE '%Kepala Sekolah%' 
-                       AND e.position NOT LIKE '%Kepsek%' 
-                       AND e.position NOT LIKE '%Direktur%' 
+                       AND t.position_code NOT LIKE 'KANIT%'
+                       AND e.position NOT LIKE '%Direktur%'
                        AND e.level_posisi NOT LIKE '%Direktur%' ";
-            $params[] = $unitId;
             $params[] = $unitId;
         } elseif ($role === 'deputi_pendidikan' || $role === 'direktur_pendidikan' || $role === 'hrd') {
             $query .= "AND e.is_deleted = 0 ";
             if (!empty($_GET['unit_id'])) {
-                $query .= "AND a.unit_id = ? AND e.unit_id = ? ";
-                $params[] = (int)$_GET['unit_id'];
+                $query .= "AND a.unit_id = ? ";
                 $params[] = (int)$_GET['unit_id'];
             }
         }
@@ -307,6 +548,16 @@ class AkfiController extends Controller {
         $query .= "ORDER BY " . $orderSql;
 
         $assessments = Database::fetchAll($query, $params);
+        $empAvgCache = [];
+        foreach ($assessments as &$assRow) {
+            $eId = (int)$assRow['employee_id'];
+            if (!array_key_exists($eId, $empAvgCache)) {
+                $empAvgCache[$eId] = $this->computeCrossUnitAverageSummary($eId, $taId);
+            }
+            $assRow['cross_unit_summary'] = $empAvgCache[$eId];
+        }
+        unset($assRow);
+
         $templates = Database::fetchAll("SELECT id, position_name, position_code FROM akfi_templates ORDER BY position_name ASC");
 
         $this->view('akfi/penilaian_bawahan', [
@@ -355,6 +606,7 @@ class AkfiController extends Controller {
         // Auto-Data Collector: kalkulasi otomatis data riil dari sistem
         $autoData = $this->collectAutoData($assessment);
         $crossUnitAssignments = $this->getCrossUnitAssignments((int)($assessment['user_id'] ?? 0), (int)($assessment['emp_unit_id'] ?? $assessment['unit_id'] ?? 0));
+        $crossUnitSummary = $this->computeCrossUnitAverageSummary((int)$assessment['employee_id'], (int)$assessment['academic_year_id']);
 
         $this->view('akfi/form_penilaian', [
             'pageTitle'            => 'Form Penilaian Kinerja AKFI: ' . $assessment['nama'],
@@ -362,7 +614,8 @@ class AkfiController extends Controller {
             'items'                => $items,
             'savedItems'           => $savedItems,
             'autoData'             => $autoData,
-            'crossUnitAssignments' => $crossUnitAssignments
+            'crossUnitAssignments' => $crossUnitAssignments,
+            'crossUnitSummary'     => $crossUnitSummary
         ]);
     }
 
@@ -519,22 +772,35 @@ class AkfiController extends Controller {
     // --- 3. APPROVAL HR / DIREKTUR PENDIDIKAN / HRD YAYASAN ---
     public function approvalHr(): void {
         $this->requireRole(['direktur_pendidikan', 'deputi_pendidikan', 'hrd', 'operator_yayasan']);
+        self::ensureUnitScopedUniqueKey();
         $taId = Auth::academicYearId();
 
         $assessments = Database::fetchAll(
-            "SELECT a.*, e.nama, e.nipy, e.position, u.name as unit_name, t.position_name, t.position_code,
+            "SELECT a.*, e.nama, e.nipy, e.position, e.unit_id as emp_homebase_unit_id,
+                    u.name as unit_name, hu.name as homebase_unit_name, t.position_name, t.position_code,
                     sup.full_name as superior_name, nsup.full_name as next_superior_name, hr.full_name as hr_name 
              FROM akfi_assessments a 
              JOIN employees e ON a.employee_id = e.id 
              JOIN units u ON a.unit_id = u.id 
+             LEFT JOIN units hu ON e.unit_id = hu.id
              JOIN akfi_templates t ON a.template_id = t.id 
              LEFT JOIN users sup ON a.superior_signed_by = sup.id 
              LEFT JOIN users nsup ON a.next_superior_signed_by = nsup.id 
              LEFT JOIN users hr ON a.hr_signed_by = hr.id 
              WHERE a.academic_year_id = ? 
-             ORDER BY FIELD(a.status, 'Disetujui_Atasan', 'Final', 'Diajukan', 'Draft'), e.nama ASC",
+             ORDER BY FIELD(a.status, 'Disetujui_Atasan', 'Final', 'Diajukan', 'Draft'), e.nama ASC, a.unit_id ASC",
             [$taId]
         );
+
+        $empAvgCache = [];
+        foreach ($assessments as &$assRow) {
+            $eId = (int)$assRow['employee_id'];
+            if (!array_key_exists($eId, $empAvgCache)) {
+                $empAvgCache[$eId] = $this->computeCrossUnitAverageSummary($eId, $taId);
+            }
+            $assRow['cross_unit_summary'] = $empAvgCache[$eId];
+        }
+        unset($assRow);
 
         $this->view('akfi/approval_hr', [
             'pageTitle'   => 'Verifikasi & Pengesahan Akhir AKFI (HRD & Pimpinan Yayasan)',
@@ -576,6 +842,7 @@ class AkfiController extends Controller {
     // --- 4. PRATINJAU AKFI KS / KANIT (DEPUTI DIREKTUR & DIREKTUR PENDIDIKAN) ---
     public function kanitPreview(): void {
         $this->requireRole(['deputi_pendidikan', 'direktur_pendidikan', 'operator_yayasan', 'pembina_yayasan']);
+        self::ensureUnitScopedUniqueKey();
         $taId = Auth::academicYearId();
 
         // Filter unit binaan jika Deputi Pendidikan yang mengakses
@@ -628,8 +895,11 @@ class AkfiController extends Controller {
 
             $assessment = null;
             $autoData = [];
+            $crossUnitSummary = null;
+            $isCrossUnit = false;
 
             if ($ks) {
+                $isCrossUnit = ((int)$ks['unit_id'] !== $uId);
                 $assessment = Database::fetch(
                     "SELECT a.*, t.position_name, t.bobot_kinerja, t.bobot_sikap, t.bobot_absensi,
                             t.grade_a_min, t.grade_b_min, t.grade_c_min, t.grade_d_min, t.grade_e_min,
@@ -638,12 +908,12 @@ class AkfiController extends Controller {
                      JOIN akfi_templates t ON a.template_id = t.id
                      LEFT JOIN users sup ON a.superior_signed_by = sup.id
                      LEFT JOIN users hr ON a.hr_signed_by = hr.id
-                     WHERE a.employee_id = ? AND a.academic_year_id = ?",
-                    [$ks['id'], $taId]
+                     WHERE a.employee_id = ? AND a.unit_id = ? AND a.academic_year_id = ?",
+                    [$ks['id'], $uId, $taId]
                 );
 
                 if (!$assessment) {
-                    $templateId = $this->matchTemplateForEmployee($ks);
+                    $templateId = $this->matchTemplateForEmployee($ks, $uId, ['kepala_sekolah']);
                     Database::execute(
                         "INSERT INTO akfi_assessments (employee_id, unit_id, academic_year_id, template_id, status) 
                          VALUES (?, ?, ?, ?, 'Draft')",
@@ -661,13 +931,16 @@ class AkfiController extends Controller {
                 }
 
                 $autoData = $this->collectAutoData($assessment);
+                $crossUnitSummary = $this->computeCrossUnitAverageSummary((int)$ks['id'], $taId);
             }
 
             $kanitList[] = [
-                'unit'       => $u,
-                'ks'         => $ks,
-                'assessment' => $assessment,
-                'autoData'   => $autoData
+                'unit'             => $u,
+                'ks'               => $ks,
+                'assessment'       => $assessment,
+                'autoData'         => $autoData,
+                'isCrossUnit'      => $isCrossUnit,
+                'crossUnitSummary' => $crossUnitSummary
             ];
         }
 
@@ -680,43 +953,91 @@ class AkfiController extends Controller {
     // --- 5. PENILAIAN SIKAP & KEPEMIMPINAN KS (DEPUTI & DIREKTUR PENDIDIKAN) ---
     public function penilaianSikapKs(): void {
         $this->requireRole(['deputi_pendidikan', 'direktur_pendidikan']);
+        self::ensureUnitScopedUniqueKey();
         $taId = Auth::academicYearId();
         $assessmentId = (int)($_GET['assessment_id'] ?? 0);
         $empId = (int)($_GET['emp_id'] ?? 0);
+        $reqUnitId = (int)($_GET['unit_id'] ?? 0);
 
-        $allKs = Database::fetchAll(
-            "SELECT e.id as employee_id, e.nama, e.nipy, u.id as unit_id, u.name as unit_name, u.code as unit_code,
-                    a.id as assessment_id, a.total_score, a.letter_grade, a.sikap_score, a.status
-             FROM employees e
-             JOIN units u ON e.unit_id = u.id
-             LEFT JOIN users usr ON e.user_id = usr.id
-             LEFT JOIN user_roles ur ON usr.id = ur.user_id
-             LEFT JOIN roles r ON ur.role_id = r.id AND r.name = 'kepala_sekolah'
-             LEFT JOIN akfi_assessments a ON e.id = a.employee_id AND a.academic_year_id = ?
-             WHERE e.is_deleted = 0 
-               AND (
-                   r.id IS NOT NULL 
-                   OR e.level_posisi = 'Kepala Sekolah'
-                   OR e.level_posisi LIKE '%Kepala Sekolah%'
-                   OR e.level_posisi LIKE '%Kepsek%'
-                   OR e.level_posisi LIKE '%Kanit%'
-                   OR e.level_posisi LIKE '%Kepala Satuan%'
-               )
-               AND e.level_posisi NOT LIKE '%Kepala Lab%'
-               AND e.level_posisi NOT LIKE '%Kepala Perpustakaan%'
-               AND e.level_posisi NOT LIKE '%Kepala TU%'
-               AND e.level_posisi NOT LIKE '%Kepala Tata Usaha%'
-               AND e.level_posisi NOT LIKE '%Kepala Bengkel%'
-               AND e.level_posisi NOT LIKE '%Kepala Ruang%'
-             GROUP BY e.id
-             ORDER BY u.id ASC",
-            [$taId]
-        );
+        $allUnits = Database::fetchAll("SELECT * FROM units WHERE deleted_at IS NULL AND UPPER(COALESCE(level, '')) != 'YAYASAN' ORDER BY id ASC");
+        $allKs = [];
+        foreach ($allUnits as $u) {
+            $uId = (int)$u['id'];
+            $ks = Database::fetch(
+                "SELECT e.id as employee_id, e.nama, e.nipy, e.user_id, e.position, e.level_posisi, e.unit_id as homebase_unit_id,
+                        hu.name as homebase_unit_name, hu.code as homebase_unit_code
+                 FROM employees e
+                 JOIN units hu ON e.unit_id = hu.id
+                 LEFT JOIN users usr ON e.user_id = usr.id
+                 LEFT JOIN user_roles ur ON usr.id = ur.user_id
+                 LEFT JOIN roles r ON ur.role_id = r.id AND r.name = 'kepala_sekolah'
+                 WHERE e.is_deleted = 0 AND e.status = 'Aktif'
+                   AND (
+                       (e.unit_id = ? AND (
+                           r.id IS NOT NULL 
+                           OR e.level_posisi = 'Kepala Sekolah'
+                           OR e.level_posisi LIKE '%Kepala Sekolah%'
+                           OR e.level_posisi LIKE '%Kepsek%'
+                           OR e.level_posisi LIKE '%Kanit%'
+                           OR e.level_posisi LIKE '%Kepala Satuan%'
+                       ))
+                       OR (r.id IS NOT NULL AND ur.unit_id = ?)
+                   )
+                   AND e.level_posisi NOT LIKE '%Kepala Lab%'
+                   AND e.level_posisi NOT LIKE '%Kepala Perpustakaan%'
+                   AND e.level_posisi NOT LIKE '%Kepala TU%'
+                   AND e.level_posisi NOT LIKE '%Kepala Tata Usaha%'
+                   AND e.level_posisi NOT LIKE '%Kepala Bengkel%'
+                   AND e.level_posisi NOT LIKE '%Kepala Ruang%'
+                 ORDER BY (CASE WHEN e.unit_id = ? THEN 0 ELSE 1 END) ASC,
+                          (CASE WHEN r.id IS NOT NULL THEN 1 WHEN e.level_posisi LIKE '%Kepala Sekolah%' THEN 2 ELSE 3 END) ASC
+                 LIMIT 1",
+                [$uId, $uId, $uId]
+            );
+            if (!$ks) {
+                continue;
+            }
+            $ass = Database::fetch(
+                "SELECT id, total_score, letter_grade, sikap_score, status
+                 FROM akfi_assessments
+                 WHERE employee_id = ? AND unit_id = ? AND academic_year_id = ?",
+                [(int)$ks['employee_id'], $uId, $taId]
+            );
+            if (!$ass) {
+                $tplId = $this->matchTemplateForEmployee($ks, $uId, ['kepala_sekolah']);
+                Database::execute(
+                    "INSERT INTO akfi_assessments (employee_id, unit_id, academic_year_id, template_id, status)
+                     VALUES (?, ?, ?, ?, 'Draft')",
+                    [(int)$ks['employee_id'], $uId, $taId, $tplId]
+                );
+                $newAssId = Database::lastInsertId();
+                $ass = Database::fetch(
+                    "SELECT id, total_score, letter_grade, sikap_score, status FROM akfi_assessments WHERE id = ?",
+                    [$newAssId]
+                );
+            }
+            $allKs[] = [
+                'employee_id'        => (int)$ks['employee_id'],
+                'nama'               => $ks['nama'],
+                'nipy'               => $ks['nipy'],
+                'unit_id'            => $uId,
+                'unit_name'          => $u['name'],
+                'unit_code'          => $u['code'],
+                'homebase_unit_id'   => (int)$ks['homebase_unit_id'],
+                'homebase_unit_code' => $ks['homebase_unit_code'],
+                'is_cross_unit'      => ((int)$ks['homebase_unit_id'] !== $uId),
+                'assessment_id'      => (int)($ass['id'] ?? 0),
+                'total_score'        => $ass['total_score'] ?? 0,
+                'letter_grade'       => $ass['letter_grade'] ?? '-',
+                'sikap_score'        => $ass['sikap_score'] ?? 0,
+                'status'             => $ass['status'] ?? 'Draft'
+            ];
+        }
 
         $selectedAssessment = null;
         if ($assessmentId > 0) {
             $selectedAssessment = Database::fetch(
-                "SELECT a.*, e.nama, e.nipy, e.level_posisi, u.name as unit_name, t.position_name, t.bobot_sikap,
+                "SELECT a.*, e.nama, e.nipy, e.level_posisi, e.unit_id as homebase_unit_id, u.name as unit_name, t.position_name, t.bobot_sikap,
                         t.grade_a_min, t.grade_b_min, t.grade_c_min, t.grade_d_min, t.grade_e_min
                  FROM akfi_assessments a
                  JOIN employees e ON a.employee_id = e.id
@@ -726,21 +1047,25 @@ class AkfiController extends Controller {
                 [$assessmentId]
             );
         } elseif ($empId > 0) {
-            $selectedAssessment = Database::fetch(
-                "SELECT a.*, e.nama, e.nipy, e.level_posisi, u.name as unit_name, t.position_name, t.bobot_sikap,
-                        t.grade_a_min, t.grade_b_min, t.grade_c_min, t.grade_d_min, t.grade_e_min
-                 FROM akfi_assessments a
-                 JOIN employees e ON a.employee_id = e.id
-                 JOIN units u ON a.unit_id = u.id
-                 JOIN akfi_templates t ON a.template_id = t.id
-                 WHERE a.employee_id = ? AND a.academic_year_id = ?",
-                [$empId, $taId]
-            );
+            $sqlSel = "SELECT a.*, e.nama, e.nipy, e.level_posisi, e.unit_id as homebase_unit_id, u.name as unit_name, t.position_name, t.bobot_sikap,
+                              t.grade_a_min, t.grade_b_min, t.grade_c_min, t.grade_d_min, t.grade_e_min
+                       FROM akfi_assessments a
+                       JOIN employees e ON a.employee_id = e.id
+                       JOIN units u ON a.unit_id = u.id
+                       JOIN akfi_templates t ON a.template_id = t.id
+                       WHERE a.employee_id = ? AND a.academic_year_id = ?";
+            $selParams = [$empId, $taId];
+            if ($reqUnitId > 0) {
+                $sqlSel .= " AND a.unit_id = ?";
+                $selParams[] = $reqUnitId;
+            }
+            $sqlSel .= " ORDER BY CASE WHEN a.unit_id = e.unit_id THEN 0 ELSE 1 END LIMIT 1";
+            $selectedAssessment = Database::fetch($sqlSel, $selParams);
         } elseif (!empty($allKs)) {
             $firstKs = $allKs[0];
             if (!empty($firstKs['assessment_id'])) {
                 $selectedAssessment = Database::fetch(
-                    "SELECT a.*, e.nama, e.nipy, e.level_posisi, u.name as unit_name, t.position_name, t.bobot_sikap,
+                    "SELECT a.*, e.nama, e.nipy, e.level_posisi, e.unit_id as homebase_unit_id, u.name as unit_name, t.position_name, t.bobot_sikap,
                             t.grade_a_min, t.grade_b_min, t.grade_c_min, t.grade_d_min, t.grade_e_min
                      FROM akfi_assessments a
                      JOIN employees e ON a.employee_id = e.id
@@ -753,16 +1078,21 @@ class AkfiController extends Controller {
         }
 
         $savedRubrics = [];
-        if ($selectedAssessment && !empty($selectedAssessment['items_json'])) {
-            $json = json_decode($selectedAssessment['items_json'], true) ?: [];
-            $savedRubrics = $json['sikap_ks'] ?? [];
+        $crossUnitSummary = null;
+        if ($selectedAssessment) {
+            if (!empty($selectedAssessment['items_json'])) {
+                $json = json_decode($selectedAssessment['items_json'], true) ?: [];
+                $savedRubrics = $json['sikap_ks'] ?? [];
+            }
+            $crossUnitSummary = $this->computeCrossUnitAverageSummary((int)$selectedAssessment['employee_id'], $taId);
         }
 
         $this->view('akfi/penilaian_sikap_ks', [
             'pageTitle'          => 'Instrumen Penilaian Sikap & Kepemimpinan Kepala Sekolah',
             'allKs'              => $allKs,
             'selectedAssessment' => $selectedAssessment,
-            'savedRubrics'       => $savedRubrics
+            'savedRubrics'       => $savedRubrics,
+            'crossUnitSummary'   => $crossUnitSummary
         ]);
     }
 
@@ -903,31 +1233,130 @@ class AkfiController extends Controller {
             ];
         }
 
-        // 2. Daftar Seluruh Pegawai Aktif Beserta Status Rapor AKFI
-        $allEmployees = Database::fetchAll(
+        // 2. Daftar Seluruh Pegawai Aktif Beserta Status Rapor AKFI (Digabung dengan Rata-Rata Live jika Lintas Unit)
+        $rawEmployees = Database::fetchAll(
             "SELECT 
                 e.id as employee_id,
                 e.nama,
                 e.nipy,
                 e.level_posisi,
                 e.unit_id,
-                COALESCE(u.name, 'Kantor Yayasan') as unit_name,
-                a.id as assessment_id,
-                a.kinerja_score,
-                a.sikap_score,
-                a.absensi_score,
-                a.total_score,
-                a.letter_grade,
-                a.status as assessment_status,
-                COALESCE(t.position_name, e.level_posisi) as position_name
+                COALESCE(u.name, 'Kantor Yayasan') as unit_name
              FROM employees e
              LEFT JOIN units u ON e.unit_id = u.id
-             LEFT JOIN akfi_assessments a ON e.id = a.employee_id AND a.academic_year_id = ?
-             LEFT JOIN akfi_templates t ON a.template_id = t.id
              WHERE e.is_deleted = 0 AND (e.status = 'Aktif' OR e.status IS NULL)
-             ORDER BY COALESCE(u.id, 0) ASC, e.nama ASC",
+             ORDER BY COALESCE(u.id, 0) ASC, e.nama ASC"
+        );
+
+        $allAssRows = Database::fetchAll(
+            "SELECT a.id, a.employee_id, a.unit_id, a.template_id, a.status,
+                    a.kinerja_score, a.sikap_score, a.absensi_score, a.total_score, a.letter_grade,
+                    u.code as unit_code, u.name as unit_name, t.position_name
+             FROM akfi_assessments a
+             JOIN units u ON a.unit_id = u.id
+             JOIN akfi_templates t ON a.template_id = t.id
+             WHERE a.academic_year_id = ?
+             ORDER BY a.unit_id ASC, a.id ASC",
             [$taId]
         );
+        $assByEmp = [];
+        foreach ($allAssRows as $ar) {
+            $assByEmp[(int)$ar['employee_id']][] = $ar;
+        }
+
+        $allEmployees = [];
+        foreach ($rawEmployees as $empRow) {
+            $eId = (int)$empRow['employee_id'];
+            $empAssessments = $assByEmp[$eId] ?? [];
+            usort($empAssessments, static function ($a, $b) use ($empRow) {
+                $aHome = ((int)$a['unit_id'] === (int)$empRow['unit_id']) ? 0 : 1;
+                $bHome = ((int)$b['unit_id'] === (int)$empRow['unit_id']) ? 0 : 1;
+                return $aHome !== $bHome ? ($aHome <=> $bHome) : ((int)$a['unit_id'] <=> (int)$b['unit_id']);
+            });
+
+            $cntAss = count($empAssessments);
+            if ($cntAss === 0) {
+                $allEmployees[] = [
+                    'employee_id'       => $eId,
+                    'nama'              => $empRow['nama'],
+                    'nipy'              => $empRow['nipy'],
+                    'level_posisi'      => $empRow['level_posisi'],
+                    'unit_id'           => $empRow['unit_id'],
+                    'unit_name'         => $empRow['unit_name'],
+                    'assessment_id'     => null,
+                    'kinerja_score'     => 0,
+                    'sikap_score'       => 0,
+                    'absensi_score'     => 0,
+                    'total_score'       => 0,
+                    'letter_grade'      => '-',
+                    'assessment_status' => 'Belum Dinilai',
+                    'position_name'     => $empRow['level_posisi'],
+                    'is_cross_unit_avg' => false,
+                    'unit_breakdown'    => []
+                ];
+            } elseif ($cntAss === 1) {
+                $one = $empAssessments[0];
+                $allEmployees[] = [
+                    'employee_id'       => $eId,
+                    'nama'              => $empRow['nama'],
+                    'nipy'              => $empRow['nipy'],
+                    'level_posisi'      => $empRow['level_posisi'],
+                    'unit_id'           => $empRow['unit_id'],
+                    'unit_name'         => $empRow['unit_name'],
+                    'assessment_id'     => (int)$one['id'],
+                    'kinerja_score'     => $one['kinerja_score'],
+                    'sikap_score'       => $one['sikap_score'],
+                    'absensi_score'     => $one['absensi_score'],
+                    'total_score'       => $one['total_score'],
+                    'letter_grade'      => $one['letter_grade'],
+                    'assessment_status' => $one['status'],
+                    'position_name'     => $one['position_name'] ?: $empRow['level_posisi'],
+                    'is_cross_unit_avg' => false,
+                    'unit_breakdown'    => $empAssessments
+                ];
+            } else {
+                $sumK = 0.0; $sumS = 0.0; $sumA = 0.0; $sumT = 0.0;
+                $finalCnt = 0; $approvedCnt = 0; $submittedCnt = 0;
+                $posNames = [];
+                foreach ($empAssessments as $ea) {
+                    $sumK += (float)$ea['kinerja_score'];
+                    $sumS += (float)$ea['sikap_score'];
+                    $sumA += (float)$ea['absensi_score'];
+                    $sumT += (float)$ea['total_score'];
+                    if ($ea['status'] === 'Final') $finalCnt++;
+                    elseif ($ea['status'] === 'Disetujui_Atasan') $approvedCnt++;
+                    elseif ($ea['status'] === 'Diajukan') $submittedCnt++;
+                    if (!empty($ea['position_name']) && !in_array($ea['position_name'], $posNames, true)) {
+                        $posNames[] = $ea['position_name'];
+                    }
+                }
+                $avgT = round($sumT / $cntAss, 2);
+                $combStatus = ($finalCnt === $cntAss)
+                    ? 'Final'
+                    : (($finalCnt + $approvedCnt) === $cntAss
+                        ? 'Disetujui_Atasan'
+                        : ($submittedCnt > 0 ? 'Diajukan' : 'Draft'));
+
+                $allEmployees[] = [
+                    'employee_id'       => $eId,
+                    'nama'              => $empRow['nama'],
+                    'nipy'              => $empRow['nipy'],
+                    'level_posisi'      => $empRow['level_posisi'],
+                    'unit_id'           => $empRow['unit_id'],
+                    'unit_name'         => $empRow['unit_name'],
+                    'assessment_id'     => (int)$empAssessments[0]['id'],
+                    'kinerja_score'     => number_format(round($sumK / $cntAss, 2), 2, '.', ''),
+                    'sikap_score'       => number_format(round($sumS / $cntAss, 2), 2, '.', ''),
+                    'absensi_score'     => number_format(round($sumA / $cntAss, 2), 2, '.', ''),
+                    'total_score'       => number_format($avgT, 2, '.', ''),
+                    'letter_grade'      => $this->calculateGradeFromScore($avgT),
+                    'assessment_status' => $combStatus,
+                    'position_name'     => implode(' / ', $posNames) ?: $empRow['level_posisi'],
+                    'is_cross_unit_avg' => true,
+                    'unit_breakdown'    => $empAssessments
+                ];
+            }
+        }
 
         // Filter rekap unit jika Deputi Pendidikan yang mengakses
         if (Auth::hasRole('deputi_pendidikan')) {
@@ -936,7 +1365,15 @@ class AkfiController extends Controller {
                 return in_array((int)$u['id'], $deputiUnitIds, true);
             }));
             $allEmployees = array_values(array_filter($allEmployees, function($emp) use ($deputiUnitIds) {
-                return in_array((int)$emp['unit_id'], $deputiUnitIds, true);
+                if (in_array((int)$emp['unit_id'], $deputiUnitIds, true)) {
+                    return true;
+                }
+                foreach ($emp['unit_breakdown'] ?? [] as $ub) {
+                    if (in_array((int)$ub['unit_id'], $deputiUnitIds, true)) {
+                        return true;
+                    }
+                }
+                return false;
             }));
         }
 
@@ -954,38 +1391,110 @@ class AkfiController extends Controller {
         $unitId = Auth::unitId();
         $role = Auth::activeRoleName();
 
-        $query = "SELECT e.nama, e.nipy, COALESCE(u.name, 'Kantor Yayasan') as unit_name, 
-                         COALESCE(t.position_name, e.level_posisi) as position_name, 
-                         COALESCE(a.kinerja_score, 0) as kinerja_score, 
-                         COALESCE(a.sikap_score, 0) as sikap_score, 
-                         COALESCE(a.absensi_score, 0) as absensi_score, 
-                         COALESCE(a.total_score, 0) as total_score, 
-                         COALESCE(a.letter_grade, '-') as letter_grade, 
-                         COALESCE(a.status, 'Belum Dinilai') as status 
-                  FROM employees e 
-                  LEFT JOIN units u ON e.unit_id = u.id 
-                  LEFT JOIN akfi_assessments a ON e.id = a.employee_id AND a.academic_year_id = ? 
-                  LEFT JOIN akfi_templates t ON a.template_id = t.id 
-                  WHERE e.is_deleted = 0 AND (e.status = 'Aktif' OR e.status IS NULL) ";
-        $params = [$taId];
+        $empSql = "SELECT e.id as employee_id, e.nama, e.nipy, e.unit_id, e.level_posisi,
+                          COALESCE(u.name, 'Kantor Yayasan') as unit_name
+                   FROM employees e
+                   LEFT JOIN units u ON e.unit_id = u.id
+                   WHERE e.is_deleted = 0 AND (e.status = 'Aktif' OR e.status IS NULL) ";
+        $params = [];
 
         if ($role === 'kepala_sekolah') {
-            $query .= "AND e.unit_id = ? ";
+            $empSql .= "AND (e.unit_id = ? OR EXISTS (SELECT 1 FROM akfi_assessments a2 WHERE a2.employee_id = e.id AND a2.unit_id = ? AND a2.academic_year_id = ?)) ";
             $params[] = $unitId;
+            $params[] = $unitId;
+            $params[] = $taId;
         } elseif ($role === 'deputi_pendidikan') {
             $deputiUnitIds = \App\Controllers\DeputiController::getDeputiUnitIds(Auth::id());
             if (!empty($deputiUnitIds)) {
                 $inClause = implode(',', array_map('intval', $deputiUnitIds));
-                $query .= "AND e.unit_id IN ($inClause) ";
+                $empSql .= "AND (e.unit_id IN ($inClause) OR EXISTS (SELECT 1 FROM akfi_assessments a2 WHERE a2.employee_id = e.id AND a2.unit_id IN ($inClause) AND a2.academic_year_id = ?)) ";
+                $params[] = $taId;
             } else {
-                $query .= "AND 1=0 ";
+                $empSql .= "AND 1=0 ";
             }
         }
-        $query .= "ORDER BY COALESCE(u.id, 0) ASC, e.nama ASC";
+        $empSql .= "ORDER BY COALESCE(u.id, 0) ASC, e.nama ASC";
+        $empRows = Database::fetchAll($empSql, $params);
 
-        $rows = Database::fetchAll($query, $params);
+        $assRows = Database::fetchAll(
+            "SELECT a.*, u.code as unit_code, u.name as unit_name, t.position_name
+             FROM akfi_assessments a
+             JOIN units u ON a.unit_id = u.id
+             JOIN akfi_templates t ON a.template_id = t.id
+             WHERE a.academic_year_id = ?
+             ORDER BY a.unit_id ASC",
+            [$taId]
+        );
+        $assByEmp = [];
+        foreach ($assRows as $ar) {
+            $assByEmp[(int)$ar['employee_id']][] = $ar;
+        }
+
+        $rows = [];
+        foreach ($empRows as $empRow) {
+            $eId = (int)$empRow['employee_id'];
+            $list = $assByEmp[$eId] ?? [];
+            if ($role === 'kepala_sekolah') {
+                $filtered = array_values(array_filter($list, static fn($x) => (int)$x['unit_id'] === $unitId));
+                $a = $filtered[0] ?? ($list[0] ?? null);
+                $rows[] = [
+                    'nama'          => $empRow['nama'],
+                    'nipy'          => $empRow['nipy'],
+                    'unit_name'     => $a['unit_name'] ?? $empRow['unit_name'],
+                    'position_name' => $a['position_name'] ?? $empRow['level_posisi'],
+                    'kinerja_score' => $a['kinerja_score'] ?? 0,
+                    'sikap_score'   => $a['sikap_score'] ?? 0,
+                    'absensi_score' => $a['absensi_score'] ?? 0,
+                    'total_score'   => $a['total_score'] ?? 0,
+                    'letter_grade'  => $a['letter_grade'] ?? '-',
+                    'status'        => $a['status'] ?? 'Belum Dinilai'
+                ];
+            } elseif (count($list) <= 1) {
+                $a = $list[0] ?? null;
+                $rows[] = [
+                    'nama'          => $empRow['nama'],
+                    'nipy'          => $empRow['nipy'],
+                    'unit_name'     => $empRow['unit_name'],
+                    'position_name' => $a['position_name'] ?? $empRow['level_posisi'],
+                    'kinerja_score' => $a['kinerja_score'] ?? 0,
+                    'sikap_score'   => $a['sikap_score'] ?? 0,
+                    'absensi_score' => $a['absensi_score'] ?? 0,
+                    'total_score'   => $a['total_score'] ?? 0,
+                    'letter_grade'  => $a['letter_grade'] ?? '-',
+                    'status'        => $a['status'] ?? 'Belum Dinilai'
+                ];
+            } else {
+                $cnt = count($list);
+                $sumK = 0.0; $sumS = 0.0; $sumA = 0.0; $sumT = 0.0;
+                $unitLabels = []; $posNames = []; $finalCnt = 0;
+                foreach ($list as $a) {
+                    $sumK += (float)$a['kinerja_score'];
+                    $sumS += (float)$a['sikap_score'];
+                    $sumA += (float)$a['absensi_score'];
+                    $sumT += (float)$a['total_score'];
+                    $unitLabels[] = ($a['unit_code'] ?: $a['unit_name']) . ' (' . number_format((float)$a['total_score'], 2) . ')';
+                    if (!empty($a['position_name']) && !in_array($a['position_name'], $posNames, true)) {
+                        $posNames[] = $a['position_name'];
+                    }
+                    if ($a['status'] === 'Final') $finalCnt++;
+                }
+                $avgT = round($sumT / $cnt, 2);
+                $rows[] = [
+                    'nama'          => $empRow['nama'],
+                    'nipy'          => $empRow['nipy'],
+                    'unit_name'     => 'Rata-Rata ' . $cnt . ' Unit: ' . implode(' + ', $unitLabels),
+                    'position_name' => implode(' / ', $posNames) ?: $empRow['level_posisi'],
+                    'kinerja_score' => round($sumK / $cnt, 2),
+                    'sikap_score'   => round($sumS / $cnt, 2),
+                    'absensi_score' => round($sumA / $cnt, 2),
+                    'total_score'   => $avgT,
+                    'letter_grade'  => $this->calculateGradeFromScore($avgT),
+                    'status'        => ($finalCnt === $cnt) ? 'Final' : 'Live Rata-Rata'
+                ];
+            }
+        }
+
         $headers = ['Nama Pegawai', 'NIPY', 'Unit Sekolah', 'Posisi AKFI', 'Skor Kinerja', 'Skor Sikap', 'Skor Absensi', 'Skor Total', 'Predikat', 'Status AKFI'];
-
         ExportHelper::xlsx($headers, $rows, 'Rekap_AKFI_Yayasan_' . date('Ymd'));
     }
 
@@ -1346,7 +1855,59 @@ class AkfiController extends Controller {
             $cellsHtml .= $renderSigCell($hrdSig, '', 'Mengesahkan', $hrdName, null, 'HRD Yayasan');
         }
 
+        // Jika pegawai/KS memiliki rapor AKFI di lebih dari 1 unit pada TA yang sama, tampilkan kotak Rekap Rata-Rata Gabungan
+        $crossUnitSummary = $this->computeCrossUnitAverageSummary((int)$assessment['employee_id'], (int)$assessment['academic_year_id']);
+        $crossSummaryHtml = '';
+        if (!empty($crossUnitSummary)) {
+            $rowsAvgHtml = '';
+            foreach ($crossUnitSummary['assessments'] as $cuRow) {
+                $isThis = ((int)$cuRow['id'] === (int)$assessment['id']);
+                $rowBg = $isThis ? 'background: #f0fdfa; font-weight: bold;' : '';
+                $rowsAvgHtml .= "
+                    <tr style='{$rowBg}'>
+                        <td>" . htmlspecialchars($cuRow['unit_name']) . ($cuRow['is_homebase'] ? ' (Induk)' : ' (Lintas Unit)') . "</td>
+                        <td>" . htmlspecialchars($cuRow['position_name']) . "</td>
+                        <td align='center'>" . number_format((float)$cuRow['kinerja_score'], 2) . "</td>
+                        <td align='center'>" . number_format((float)$cuRow['sikap_score'], 2) . "</td>
+                        <td align='center'>" . number_format((float)$cuRow['absensi_score'], 2) . "</td>
+                        <td align='center'><strong>" . number_format((float)$cuRow['total_score'], 2) . " (" . htmlspecialchars($cuRow['letter_grade']) . ")</strong></td>
+                        <td align='center'>" . htmlspecialchars(str_replace('_', ' ', $cuRow['status'])) . "</td>
+                    </tr>";
+            }
+            $crossSummaryHtml = "
+                <div style='margin-top: 12px; page-break-inside: avoid;'>
+                    <div style='font-weight: bold; font-size: 10.5px; background: #0f766e; color: #fff; padding: 5px 8px; border-radius: 3px 3px 0 0;'>
+                        REKAPITULASI NILAI AKHIR AKFI LINTAS UNIT (RATA-RATA LIVE " . (int)$crossUnitSummary['unit_count'] . " UNIT)
+                    </div>
+                    <table class='table-data' style='margin-bottom: 0; font-size: 9.5px;'>
+                        <thead>
+                            <tr>
+                                <th>Satuan Pendidikan</th>
+                                <th>Posisi AKFI</th>
+                                <th>Kinerja</th>
+                                <th>Sikap</th>
+                                <th>Absensi</th>
+                                <th>Total Unit</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {$rowsAvgHtml}
+                            <tr style='background: #ecfdf5; font-weight: bold;'>
+                                <td colspan='2'>NILAI AKHIR RATA-RATA GABUNGAN (" . (int)$crossUnitSummary['unit_count'] . " RAPOR)</td>
+                                <td align='center'>" . number_format((float)$crossUnitSummary['avg_kinerja'], 2) . "</td>
+                                <td align='center'>" . number_format((float)$crossUnitSummary['avg_sikap'], 2) . "</td>
+                                <td align='center'>" . number_format((float)$crossUnitSummary['avg_absensi'], 2) . "</td>
+                                <td align='center' style='color: #047857; font-size: 11px;'>" . number_format((float)$crossUnitSummary['avg_total'], 2) . " (" . htmlspecialchars($crossUnitSummary['avg_grade']) . ")</td>
+                                <td align='center'>" . ($crossUnitSummary['all_final'] ? 'Final' : 'Live') . "</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>";
+        }
+
         $html .= "
+            {$crossSummaryHtml}
             <!-- Tanda Tangan 4 Kolom (Resmi Yayasan) -->
             <table class='signatures'>
                 <tr>
@@ -1360,15 +1921,280 @@ class AkfiController extends Controller {
         ExportHelper::pdf($html, 'Rapor_AKFI_' . $assessment['nipy'] . '_' . date('Ymd'), 'A4', 'portrait', true);
     }
 
+    /**
+     * Cetak PDF Resmi Rapor AKFI Gabungan (Rata-Rata Live Lintas Unit) per Pegawai / Kepala Sekolah.
+     */
+    public function printRaporGabungan(string $employeeId): void {
+        $this->requireAuth();
+        self::ensureUnitScopedUniqueKey();
+        $empId = (int)$employeeId;
+        $taId = Auth::academicYearId();
+
+        $emp = Database::fetch(
+            "SELECT e.*, u.name as unit_name, u.code as unit_code, u_emp.signature_path as user_sig_path
+             FROM employees e
+             LEFT JOIN units u ON e.unit_id = u.id
+             LEFT JOIN users u_emp ON e.user_id = u_emp.id
+             WHERE e.id = ? AND e.is_deleted = 0",
+            [$empId]
+        );
+        if (!$emp) {
+            die('Data pegawai tidak ditemukan.');
+        }
+
+        $summary = $this->computeCrossUnitAverageSummary($empId, $taId);
+        if (!$summary) {
+            // Jika hanya punya 1 rapor, arahkan ke printRaporAkfi tunggal
+            $single = Database::fetch(
+                "SELECT id FROM akfi_assessments WHERE employee_id = ? AND academic_year_id = ? LIMIT 1",
+                [$empId, $taId]
+            );
+            if ($single) {
+                $this->printRaporAkfi((string)$single['id']);
+                return;
+            }
+            die('Rapor AKFI pegawai ini belum tersedia.');
+        }
+
+        // Anti-IDOR Check
+        $activeRole = Auth::activeRoleName();
+        $myEmpId = (int)Auth::employeeId();
+        $myUserId = (int)Auth::id();
+        $myUnitId = (int)Auth::unitId();
+        $canView = false;
+
+        if (in_array($activeRole, ['operator_yayasan', 'direktur_pendidikan', 'hrd', 'pembina_yayasan', 'ketua_yayasan'], true)) {
+            $canView = true;
+        } elseif ($empId === $myEmpId) {
+            $canView = true;
+        } elseif ($activeRole === 'deputi_pendidikan') {
+            $deputiUnits = \App\Controllers\DeputiController::getDeputiUnitIds($myUserId);
+            foreach ($summary['assessments'] as $ar) {
+                if (in_array((int)$ar['unit_id'], $deputiUnits, true)) {
+                    $canView = true;
+                    break;
+                }
+            }
+        } elseif ($activeRole === 'kepala_sekolah') {
+            foreach ($summary['assessments'] as $ar) {
+                if ((int)$ar['unit_id'] === $myUnitId) {
+                    $canView = true;
+                    break;
+                }
+            }
+        }
+
+        if (!$canView) {
+            http_response_code(403);
+            die('Akses Ditolak (403): Anda tidak memiliki wewenang untuk mencetak Rapor Gabungan AKFI pegawai ini.');
+        }
+
+        $taRow = Database::fetch("SELECT name, semester FROM academic_years WHERE id = ?", [$taId]);
+        $taLabel = ($taRow['name'] ?? 'Tahun Aktif') . (!empty($taRow['semester']) ? ' (' . $taRow['semester'] . ')' : '');
+        $kop = ExportHelper::renderKopYayasan();
+
+        $predikatLabel = match($summary['avg_grade']) {
+            'A' => 'Amat Baik (A)',
+            'B' => 'Baik (B)',
+            'C' => 'Cukup (C)',
+            'D' => 'Sedang (D)',
+            default => 'Kurang (E)'
+        };
+
+        $unitRowsHtml = '';
+        foreach ($summary['assessments'] as $idx => $ar) {
+            $unitRowsHtml .= "
+                <tr>
+                    <td align='center'>" . ($idx + 1) . "</td>
+                    <td><strong>" . htmlspecialchars($ar['unit_name']) . "</strong> <span style='color:#475569;'>" . ($ar['is_homebase'] ? '(Unit Induk)' : '(Lintas Unit)') . "</span></td>
+                    <td>" . htmlspecialchars($ar['position_name']) . "</td>
+                    <td align='center'>" . number_format((float)$ar['kinerja_score'], 2) . "</td>
+                    <td align='center'>" . number_format((float)$ar['sikap_score'], 2) . "</td>
+                    <td align='center'>" . number_format((float)$ar['absensi_score'], 2) . "</td>
+                    <td align='center'><strong>" . number_format((float)$ar['total_score'], 2) . "</strong></td>
+                    <td align='center'><strong>" . htmlspecialchars($ar['letter_grade']) . "</strong></td>
+                    <td align='center'>" . htmlspecialchars(str_replace('_', ' ', $ar['status'])) . "</td>
+                </tr>";
+        }
+
+        $deputiUser = Database::fetch(
+            "SELECT u.full_name, COALESCE(e.signature_path, u.signature_path) as signature_path, e.nipy
+             FROM users u JOIN user_roles ur ON u.id = ur.user_id JOIN roles r ON ur.role_id = r.id
+             LEFT JOIN employees e ON u.id = e.user_id WHERE r.name = 'deputi_pendidikan' LIMIT 1"
+        );
+        $direkturUser = Database::fetch(
+            "SELECT u.full_name, COALESCE(e.signature_path, u.signature_path) as signature_path, e.nipy
+             FROM users u JOIN user_roles ur ON u.id = ur.user_id JOIN roles r ON ur.role_id = r.id
+             LEFT JOIN employees e ON u.id = e.user_id WHERE r.name = 'direktur_pendidikan' LIMIT 1"
+        );
+        $hrdUser = Database::fetch(
+            "SELECT u.full_name, COALESCE(e.signature_path, u.signature_path) as signature_path, e.nipy
+             FROM users u JOIN user_roles ur ON u.id = ur.user_id JOIN roles r ON ur.role_id = r.id
+             LEFT JOIN employees e ON u.id = e.user_id WHERE r.name = 'hrd' LIMIT 1"
+        );
+
+        $resolveSigImage = function(?string $sigPath): string {
+            if (empty($sigPath)) return '';
+            $sigPath = '/' . ltrim($sigPath, '/');
+            $fullPath = __DIR__ . '/../../public' . $sigPath;
+            if (file_exists($fullPath) && is_file($fullPath)) {
+                $ext = strtolower(pathinfo($fullPath, PATHINFO_EXTENSION));
+                $mime = match($ext) {
+                    'jpg', 'jpeg' => 'image/jpeg',
+                    'png' => 'image/png',
+                    'webp' => 'image/webp',
+                    default => 'image/png'
+                };
+                $data = base64_encode(file_get_contents($fullPath));
+                return "<div style='height: 52px; margin: 3px 0;'><img src='data:{$mime};base64,{$data}' style='max-height: 48px; max-width: 120px; object-fit: contain;' /></div>";
+            }
+            return '';
+        };
+        $renderSigCell = function(?string $sigPath, string $headerDate, string $title, string $name, ?string $nipy = null, ?string $subtitle = null) use ($resolveSigImage): string {
+            $sigHtml = $resolveSigImage($sigPath);
+            if (empty($sigHtml)) $sigHtml = "<div style='height: 52px;'></div>";
+            $dateHtml = !empty($headerDate) ? "<div style='font-size: 9.5px; margin-bottom: 2px;'>" . htmlspecialchars($headerDate) . "</div>" : "<div style='font-size: 9.5px; margin-bottom: 2px;'>&nbsp;</div>";
+            $nipyText = (!empty($nipy) && $nipy !== '-') ? "<br><span style='font-size: 9px;'>NIPY. " . htmlspecialchars($nipy) . "</span>" : "";
+            $subText = !empty($subtitle) ? "<div style='font-size: 8.5px; color: #475569;'>(" . htmlspecialchars($subtitle) . ")</div>" : "";
+            return "<td class='sig-box'>{$dateHtml}<strong>" . htmlspecialchars($title) . "</strong>{$sigHtml}<div style='border-bottom: 1px solid #1e293b; display: inline-block; padding-bottom: 1px; font-weight: bold;'>" . htmlspecialchars($name) . "</div>{$nipyText}{$subText}</td>";
+        };
+
+        $empSig = $emp['signature_path'] ?: ($emp['user_sig_path'] ?? null);
+        $cityDate = "Batam, " . SecurityHelper::formatTanggalIndo(date('Y-m-d'));
+        $cellsHtml  = $renderSigCell($empSig, '', 'Pegawai yang Dinilai', $emp['nama'], $emp['nipy'] ?? '-', $emp['position'] ?? '');
+        $cellsHtml .= $renderSigCell($deputiUser['signature_path'] ?? null, $cityDate, 'Mengetahui', $deputiUser['full_name'] ?? 'Deputi Direktur Pendidikan', null, 'Deputi Direktur Pendidikan');
+        $cellsHtml .= $renderSigCell($direkturUser['signature_path'] ?? null, '', 'Menyetujui', $direkturUser['full_name'] ?? 'Direktur Pendidikan', null, 'Direktur Pendidikan');
+        $cellsHtml .= $renderSigCell($hrdUser['signature_path'] ?? null, '', 'Mengesahkan', $hrdUser['full_name'] ?? 'HRD Yayasan Al-Kahfi', null, 'HRD Yayasan');
+
+        $liveNote = $summary['all_final']
+            ? 'Seluruh rapor unit telah berstatus Final dan disahkan.'
+            : 'Nilai akhir gabungan dihitung secara <strong>live (real-time)</strong> sebagai rata-rata seluruh rapor unit penugasan (' . (int)$summary['final_count'] . ' dari ' . (int)$summary['unit_count'] . ' rapor telah berstatus Final).';
+
+        $html = "
+        <html>
+        <head>
+            <meta charset='UTF-8'>
+            <style>
+                body { font-family: Helvetica, Arial, sans-serif; font-size: 11px; color: #1e293b; line-height: 1.4; }
+                .title-doc { text-align: center; font-size: 14px; font-weight: bold; margin: 14px 0 10px 0; text-transform: uppercase; border-bottom: 2px solid #0f766e; padding-bottom: 5px; }
+                .meta-table { width: 100%; margin-bottom: 12px; }
+                .meta-table td { padding: 3px 4px; vertical-align: top; }
+                .table-data { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
+                .table-data th, .table-data td { border: 1px solid #94a3b8; padding: 6px 7px; }
+                .table-data th { background: #f1f5f9; text-align: center; font-weight: bold; }
+                .signatures { width: 100%; margin-top: 24px; border-collapse: collapse; page-break-inside: avoid; }
+                .sig-box { width: 25%; text-align: center; vertical-align: top; font-size: 9.5px; line-height: 1.3; padding: 0 4px; }
+            </style>
+        </head>
+        <body>
+            {$kop}
+            <div class='title-doc'>RAPOR KINERJA AKFI GABUNGAN LINTAS UNIT (RATA-RATA {$summary['unit_count']} UNIT)</div>
+
+            <table class='meta-table'>
+                <tr>
+                    <td width='18%'><strong>Nama Pegawai</strong></td>
+                    <td width='34%'>: " . htmlspecialchars($emp['nama']) . "</td>
+                    <td width='18%'><strong>Tahun Ajaran</strong></td>
+                    <td width='30%'>: " . htmlspecialchars($taLabel) . "</td>
+                </tr>
+                <tr>
+                    <td><strong>NIPY</strong></td>
+                    <td>: " . htmlspecialchars($emp['nipy'] ?? '-') . "</td>
+                    <td><strong>Unit Induk</strong></td>
+                    <td>: " . htmlspecialchars($emp['unit_name'] ?? '-') . "</td>
+                </tr>
+                <tr>
+                    <td><strong>Jabatan Pokok</strong></td>
+                    <td>: " . htmlspecialchars($emp['position'] ?? '-') . "</td>
+                    <td><strong>Predikat Akhir</strong></td>
+                    <td>: <strong>{$predikatLabel}</strong></td>
+                </tr>
+            </table>
+
+            <table class='table-data'>
+                <thead>
+                    <tr>
+                        <th width='32'>No</th>
+                        <th>Satuan Pendidikan</th>
+                        <th>Posisi / Template AKFI</th>
+                        <th width='65'>Kinerja</th>
+                        <th width='65'>Sikap</th>
+                        <th width='65'>Absensi</th>
+                        <th width='75'>Total Unit</th>
+                        <th width='55'>Predikat</th>
+                        <th width='85'>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {$unitRowsHtml}
+                    <tr style='background: #ecfdf5; font-weight: bold; font-size: 11.5px;'>
+                        <td colspan='3'>NILAI AKHIR AKFI GABUNGAN (RATA-RATA {$summary['unit_count']} RAPOR)</td>
+                        <td align='center'>" . number_format((float)$summary['avg_kinerja'], 2) . "</td>
+                        <td align='center'>" . number_format((float)$summary['avg_sikap'], 2) . "</td>
+                        <td align='center'>" . number_format((float)$summary['avg_absensi'], 2) . "</td>
+                        <td align='center' style='color: #047857; font-size: 13px;'>" . number_format((float)$summary['avg_total'], 2) . "</td>
+                        <td align='center' style='color: #047857; font-size: 13px;'>" . htmlspecialchars($summary['avg_grade']) . "</td>
+                        <td align='center'>" . ($summary['all_final'] ? 'Final' : 'Live') . "</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <div style='border: 1px solid #99f6e4; background: #f0fdfa; padding: 8px 10px; border-radius: 4px; font-size: 10px; color: #115e59;'>
+                <strong>Keterangan Perhitungan Lintas Unit:</strong> {$liveNote}
+            </div>
+
+            <table class='signatures'>
+                <tr>{$cellsHtml}</tr>
+            </table>
+        </body>
+        </html>";
+
+        ExportHelper::pdf($html, 'Rapor_Gabungan_AKFI_' . ($emp['nipy'] ?? $empId) . '_' . date('Ymd'), 'A4', 'portrait', true);
+    }
+
     // Helper: auto matching template for employee position
-    private function matchTemplateForEmployee(array $emp): int {
+    private function matchTemplateForEmployee(array $emp, ?int $targetUnitId = null, array $unitRoleNames = []): int {
         $pos = strtoupper($emp['position'] ?? $emp['level_posisi'] ?? '');
-        $unitId = (int)($emp['unit_id'] ?? 3);
+        $homebaseUnitId = (int)($emp['unit_id'] ?? 3);
+        $unitId = $targetUnitId ?: $homebaseUnitId;
         $empId = (int)($emp['id'] ?? 0);
         $userId = (int)($emp['user_id'] ?? 0);
 
         $unit = Database::fetch("SELECT level FROM units WHERE id = ?", [$unitId]);
-        $lvl = $unit['level'] ?? 'SD';
+        $lvl = strtoupper((string)($unit['level'] ?? 'SD'));
+
+        // Jika matching khusus untuk penugasan lintas unit (unit berbeda dari homebase)
+        if ($targetUnitId !== null && $targetUnitId > 0 && $targetUnitId !== $homebaseUnitId) {
+            if (in_array('kepala_sekolah', $unitRoleNames, true)) {
+                if ($lvl === 'TK' || $lvl === 'KB') return 9;
+                if ($lvl === 'SMP' || $lvl === 'SMA') return 10;
+                return 8;
+            }
+            if (in_array('walas', $unitRoleNames, true)) {
+                return 3;
+            }
+            if (in_array('guru_tahfidz', $unitRoleNames, true)) {
+                return 2;
+            }
+            if (in_array('guru_mapel_kbtk', $unitRoleNames, true)) {
+                $tplKbtk = Database::fetch("SELECT id FROM akfi_templates WHERE position_code = 'GURU_MAPEL_KBTK' ORDER BY id DESC LIMIT 1");
+                if ($tplKbtk) return (int)$tplKbtk['id'];
+                return 4;
+            }
+            if (in_array('guru_tk', $unitRoleNames, true) || $lvl === 'TK' || $lvl === 'KB') {
+                return 4;
+            }
+            if (in_array('tata_usaha', $unitRoleNames, true)) {
+                return 5;
+            }
+            if (in_array('cleaning_service', $unitRoleNames, true)) {
+                return 6;
+            }
+            if (in_array('security', $unitRoleNames, true)) {
+                return 7;
+            }
+            return 1;
+        }
 
         $isKepsek = false;
         if (str_contains($pos, 'KEPALA SEKOLAH') || str_contains($pos, 'KEPALA SATUAN') || str_contains($pos, 'KEPSEK') || str_contains($pos, 'KANIT')) {
@@ -1389,20 +2215,21 @@ class AkfiController extends Controller {
         }
 
         if ($isKepsek) {
-            if ($lvl === 'TK') return 9;
+            if ($lvl === 'TK' || $lvl === 'KB') return 9;
             if ($lvl === 'SMP' || $lvl === 'SMA') return 10;
             return 8; // SD
         }
         if (str_contains($pos, 'SECURITY') || str_contains($pos, 'SATPAM')) return 7;
         if (str_contains($pos, 'CS') || str_contains($pos, 'CLEANING') || str_contains($pos, 'KEBERSIHAN')) return 6;
 
-        // Cek apakah pegawai ditugaskan sebagai Walas di tabel classes atau memiliki peran walas di user_roles
-        $isWalasClass = Database::fetch("SELECT id FROM classes WHERE walas_id = ?", [$empId]);
+        // Cek apakah pegawai ditugaskan sebagai Walas di tabel classes atau memiliki peran walas di user_roles pada unit ini
+        $isWalasClass = Database::fetch("SELECT id FROM classes WHERE walas_id = ? AND unit_id = ?", [$empId, $unitId]);
         $hasWalasRole = false;
         if ($userId > 0) {
             $rWalas = Database::fetch(
-                "SELECT ur.role_id FROM user_roles ur JOIN roles r ON ur.role_id = r.id WHERE ur.user_id = ? AND r.name = 'walas'",
-                [$userId]
+                "SELECT ur.role_id FROM user_roles ur JOIN roles r ON ur.role_id = r.id
+                 WHERE ur.user_id = ? AND r.name = 'walas' AND (COALESCE(ur.unit_id, 0) = 0 OR ur.unit_id = ?)",
+                [$userId, $unitId]
             );
             if ($rWalas) $hasWalasRole = true;
         }
@@ -1429,12 +2256,12 @@ class AkfiController extends Controller {
             if ($rMapelKbtk) $hasMapelKbtkRole = true;
         }
 
-        if ($hasMapelKbtkRole || ($lvl === 'TK' && (str_contains($pos, 'MAPEL') || str_contains($pos, 'MATA PELAJARAN')))) {
+        if ($hasMapelKbtkRole || (($lvl === 'TK' || $lvl === 'KB') && (str_contains($pos, 'MAPEL') || str_contains($pos, 'MATA PELAJARAN')))) {
             $tplKbtk = Database::fetch("SELECT id FROM akfi_templates WHERE position_code = 'GURU_MAPEL_KBTK' ORDER BY id DESC LIMIT 1");
             if ($tplKbtk) return (int)$tplKbtk['id'];
         }
 
-        if ($lvl === 'TK') return 4;
+        if ($lvl === 'TK' || $lvl === 'KB') return 4;
 
         return 1; // Guru Mapel SD/SMP/SMA
     }
@@ -1495,11 +2322,11 @@ class AkfiController extends Controller {
         $attLupaCatat   = (int)($att['total_lupa_catat'] ?? 0);
         $attMangkir     = (int)($att['total_mangkir'] ?? $att['total_alpha'] ?? 0);
 
-        // 2. Supervisi Mengajar (Khusus Guru)
+        // 2. Supervisi Mengajar (Khusus Guru pada unit rapor ini)
         $sup = Database::fetch(
             "SELECT AVG(final_score) as avg_supervisi, COUNT(id) as sessions_count 
-             FROM supervisi_sessions WHERE teacher_id = ? AND academic_year_id = ?",
-            [$empId, $taId]
+             FROM supervisi_sessions WHERE teacher_id = ? AND academic_year_id = ? AND unit_id = ?",
+            [$empId, $taId, $unitId]
         );
         $sessionsCount = (int)($sup['sessions_count'] ?? 0);
         $avgSupervisi = ($sessionsCount > 0 && $sup['avg_supervisi'] !== null) ? round((float)$sup['avg_supervisi'], 1) : 0.0;
@@ -1550,8 +2377,8 @@ class AkfiController extends Controller {
             "SELECT COUNT(DISTINCT CONCAT(jenis_admin_id, '-', month_num)) as total_verified,
                     SUM(CASE WHEN is_on_time = 1 THEN 1 ELSE 0 END) as total_ontime
              FROM administrasi_uploads 
-             WHERE user_id = ? AND academic_year_id = ? AND status = 'Disetujui'",
-            [$empUserId, $taId]
+             WHERE user_id = ? AND academic_year_id = ? AND unit_id = ? AND status = 'Disetujui'",
+            [$empUserId, $taId, $unitId]
         );
         $verifiedAdmin = (int)($adminUploads['total_verified'] ?? 0);
         $ontimeAdmin   = (int)($adminUploads['total_ontime'] ?? 0);
@@ -1571,22 +2398,23 @@ class AkfiController extends Controller {
         );
         $uploadPtk = $ptk ? 1 : 0;
 
-        // 6. Rata-rata Nilai Mata Pelajaran yang diampu guru (subject_average)
+        // 6. Rata-rata Nilai Mata Pelajaran yang diampu guru pada unit rapor ini (subject_average)
         $subAvgRow = Database::fetch(
             "SELECT AVG(sg.score) as avg_score, COUNT(sg.id) as grades_count 
              FROM student_grades sg 
              JOIN teacher_subjects ts ON sg.subject_id = ts.subject_id AND sg.class_id = ts.class_id AND sg.academic_year_id = ts.academic_year_id
-             WHERE ts.employee_id = ? AND sg.academic_year_id = ?",
-            [$empId, $taId]
+             JOIN classes c ON ts.class_id = c.id
+             WHERE ts.employee_id = ? AND sg.academic_year_id = ? AND c.unit_id = ?",
+            [$empId, $taId, $unitId]
         );
         $gradesCount = (int)($subAvgRow['grades_count'] ?? 0);
         $subjectAverage = ($gradesCount > 0 && $subAvgRow['avg_score'] !== null) ? round((float)$subAvgRow['avg_score'], 1) : 0.0;
 
-        // 7. Presensi Kehadiran Siswa di Kelas Walas / KBM / Halaqah Tahfidz (student_attendance)
+        // 7. Presensi Kehadiran Siswa di Kelas Walas / KBM / Halaqah Tahfidz pada unit rapor ini (student_attendance)
         $isTahfidzTutor = ($positionCode === 'GURU_TAHTA' || str_contains($positionCode, 'TAHFIDZ') || str_contains($emp['level_posisi'] ?? '', 'Tahfidz') || str_contains($emp['position'] ?? '', 'Tahfidz'));
         $tahfidzHalaqahs = Database::fetchAll(
-            "SELECT id, name FROM tahfidz_halaqah WHERE (tutor_employee_id = ? OR tutor_employee_id = ?) AND academic_year_id = ? AND type = 'Siswa'",
-            [$empId, $empUserId, $taId]
+            "SELECT id, name FROM tahfidz_halaqah WHERE (tutor_employee_id = ? OR tutor_employee_id = ?) AND academic_year_id = ? AND unit_id = ? AND type = 'Siswa'",
+            [$empId, $empUserId, $taId, $unitId]
         );
 
         $studentAttendance = 0.0;
@@ -1671,23 +2499,23 @@ class AkfiController extends Controller {
                 }
             }
         } else {
-            // Wali Kelas atau Guru Mapel Umum
+            // Wali Kelas atau Guru Mapel Umum pada unit rapor ini
             $walasClasses = Database::fetchAll(
-                "SELECT id, name FROM classes WHERE (walas_id = ? OR walas_employee_id = ? OR walas_id = ?) AND academic_year_id = ?",
-                [$empId, $empId, $empUserId, $taId]
+                "SELECT id, name FROM classes WHERE (walas_id = ? OR walas_employee_id = ? OR walas_id = ?) AND academic_year_id = ? AND unit_id = ?",
+                [$empId, $empId, $empUserId, $taId, $unitId]
             );
 
             if (!empty($walasClasses)) {
                 $walasClassIds = array_column($walasClasses, 'id');
                 $walasClassNames = implode(', ', array_column($walasClasses, 'name'));
             } else {
-                // Jika tidak tercatat di classes.walas_id, cek kelas yang diajar melalui teacher_subjects
+                // Jika tidak tercatat di classes.walas_id, cek kelas yang diajar melalui teacher_subjects di unit rapor ini
                 $subClasses = Database::fetchAll(
                     "SELECT DISTINCT c.id, c.name 
                      FROM teacher_subjects ts 
                      JOIN classes c ON ts.class_id = c.id 
-                     WHERE ts.employee_id = ? AND ts.academic_year_id = ?",
-                    [$empId, $taId]
+                     WHERE ts.employee_id = ? AND ts.academic_year_id = ? AND c.unit_id = ?",
+                    [$empId, $taId, $unitId]
                 );
                 if (!empty($subClasses)) {
                     $walasClassIds = array_column($subClasses, 'id');

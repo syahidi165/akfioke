@@ -30,7 +30,12 @@
                                     <strong><?= htmlspecialchars($a['nama']) ?></strong>
                                     <div class="small text-muted">NIPY: <?= htmlspecialchars($a['nipy']) ?></div>
                                 </td>
-                                <td><?= htmlspecialchars($a['unit_name']) ?></td>
+                                <td>
+                                    <?= htmlspecialchars($a['unit_name']) ?>
+                                    <?php if (!empty($a['emp_homebase_unit_id']) && (int)$a['emp_homebase_unit_id'] !== (int)$a['unit_id']): ?>
+                                        <span class="badge bg-info text-dark" style="font-size: 10px;">Lintas Unit</span>
+                                    <?php endif; ?>
+                                </td>
                                 <td><?= htmlspecialchars($a['position_name']) ?></td>
                                 <td>
                                     <div style="font-size: 12px; font-weight: 600;"><?= htmlspecialchars($a['superior_name'] ?: 'Atasan Langsung') ?></div>
@@ -38,7 +43,14 @@
                                         <div style="font-size: 11px; color: #059669;"><i class="fa fa-stamp"></i> Sah: <?= htmlspecialchars($a['hr_name']) ?></div>
                                     <?php endif; ?>
                                 </td>
-                                <td><strong class="text-emerald-700"><?= $a['total_score'] ?></strong></td>
+                                <td>
+                                    <strong class="text-emerald-700"><?= $a['total_score'] ?></strong>
+                                    <?php if (!empty($a['cross_unit_summary'])): ?>
+                                        <div style="font-size: 10.5px; color: #0f766e; font-weight: 600;">
+                                            Avg <?= (int)$a['cross_unit_summary']['unit_count'] ?> Unit: <?= number_format((float)$a['cross_unit_summary']['avg_total'], 2) ?> (<?= htmlspecialchars($a['cross_unit_summary']['avg_grade']) ?>)
+                                        </div>
+                                    <?php endif; ?>
+                                </td>
                                 <td>
                                     <span class="badge bg-emerald-100 text-emerald-800 fs-7"><?= $a['letter_grade'] ?></span>
                                 </td>
@@ -62,9 +74,14 @@
                                         </form>
                                     <?php endif; ?>
 
-                                    <a href="<?= \Core\Auth::baseUrl() ?>/akfi/print-rapor/<?= $a['id'] ?>" target="_blank" class="btn btn-sm btn-outline-secondary" title="Pratinjau PDF Rapor Resmi">
+                                    <a href="<?= \Core\Auth::baseUrl() ?>/akfi/print-rapor/<?= $a['id'] ?>" target="_blank" class="btn btn-sm btn-outline-secondary" title="Pratinjau PDF Rapor Unit Ini">
                                         <i class="fa fa-file-pdf me-1"></i> Rapor PDF
                                     </a>
+                                    <?php if (!empty($a['cross_unit_summary'])): ?>
+                                        <a href="<?= \Core\Auth::baseUrl() ?>/akfi/print-gabungan/<?= (int)$a['employee_id'] ?>" target="_blank" class="btn btn-sm btn-outline-primary" title="Cetak Rapor Gabungan (Rata-Rata Live)">
+                                            <i class="fa fa-layer-group me-1"></i> Gabungan
+                                        </a>
+                                    <?php endif; ?>
                                 </td>
                             </tr>
                         <?php endforeach; ?>

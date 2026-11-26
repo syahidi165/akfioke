@@ -130,6 +130,12 @@ class DashboardController extends Controller {
             $sumSiswaHadir = 0;
             $sumSiswaTotalDays = 0;
 
+            $tunggakanByUnit = [];
+            $sumTunggakanSpp = 0.0;
+            $sumTunggakanNonSpp = 0.0;
+            $sumTunggakanTotal = 0.0;
+            $sumUnpaidStudents = 0;
+
             foreach ($allUnits as $u) {
                 $uid = (int)$u['id'];
 
@@ -197,6 +203,39 @@ class DashboardController extends Controller {
                     'alpha'       => $sAlpha,
                     'pct'         => $sPct
                 ];
+
+                // Akumulasi Tunggakan Unit Binaan (SPP vs Non-SPP & Total Keseluruhan)
+                $billRow = Database::fetch(
+                    "SELECT COUNT(DISTINCT student_id) as unpaid_students,
+                            COALESCE(SUM(amount_spp), 0) as sum_spp,
+                            COALESCE(SUM(amount_non_spp), 0) as sum_non_spp,
+                            COALESCE(SUM(amount), 0) as sum_total
+                     FROM bills
+                     WHERE unit_id = ? AND academic_year_id = ? AND status = 'Tertunggak'",
+                    [$uid, $taId]
+                );
+                $uUnpaidCnt = (int)($billRow['unpaid_students'] ?? 0);
+                $uSpp       = (float)($billRow['sum_spp'] ?? 0);
+                $uNonSpp    = (float)($billRow['sum_non_spp'] ?? 0);
+                $uTot       = (float)($billRow['sum_total'] ?? 0);
+                $uRatio     = $totSiswa > 0 ? round(($uUnpaidCnt / $totSiswa) * 100, 1) : 0.0;
+
+                $sumUnpaidStudents += $uUnpaidCnt;
+                $sumTunggakanSpp += $uSpp;
+                $sumTunggakanNonSpp += $uNonSpp;
+                $sumTunggakanTotal += $uTot;
+
+                $tunggakanByUnit[] = [
+                    'unit_id'         => $uid,
+                    'unit_code'       => $u['code'],
+                    'unit_name'       => $u['name'],
+                    'total_siswa'     => $totSiswa,
+                    'unpaid_students' => $uUnpaidCnt,
+                    'ratio_pct'       => $uRatio,
+                    'spp'             => $uSpp,
+                    'non_spp'         => $uNonSpp,
+                    'total'           => $uTot
+                ];
             }
 
             $totalUnitsYayasanCount = (int)(Database::fetch("SELECT COUNT(*) as c FROM units")['c'] ?? 0);
@@ -211,6 +250,11 @@ class DashboardController extends Controller {
             $data['totalUnitsYayasanCount'] = $totalUnitsYayasanCount;
             $data['isAllUnitsOverseen'] = (count($allUnits) >= $totalUnitsYayasanCount);
             $data['totalSiswaYayasan'] = $totalSiswaYayasan;
+            $data['tunggakanByUnit'] = $tunggakanByUnit;
+            $data['totalTunggakanSppBinaan'] = $sumTunggakanSpp;
+            $data['totalTunggakanNonSppBinaan'] = $sumTunggakanNonSpp;
+            $data['totalTunggakanKeseluruhanBinaan'] = $sumTunggakanTotal;
+            $data['totalSiswaTertunggakBinaan'] = $sumUnpaidStudents;
 
         } elseif ($role === 'kepala_sekolah') {
             $currentUnit = Database::fetch("SELECT * FROM units WHERE id = ?", [$unitId]) ?: [];

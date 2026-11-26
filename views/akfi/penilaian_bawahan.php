@@ -281,10 +281,22 @@ $getSortIcon = function(string $col) use ($sortBy, $sortOrder) {
                                 </div>
                             </td>
                             <td>
-                                <div style="font-weight: 500;"><?= SecurityHelper::escape($a['unit_name']) ?></div>
+                                <div style="font-weight: 500;">
+                                    <?= SecurityHelper::escape($a['unit_name']) ?>
+                                    <?php if (!empty($a['emp_homebase_unit_id']) && (int)$a['emp_homebase_unit_id'] !== (int)$a['unit_id']): ?>
+                                        <span class="badge" style="background: #ede9fe; color: #6d28d9; font-size: 10px; margin-left: 4px;">
+                                            Lintas Unit (Induk: <?= SecurityHelper::escape($a['homebase_unit_code'] ?: $a['homebase_unit_name'] ?? '-') ?>)
+                                        </span>
+                                    <?php endif; ?>
+                                </div>
                                 <span class="badge badge-secondary" style="font-size: 10px; margin-top: 2px;">
                                     <?= SecurityHelper::escape($a['position_name']) ?>
                                 </span>
+                                <?php if (!empty($a['cross_unit_summary'])): ?>
+                                    <div style="font-size: 10.5px; color: #0f766e; margin-top: 3px; font-weight: 600;">
+                                        <i class="fa-solid fa-layer-group"></i> Rata-Rata <?= (int)$a['cross_unit_summary']['unit_count'] ?> Unit: <?= number_format((float)$a['cross_unit_summary']['avg_total'], 2) ?> (<?= SecurityHelper::escape($a['cross_unit_summary']['avg_grade']) ?>)
+                                    </div>
+                                <?php endif; ?>
                             </td>
                             <td style="text-align: center;">
                                 <?php if ($a['status'] === 'Final'): ?>

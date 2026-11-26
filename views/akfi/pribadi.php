@@ -27,14 +27,19 @@ $badgeGrade = match($grade) {
             Rapor Angka Ketercapaian Fungsional Individu & Penilaian Sasaran Kerja Pegawai
         </p>
     </div>
-    <div style="display: flex; align-items: center; gap: 10px;">
+    <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+        <?php if (!empty($crossUnitSummary)): ?>
+            <a href="<?= Auth::baseUrl() ?>/akfi/print-gabungan/<?= (int)$employee['id'] ?>" target="_blank" class="btn btn-outline" style="border-color: #0f766e; color: #0f766e; font-weight: 600; display: inline-flex; align-items: center; gap: 8px;">
+                <i class="fa-solid fa-layer-group"></i> Cetak Rapor Gabungan (Rata-Rata PDF)
+            </a>
+        <?php endif; ?>
         <?php if ($isApproved || $isFinal): ?>
             <a href="<?= Auth::baseUrl() ?>/akfi/print-rapor/<?= $assessment['id'] ?>" target="_blank" class="btn btn-primary" style="display: inline-flex; align-items: center; gap: 8px;">
-                <i class="fa-solid fa-print"></i> Cetak Rapor AKFI (PDF)
+                <i class="fa-solid fa-print"></i> Cetak Rapor Unit Ini (PDF)
             </a>
         <?php else: ?>
             <span class="badge badge-secondary" style="padding: 8px 14px; font-size: 12px; display: inline-flex; align-items: center; gap: 6px;">
-                <i class="fa-solid fa-lock"></i> Rapor Belum Disahkan
+                <i class="fa-solid fa-lock"></i> Rapor Unit Ini Belum Disahkan
             </span>
         <?php endif; ?>
     </div>
@@ -76,26 +81,65 @@ $badgeGrade = match($grade) {
     </div>
 </div>
 
-<?php if (!empty($crossUnitAssignments)): ?>
-    <?php $isKsTpl = str_contains(strtoupper($assessment['position_name'] ?? ''), 'KEPALA'); ?>
+<?php if (!empty($crossUnitSummary) || count($assignedUnits ?? []) > 1): ?>
+    <div class="card" style="margin-bottom: 20px; border: 1px solid #99f6e4; background: linear-gradient(135deg, #f0fdfa 0%, #ffffff 100%);">
+        <div class="card-body" style="padding: 16px 20px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 12px;">
+                <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                    <i class="fa-solid fa-diagram-project" style="color: #0f766e;"></i>
+                    <strong style="color: #115e59; font-size: 14px;">Rapor AKFI Lintas Unit (Nilai Akhir = Rata-Rata Live Seluruh Unit):</strong>
+                    <?php foreach ($assignedUnits ?? [] as $au):
+                        $isTabActive = ((int)$au['unit_id'] === (int)$assessment['unit_id']);
+                    ?>
+                        <a href="<?= Auth::baseUrl() ?>/akfi/pribadi?unit_id=<?= (int)$au['unit_id'] ?>"
+                           class="btn btn-sm <?= $isTabActive ? 'btn-primary' : 'btn-outline' ?>"
+                           style="<?= $isTabActive ? 'background: #0f766e; border-color: #0f766e;' : 'border-color: #99f6e4; color: #0f766e; background: #fff;' ?> font-weight: 600;">
+                            <i class="fa-solid fa-school" style="margin-right: 4px;"></i>
+                            <?= SecurityHelper::escape($au['unit_code'] ?: $au['unit_name']) ?>
+                            <?= !empty($au['is_homebase']) ? ' (Induk)' : ' (Lintas Unit)' ?>
+                        </a>
+                    <?php endforeach; ?>
+                </div>
+                <?php if (!empty($crossUnitSummary)): ?>
+                    <div style="display: flex; align-items: center; gap: 10px; background: #ecfdf5; border: 1px solid #6ee7b7; border-radius: 8px; padding: 6px 12px;">
+                        <span style="font-size: 12px; color: #065f46; font-weight: 600;">Rata-Rata Live (<?= (int)$crossUnitSummary['unit_count'] ?> Unit):</span>
+                        <strong style="font-size: 17px; color: #047857;"><?= number_format((float)$crossUnitSummary['avg_total'], 2) ?></strong>
+                        <span class="badge badge-success" style="font-size: 12px;"><?= SecurityHelper::escape($crossUnitSummary['avg_grade']) ?></span>
+                    </div>
+                <?php endif; ?>
+            </div>
+
+            <?php if (!empty($crossUnitSummary['assessments'])): ?>
+                <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                    <?php foreach ($crossUnitSummary['assessments'] as $cu): ?>
+                        <a href="<?= Auth::baseUrl() ?>/akfi/pribadi?unit_id=<?= (int)$cu['unit_id'] ?>"
+                           style="text-decoration: none; flex: 1; min-width: 210px; background: <?= (int)$cu['unit_id'] === (int)$assessment['unit_id'] ? '#ccfbf1' : '#fff' ?>; border: 1px solid <?= (int)$cu['unit_id'] === (int)$assessment['unit_id'] ? '#0d9488' : '#e2e8f0' ?>; border-radius: 8px; padding: 8px 12px; color: #1e293b;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; font-size: 12px;">
+                                <strong><?= SecurityHelper::escape($cu['unit_name']) ?></strong>
+                                <span class="badge <?= $cu['status'] === 'Final' ? 'badge-success' : ($cu['status'] === 'Disetujui_Atasan' ? 'badge-info' : 'badge-secondary') ?>" style="font-size: 10px;">
+                                    <?= SecurityHelper::escape(str_replace('_', ' ', $cu['status'])) ?>
+                                </span>
+                            </div>
+                            <div style="font-size: 11px; color: #475569; margin-top: 2px;">
+                                <?= SecurityHelper::escape($cu['position_name']) ?> &bull; Skor: <strong><?= number_format((float)$cu['total_score'], 2) ?> (<?= SecurityHelper::escape($cu['letter_grade']) ?>)</strong>
+                            </div>
+                        </a>
+                    <?php endforeach; ?>
+                </div>
+            <?php endif; ?>
+        </div>
+    </div>
+<?php elseif (!empty($crossUnitAssignments)): ?>
     <div class="alert alert-info" style="margin-bottom: 20px; border-left: 4px solid #0284c7; font-size: 13px; line-height: 1.55;">
         <div style="display: flex; align-items: flex-start; gap: 10px;">
             <i class="fa-solid fa-diagram-project" style="margin-top: 3px; color: #0284c7;"></i>
             <div>
-                <strong>Penugasan Lintas Unit Aktif (Kebijakan 1 Rapor AKFI):</strong>
-                Anda tercatat memiliki tugas tambahan lintas unit:
+                <strong>Penugasan Lintas Unit Aktif:</strong>
                 <?php foreach ($crossUnitAssignments as $ca): ?>
                     <span class="badge badge-info" style="margin: 2px 4px 2px 0;">
                         <?= SecurityHelper::escape($ca['role_display']) ?> — <?= SecurityHelper::escape($ca['unit_code'] ?: $ca['unit_name']) ?>
                     </span>
                 <?php endforeach; ?>
-                <div style="margin-top: 4px; color: #334155;">
-                    <?php if ($isKsTpl): ?>
-                        Rapor AKFI Anda tetap menggunakan <strong>1 rapor tunggal Kepala Sekolah Unit Induk</strong> (KPI kepemimpinan unit induk; penugasan mengajar di unit lain bersifat bantuan operasional).
-                    <?php else: ?>
-                        Rapor AKFI Anda tetap dinilai dalam <strong>1 rapor tunggal Unit Induk</strong>, dengan capaian mengajar, nilai KKM, supervisi kelas, administrasi, dan halaqah dari seluruh unit terakumulasi otomatis ke Bagian A.
-                    <?php endif; ?>
-                </div>
             </div>
         </div>
     </div>

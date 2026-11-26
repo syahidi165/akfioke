@@ -247,8 +247,14 @@ $overallProgress = $totalAllEmployees > 0 ? round(($totalAllAssessed / $totalAll
                             $hasAssessment = !empty($e['assessment_id']);
                             $status = $e['assessment_status'] ?? 'Belum Dinilai';
                             $grade = $e['letter_grade'] ?? '-';
+                            $isCrossAvg = !empty($e['is_cross_unit_avg']);
+                            $breakdown = $e['unit_breakdown'] ?? [];
+                            $unitSearchNames = [$e['unit_name']];
+                            foreach ($breakdown as $bd) {
+                                if (!empty($bd['unit_name'])) $unitSearchNames[] = $bd['unit_name'];
+                            }
                         ?>
-                            <tr class="emp-row" data-unit="<?= htmlspecialchars($e['unit_name']) ?>" data-status="<?= htmlspecialchars($status) ?>">
+                            <tr class="emp-row" data-unit="<?= htmlspecialchars(implode(' | ', array_unique($unitSearchNames))) ?>" data-status="<?= htmlspecialchars($status) ?>">
                                 <td style="padding: 12px 10px; text-align: center; color: var(--text-muted);"><?= $idx + 1 ?></td>
                                 <td style="padding: 12px 16px;">
                                     <div class="emp-name" style="font-weight: 600; color: #1e293b;"><?= htmlspecialchars($e['nama']) ?></div>
@@ -256,6 +262,15 @@ $overallProgress = $totalAllEmployees > 0 ? round(($totalAllAssessed / $totalAll
                                 </td>
                                 <td style="padding: 12px 12px;">
                                     <span style="font-size: 12px; font-weight: 500; color: #334155;"><?= htmlspecialchars($e['unit_name']) ?></span>
+                                    <?php if ($isCrossAvg): ?>
+                                        <div style="margin-top: 4px; display: flex; flex-wrap: wrap; gap: 4px;">
+                                            <?php foreach ($breakdown as $bd): ?>
+                                                <a href="<?= $baseUrl ?>/akfi/print-rapor/<?= (int)$bd['id'] ?>" target="_blank" class="badge" style="background: #f0fdfa; color: #0f766e; border: 1px solid #99f6e4; font-size: 10px; text-decoration: none;" title="Cetak Rapor Unit Ini">
+                                                    <?= htmlspecialchars($bd['unit_code'] ?: $bd['unit_name']) ?>: <?= number_format((float)$bd['total_score'], 2) ?>
+                                                </a>
+                                            <?php endforeach; ?>
+                                        </div>
+                                    <?php endif; ?>
                                 </td>
                                 <td style="padding: 12px 12px;">
                                     <span style="font-size: 12px; color: var(--primary); font-weight: 600;"><?= htmlspecialchars($e['position_name']) ?></span>
@@ -272,6 +287,9 @@ $overallProgress = $totalAllEmployees > 0 ? round(($totalAllAssessed / $totalAll
                                 <td style="padding: 12px 8px; text-align: center;">
                                     <?php if ($hasAssessment): ?>
                                         <strong style="color: var(--primary); font-size: 14px;"><?= $e['total_score'] ?></strong>
+                                        <?php if ($isCrossAvg): ?>
+                                            <div style="font-size: 10px; color: #0f766e; font-weight: 600;">Rata-Rata <?= count($breakdown) ?> Unit</div>
+                                        <?php endif; ?>
                                     <?php else: ?>
                                         <span style="color: #94a3b8;">-</span>
                                     <?php endif; ?>
@@ -309,7 +327,11 @@ $overallProgress = $totalAllEmployees > 0 ? round(($totalAllAssessed / $totalAll
                                     <?php endif; ?>
                                 </td>
                                 <td style="padding: 12px 14px; text-align: center;">
-                                    <?php if ($hasAssessment): ?>
+                                    <?php if ($isCrossAvg): ?>
+                                        <a href="<?= $baseUrl ?>/akfi/print-gabungan/<?= (int)$e['employee_id'] ?>" target="_blank" class="btn btn-primary btn-sm" style="font-size: 11px; padding: 4px 8px; border-radius: 4px; background: #0f766e; border-color: #0f766e;" title="Cetak Rapor Gabungan Rata-Rata Lintas Unit">
+                                            <i class="fa-solid fa-layer-group"></i> Gabungan
+                                        </a>
+                                    <?php elseif ($hasAssessment): ?>
                                         <a href="<?= $baseUrl ?>/akfi/print-rapor/<?= $e['assessment_id'] ?>" target="_blank" class="btn btn-outline btn-sm" style="font-size: 11px; padding: 4px 10px; border-radius: 4px;" title="Cetak Rapor Resmi">
                                             <i class="fa-solid fa-print"></i> Rapor
                                         </a>

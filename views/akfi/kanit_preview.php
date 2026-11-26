@@ -106,8 +106,20 @@ $avgScore = $countWithScores > 0 ? round($totalScores / $countWithScores, 1) : 0
                             </td>
                             <td>
                                 <?php if ($ks): ?>
-                                    <div style="font-weight: 600;"><?= SecurityHelper::escape($ks['nama']) ?></div>
+                                    <div style="font-weight: 600;">
+                                        <?= SecurityHelper::escape($ks['nama']) ?>
+                                        <?php if (!empty($k['isCrossUnit'])): ?>
+                                            <span class="badge" style="background: #ede9fe; color: #6d28d9; font-size: 10px; margin-left: 4px;">
+                                                Rangkap / Lintas Unit (Induk: <?= SecurityHelper::escape($ks['unit_code'] ?: $ks['unit_name']) ?>)
+                                            </span>
+                                        <?php endif; ?>
+                                    </div>
                                     <div style="font-size: 11px; color: var(--text-muted);">NIPY: <?= SecurityHelper::escape($ks['nipy']) ?></div>
+                                    <?php if (!empty($k['crossUnitSummary'])): ?>
+                                        <div style="font-size: 11px; color: #0f766e; font-weight: 700; margin-top: 2px;">
+                                            <i class="fa-solid fa-layer-group"></i> Rata-Rata <?= (int)$k['crossUnitSummary']['unit_count'] ?> Unit: <?= number_format((float)$k['crossUnitSummary']['avg_total'], 2) ?> (<?= SecurityHelper::escape($k['crossUnitSummary']['avg_grade']) ?>)
+                                        </div>
+                                    <?php endif; ?>
                                 <?php else: ?>
                                     <span class="text-muted" style="font-style: italic;">Belum ditugaskan</span>
                                 <?php endif; ?>
@@ -183,9 +195,14 @@ $avgScore = $countWithScores > 0 ? round($totalScores / $countWithScores, 1) : 0
                                         <a href="<?= $baseUrl ?>/akfi/assess/<?= $a['id'] ?>" class="btn btn-outline btn-sm" title="Form Penilaian Lengkap">
                                             <i class="fa-solid fa-pen-to-square"></i> Form
                                         </a>
-                                        <a href="<?= $baseUrl ?>/akfi/print-rapor/<?= $a['id'] ?>" target="_blank" class="btn btn-outline btn-sm" title="Cetak Rapor A4">
+                                        <a href="<?= $baseUrl ?>/akfi/print-rapor/<?= $a['id'] ?>" target="_blank" class="btn btn-outline btn-sm" title="Cetak Rapor Unit Ini A4">
                                             <i class="fa-solid fa-print"></i>
                                         </a>
+                                        <?php if (!empty($k['crossUnitSummary'])): ?>
+                                            <a href="<?= $baseUrl ?>/akfi/print-gabungan/<?= (int)$ks['id'] ?>" target="_blank" class="btn btn-outline btn-sm" style="border-color: #0f766e; color: #0f766e;" title="Cetak Rapor Gabungan (Rata-Rata Live)">
+                                                <i class="fa-solid fa-layer-group"></i> Gabungan
+                                            </a>
+                                        <?php endif; ?>
                                     </div>
                                 <?php else: ?>
                                     <span class="text-muted" style="font-size: 11px;">-</span>

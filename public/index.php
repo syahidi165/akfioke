@@ -223,6 +223,7 @@ Router::post('/akfi/hr-sign', [AkfiController::class, 'hrSign']);
 Router::get('/akfi/rekap-yayasan', [AkfiController::class, 'rekapYayasan']);
 Router::get('/akfi/export-xlsx', [AkfiController::class, 'exportXlsx']);
 Router::get('/akfi/print-rapor/:id', [AkfiController::class, 'printRaporAkfi']);
+Router::get('/akfi/print-gabungan/:id', [AkfiController::class, 'printRaporGabungan']);
 Router::get('/deputi/target-kerja', [AkfiController::class, 'targetKerjaIndex']);
 Router::post('/deputi/target-kerja/save', [AkfiController::class, 'targetKerjaSave']);
 
