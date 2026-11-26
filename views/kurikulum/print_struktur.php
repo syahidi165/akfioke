@@ -236,17 +236,23 @@ foreach ($items as $it) {
             padding: 5px 8px;
             vertical-align: top;
             font-size: 8.5pt;
+            overflow: visible;
         }
         .sig-cell {
             height: 70px;
             position: relative;
             vertical-align: bottom;
+            overflow: visible;
         }
         .sig-img {
-            max-height: 55px;
+            max-height: 95px;
+            height: 92px;
+            width: auto;
+            max-width: 210px;
             position: absolute;
-            left: 20px;
-            bottom: 5px;
+            left: 10px;
+            bottom: -10px;
+            z-index: 2;
         }
 
         /* Format Cetak Fisik / PDF Cetak */

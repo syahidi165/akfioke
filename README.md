@@ -1,7 +1,7 @@
 # MASEKO / AKFIOKE — Sistem Manajemen Sekolah Terpadu & Penilaian Kinerja (AKFI)
 ### Yayasan Islam Al Kahfi Batam
 
-> *Terakhir diperbarui: 26 November 2026 (Sinkronisasi codebase hingga Penghapusan Fallback users.id Anti-Bentrok ID pada Query Walas/Tutor/AKFI, Penyeragaman Query Penugasan Walas/Guru & Normalisasi ID, Dashboard Deputi Tunggakan Binaan SPP/Non-SPP, Rapor AKFI Lintas Unit Rata-Rata Live, TTD Digital Form Penagihan, & Eskalasi Massal TU ke KS)*
+> *Terakhir diperbarui: 26 November 2026 (Sinkronisasi codebase hingga Perbaikan Margin Rapor Gabungan/Deputi & Pembesaran TTD Digital Proporsional Dompdf, Penghapusan Fallback users.id Anti-Bentrok ID pada Query Walas/Tutor/AKFI, Penyeragaman Query Penugasan Walas/Guru & Normalisasi ID, Dashboard Deputi Tunggakan Binaan SPP/Non-SPP, Rapor AKFI Lintas Unit Rata-Rata Live, TTD Digital Form Penagihan, & Eskalasi Massal TU ke KS)*
 
 Aplikasi web enterprise yang dikembangkan khusus untuk **Yayasan Islam Al Kahfi Batam** menggunakan **PHP 8.x Native + MariaDB/MySQL**, dirancang responsif dengan orientasi **Sidebar**, dukungan **Progressive Web App (PWA)**, multi-role switcher, **Delegasi Izin Switch Akun**, filter **Tahun Ajaran & Semester (Opsi B: 1 TA = 2 Semester Juli–Juni)** global, penyimpanan multi-tier (**Hot & Cold Storage NAS**), serta berjalan secara **offline-ready** tanpa ketergantungan CDN eksternal.
 
@@ -59,7 +59,7 @@ Aplikasi web enterprise yang dikembangkan khusus untuk **Yayasan Islam Al Kahfi 
 - **Aturan Pengajuan & Format Rapor AKFI:**
   - Saat guru, karyawan, atau kepala sekolah mengajukan nilai AKFI ke atasan (`/akfi/pribadi`), **yang diajukan HANYA Bagian A (Kinerja)**; sedangkan **Bagian B (Sikap)** dan **Bagian C (Absensi)** murni diisi/divalidasi oleh atasan penilai.
   - Pada seluruh rapor dan formulir penilaian AKFI **Bagian B**, kolom *Realisasi Aktual* ditiadakan.
-- **Alur Pengesahan 4 Tanda Tangan Digital:** Pegawai $\rightarrow$ Atasan Langsung / Kepala Sekolah $\rightarrow$ Deputi Pendidikan (khusus Kepala Sekolah) $\rightarrow$ Pengesahan Akhir Direktur Pendidikan / HRD (`/akfi/approval-hr` menjadi status `Final`), disertai pratinjau Kanit dengan isolasi unit binaan Deputi, cetak PDF A4, dan ekspor `.xlsx` Rekap Yayasan.
+- **Alur Pengesahan 4 Tanda Tangan Digital & Format Cetak A4 Rapi:** Pegawai $\rightarrow$ Atasan Langsung / Kepala Sekolah $\rightarrow$ Deputi Pendidikan (khusus Kepala Sekolah) $\rightarrow$ Pengesahan Akhir Direktur Pendidikan / HRD (`/akfi/approval-hr` menjadi status `Final`), disertai pratinjau Kanit dengan isolasi unit binaan Deputi, cetak PDF A4 (`@page` A4 portrait, `table-layout: fixed` berkolom persentase anti-keluar margin pada Rapor AKFI tunggal, **Rapor AKFI Gabungan Lintas Unit**, maupun **Rapor Deputi Pendidikan**), **pembesaran otomatis Tanda Tangan Digital proporsional** berbasis rasio aspek (`ExportHelper::renderSignatureImg()`) di seluruh dokumen cetak resmi (Rapor AKFI, Rapor & Kalender Deputi, `FR 8001B`/`C`/`D`, Kartu Cicilan, dan Struktur Kurikulum `FR-9023a`), serta ekspor `.xlsx` Rekap Yayasan.
 
 ### 4. Modul Eksekutif Deputi Pendidikan, Direktur Pendidikan & RAPBS
 - **Pengelolaan Unit Binaan & Rapor KPI Deputi:** Penetapan unit binaan Deputi A/B, pengaturan bobot Rapor Deputi (wajib 100%), penilaian 23 indikator master pada 4 area (Kurikulum, Kesiswaan, SDM, Keuangan RAPBS) oleh Direktur Pendidikan, dan **KPI Mutu / KKM Mapel (`/deputi/kpi-mutu`)** dengan deteksi fleksibel modul Halaqah Tahfidz/Tahsin serta pemetaan sinonim mapel dwibahasa & hitung ketuntasan siswa unik.

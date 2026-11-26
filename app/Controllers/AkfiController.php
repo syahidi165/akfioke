@@ -1632,35 +1632,13 @@ class AkfiController extends Controller {
              || str_contains($posTitle, 'KEPALA SEKOLAH') 
              || str_contains($posTitle, 'KEPSEK');
 
-        // Helper to resolve and embed base64 signature image
-        $resolveSigImage = function(?string $sigPath): string {
-            if (empty($sigPath)) return '';
-            $sigPath = '/' . ltrim($sigPath, '/');
-            $fullPath = __DIR__ . '/../../public' . $sigPath;
-            if (file_exists($fullPath) && is_file($fullPath)) {
-                $ext = strtolower(pathinfo($fullPath, PATHINFO_EXTENSION));
-                $mime = match($ext) {
-                    'jpg', 'jpeg' => 'image/jpeg',
-                    'png' => 'image/png',
-                    'webp' => 'image/webp',
-                    default => 'image/png'
-                };
-                $data = base64_encode(file_get_contents($fullPath));
-                return "<div style='height: 52px; margin: 3px 0;'><img src='data:{$mime};base64,{$data}' style='max-height: 48px; max-width: 120px; object-fit: contain;' /></div>";
-            }
-            return '';
-        };
+        // Helper to render signature cell box (skala proporsional jelas untuk Dompdf)
+        $renderSigCell = function(?string $sigPath, string $headerDate, string $title, string $name, ?string $nipy = null, ?string $subtitle = null): string {
+            $sigHtml = ExportHelper::renderSignatureImg($sigPath, 175, 92, 54);
 
-        // Helper to render signature cell box
-        $renderSigCell = function(?string $sigPath, string $headerDate, string $title, string $name, ?string $nipy = null, ?string $subtitle = null) use ($resolveSigImage): string {
-            $sigHtml = $resolveSigImage($sigPath);
-            if (empty($sigHtml)) {
-                $sigHtml = "<div style='height: 52px;'></div>";
-            }
-
-            $dateHtml = !empty($headerDate) ? "<div style='font-size: 9.5px; margin-bottom: 2px;'>" . htmlspecialchars($headerDate) . "</div>" : "<div style='font-size: 9.5px; margin-bottom: 2px;'>&nbsp;</div>";
-            $nipyText = (!empty($nipy) && $nipy !== '-') ? "<br><span style='font-size: 9px;'>NIPY. " . htmlspecialchars($nipy) . "</span>" : "";
-            $subText = !empty($subtitle) ? "<div style='font-size: 8.5px; color: #475569;'>(" . htmlspecialchars($subtitle) . ")</div>" : "";
+            $dateHtml = !empty($headerDate) ? "<div style='font-size: 9px; margin-bottom: 2px;'>" . htmlspecialchars($headerDate) . "</div>" : "<div style='font-size: 9px; margin-bottom: 2px;'>&nbsp;</div>";
+            $nipyText = (!empty($nipy) && $nipy !== '-') ? "<br><span style='font-size: 8.5px;'>NIPY. " . htmlspecialchars($nipy) . "</span>" : "";
+            $subText = !empty($subtitle) ? "<div style='font-size: 8px; color: #475569;'>(" . htmlspecialchars($subtitle) . ")</div>" : "";
 
             return "
                 <td class='sig-box'>
@@ -1680,17 +1658,20 @@ class AkfiController extends Controller {
         $html = "
         <html>
         <head>
+            <meta charset='UTF-8'>
             <style>
-                body { font-family: Helvetica, Arial, sans-serif; font-size: 11px; color: #1e293b; line-height: 1.4; }
-                .title-doc { text-align: center; font-size: 14px; font-weight: bold; margin: 15px 0 10px 0; text-transform: uppercase; border-bottom: 2px solid #0f766e; padding-bottom: 5px; }
-                .meta-table { width: 100%; margin-bottom: 12px; }
-                .meta-table td { padding: 3px 4px; vertical-align: top; }
-                .table-data { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
-                .table-data th, .table-data td { border: 1px solid #94a3b8; padding: 5px 6px; }
+                @page { size: A4 portrait; margin: 12mm 12mm 14mm 12mm; }
+                * { box-sizing: border-box; }
+                body { margin: 0; padding: 0; font-family: Helvetica, Arial, sans-serif; font-size: 10px; color: #1e293b; line-height: 1.35; }
+                .title-doc { text-align: center; font-size: 13px; font-weight: bold; margin: 10px 0 8px 0; text-transform: uppercase; border-bottom: 2px solid #0f766e; padding-bottom: 5px; }
+                .meta-table { width: 100%; border-collapse: collapse; table-layout: fixed; margin-bottom: 10px; }
+                .meta-table td { padding: 3px 4px; vertical-align: top; word-wrap: break-word; overflow-wrap: break-word; }
+                .table-data { width: 100%; border-collapse: collapse; table-layout: fixed; margin-bottom: 10px; font-size: 9.5px; }
+                .table-data th, .table-data td { border: 1px solid #94a3b8; padding: 4px 5px; word-wrap: break-word; overflow-wrap: break-word; }
                 .table-data th { background: #f1f5f9; text-align: center; font-weight: bold; }
                 .section-header { background: #e2e8f0; font-weight: bold; text-transform: uppercase; }
-                .signatures { width: 100%; margin-top: 20px; border-collapse: collapse; page-break-inside: avoid; }
-                .sig-box { width: 25%; text-align: center; vertical-align: top; font-size: 9.5px; line-height: 1.3; padding: 0 4px; }
+                .signatures { width: 100%; margin-top: 18px; border-collapse: collapse; table-layout: fixed; page-break-inside: avoid; }
+                .sig-box { width: 25%; text-align: center; vertical-align: top; font-size: 9px; line-height: 1.3; padding: 0 4px; overflow: visible; word-wrap: break-word; overflow-wrap: break-word; }
                 .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-weight: bold; }
                 .badge-a { background: #dcfce7; color: #15803d; }
                 .badge-b { background: #e0f2fe; color: #0369a1; }
@@ -1769,12 +1750,12 @@ class AkfiController extends Controller {
                 <thead>
                     <tr>
                         <th width='4%'>No</th>
-                        <th width='12%'>Kategori</th>
-                        <th>Indikator Sasaran Kerja</th>
-                        <th width='10%'>Target</th>
-                        <th width='10%'>Realisasi</th>
-                        <th width='8%'>Bobot</th>
-                        <th width='8%'>Skor</th>
+                        <th width='13%'>Kategori</th>
+                        <th width='41%'>Indikator Sasaran Kerja</th>
+                        <th width='11%'>Target</th>
+                        <th width='11%'>Realisasi</th>
+                        <th width='10%'>Bobot</th>
+                        <th width='10%'>Skor</th>
                     </tr>
                 </thead>
                 <tbody>";
@@ -1879,16 +1860,16 @@ class AkfiController extends Controller {
                     <div style='font-weight: bold; font-size: 10.5px; background: #0f766e; color: #fff; padding: 5px 8px; border-radius: 3px 3px 0 0;'>
                         REKAPITULASI NILAI AKHIR AKFI LINTAS UNIT (RATA-RATA LIVE " . (int)$crossUnitSummary['unit_count'] . " UNIT)
                     </div>
-                    <table class='table-data' style='margin-bottom: 0; font-size: 9.5px;'>
+                    <table class='table-data' style='margin-bottom: 0; font-size: 9px;'>
                         <thead>
                             <tr>
-                                <th>Satuan Pendidikan</th>
-                                <th>Posisi AKFI</th>
-                                <th>Kinerja</th>
-                                <th>Sikap</th>
-                                <th>Absensi</th>
-                                <th>Total Unit</th>
-                                <th>Status</th>
+                                <th width='24%'>Satuan Pendidikan</th>
+                                <th width='22%'>Posisi AKFI</th>
+                                <th width='10%'>Kinerja</th>
+                                <th width='9%'>Sikap</th>
+                                <th width='10%'>Absensi</th>
+                                <th width='14%'>Total Unit</th>
+                                <th width='11%'>Status</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -2033,29 +2014,11 @@ class AkfiController extends Controller {
              LEFT JOIN employees e ON u.id = e.user_id WHERE r.name = 'hrd' LIMIT 1"
         );
 
-        $resolveSigImage = function(?string $sigPath): string {
-            if (empty($sigPath)) return '';
-            $sigPath = '/' . ltrim($sigPath, '/');
-            $fullPath = __DIR__ . '/../../public' . $sigPath;
-            if (file_exists($fullPath) && is_file($fullPath)) {
-                $ext = strtolower(pathinfo($fullPath, PATHINFO_EXTENSION));
-                $mime = match($ext) {
-                    'jpg', 'jpeg' => 'image/jpeg',
-                    'png' => 'image/png',
-                    'webp' => 'image/webp',
-                    default => 'image/png'
-                };
-                $data = base64_encode(file_get_contents($fullPath));
-                return "<div style='height: 52px; margin: 3px 0;'><img src='data:{$mime};base64,{$data}' style='max-height: 48px; max-width: 120px; object-fit: contain;' /></div>";
-            }
-            return '';
-        };
-        $renderSigCell = function(?string $sigPath, string $headerDate, string $title, string $name, ?string $nipy = null, ?string $subtitle = null) use ($resolveSigImage): string {
-            $sigHtml = $resolveSigImage($sigPath);
-            if (empty($sigHtml)) $sigHtml = "<div style='height: 52px;'></div>";
-            $dateHtml = !empty($headerDate) ? "<div style='font-size: 9.5px; margin-bottom: 2px;'>" . htmlspecialchars($headerDate) . "</div>" : "<div style='font-size: 9.5px; margin-bottom: 2px;'>&nbsp;</div>";
-            $nipyText = (!empty($nipy) && $nipy !== '-') ? "<br><span style='font-size: 9px;'>NIPY. " . htmlspecialchars($nipy) . "</span>" : "";
-            $subText = !empty($subtitle) ? "<div style='font-size: 8.5px; color: #475569;'>(" . htmlspecialchars($subtitle) . ")</div>" : "";
+        $renderSigCell = function(?string $sigPath, string $headerDate, string $title, string $name, ?string $nipy = null, ?string $subtitle = null): string {
+            $sigHtml = ExportHelper::renderSignatureImg($sigPath, 175, 92, 54);
+            $dateHtml = !empty($headerDate) ? "<div style='font-size: 9px; margin-bottom: 2px;'>" . htmlspecialchars($headerDate) . "</div>" : "<div style='font-size: 9px; margin-bottom: 2px;'>&nbsp;</div>";
+            $nipyText = (!empty($nipy) && $nipy !== '-') ? "<br><span style='font-size: 8.5px;'>NIPY. " . htmlspecialchars($nipy) . "</span>" : "";
+            $subText = !empty($subtitle) ? "<div style='font-size: 8px; color: #475569;'>(" . htmlspecialchars($subtitle) . ")</div>" : "";
             return "<td class='sig-box'>{$dateHtml}<strong>" . htmlspecialchars($title) . "</strong>{$sigHtml}<div style='border-bottom: 1px solid #1e293b; display: inline-block; padding-bottom: 1px; font-weight: bold;'>" . htmlspecialchars($name) . "</div>{$nipyText}{$subText}</td>";
         };
 
@@ -2075,15 +2038,17 @@ class AkfiController extends Controller {
         <head>
             <meta charset='UTF-8'>
             <style>
-                body { font-family: Helvetica, Arial, sans-serif; font-size: 11px; color: #1e293b; line-height: 1.4; }
-                .title-doc { text-align: center; font-size: 14px; font-weight: bold; margin: 14px 0 10px 0; text-transform: uppercase; border-bottom: 2px solid #0f766e; padding-bottom: 5px; }
-                .meta-table { width: 100%; margin-bottom: 12px; }
-                .meta-table td { padding: 3px 4px; vertical-align: top; }
-                .table-data { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
-                .table-data th, .table-data td { border: 1px solid #94a3b8; padding: 6px 7px; }
+                @page { size: A4 portrait; margin: 12mm 12mm 14mm 12mm; }
+                * { box-sizing: border-box; }
+                body { margin: 0; padding: 0; font-family: Helvetica, Arial, sans-serif; font-size: 10px; color: #1e293b; line-height: 1.35; }
+                .title-doc { text-align: center; font-size: 13px; font-weight: bold; margin: 10px 0 8px 0; text-transform: uppercase; border-bottom: 2px solid #0f766e; padding-bottom: 5px; }
+                .meta-table { width: 100%; border-collapse: collapse; table-layout: fixed; margin-bottom: 10px; }
+                .meta-table td { padding: 3px 4px; vertical-align: top; word-wrap: break-word; overflow-wrap: break-word; }
+                .table-data { width: 100%; border-collapse: collapse; table-layout: fixed; margin-bottom: 10px; font-size: 9px; }
+                .table-data th, .table-data td { border: 1px solid #94a3b8; padding: 5px 4px; word-wrap: break-word; overflow-wrap: break-word; }
                 .table-data th { background: #f1f5f9; text-align: center; font-weight: bold; }
-                .signatures { width: 100%; margin-top: 24px; border-collapse: collapse; page-break-inside: avoid; }
-                .sig-box { width: 25%; text-align: center; vertical-align: top; font-size: 9.5px; line-height: 1.3; padding: 0 4px; }
+                .signatures { width: 100%; margin-top: 22px; border-collapse: collapse; table-layout: fixed; page-break-inside: avoid; }
+                .sig-box { width: 25%; text-align: center; vertical-align: top; font-size: 9px; line-height: 1.3; padding: 0 4px; overflow: visible; word-wrap: break-word; overflow-wrap: break-word; }
             </style>
         </head>
         <body>
@@ -2114,26 +2079,26 @@ class AkfiController extends Controller {
             <table class='table-data'>
                 <thead>
                     <tr>
-                        <th width='32'>No</th>
-                        <th>Satuan Pendidikan</th>
-                        <th>Posisi / Template AKFI</th>
-                        <th width='65'>Kinerja</th>
-                        <th width='65'>Sikap</th>
-                        <th width='65'>Absensi</th>
-                        <th width='75'>Total Unit</th>
-                        <th width='55'>Predikat</th>
-                        <th width='85'>Status</th>
+                        <th width='4%'>No</th>
+                        <th width='21%'>Satuan Pendidikan</th>
+                        <th width='20%'>Posisi / Template AKFI</th>
+                        <th width='9%'>Kinerja</th>
+                        <th width='8%'>Sikap</th>
+                        <th width='9%'>Absensi</th>
+                        <th width='10%'>Total Unit</th>
+                        <th width='8%'>Predikat</th>
+                        <th width='11%'>Status</th>
                     </tr>
                 </thead>
                 <tbody>
                     {$unitRowsHtml}
-                    <tr style='background: #ecfdf5; font-weight: bold; font-size: 11.5px;'>
+                    <tr style='background: #ecfdf5; font-weight: bold; font-size: 10px;'>
                         <td colspan='3'>NILAI AKHIR AKFI GABUNGAN (RATA-RATA {$summary['unit_count']} RAPOR)</td>
                         <td align='center'>" . number_format((float)$summary['avg_kinerja'], 2) . "</td>
                         <td align='center'>" . number_format((float)$summary['avg_sikap'], 2) . "</td>
                         <td align='center'>" . number_format((float)$summary['avg_absensi'], 2) . "</td>
-                        <td align='center' style='color: #047857; font-size: 13px;'>" . number_format((float)$summary['avg_total'], 2) . "</td>
-                        <td align='center' style='color: #047857; font-size: 13px;'>" . htmlspecialchars($summary['avg_grade']) . "</td>
+                        <td align='center' style='color: #047857; font-size: 11.5px;'>" . number_format((float)$summary['avg_total'], 2) . "</td>
+                        <td align='center' style='color: #047857; font-size: 11.5px;'>" . htmlspecialchars($summary['avg_grade']) . "</td>
                         <td align='center'>" . ($summary['all_final'] ? 'Final' : 'Live') . "</td>
                     </tr>
                 </tbody>

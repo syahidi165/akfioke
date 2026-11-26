@@ -457,7 +457,7 @@ class DeputiController extends Controller {
             .badge-cat { display: inline-block; padding: 1px 4px; border-radius: 2px; font-size: 7.5px; font-weight: bold; }
             .page-break { page-break-before: always; }
             .sig-table { width: 100%; margin-top: 20px; border-collapse: collapse; page-break-inside: avoid; }
-            .sig-cell { width: 50%; text-align: center; vertical-align: top; font-size: 9px; }
+            .sig-cell { width: 50%; text-align: center; vertical-align: top; font-size: 9px; overflow: visible; }
         </style></head><body>';
 
         // Header KOP
@@ -538,21 +538,13 @@ class DeputiController extends Controller {
         $html .= '<table class="sig-table"><tr>';
         $html .= '<td class="sig-cell">';
         $html .= 'Mengetahui,<br><strong>Deputi Direktur Pendidikan</strong><br>';
-        if (!empty($deputiSig) && file_exists(dirname(__DIR__, 2) . '/public' . $deputiSig)) {
-            $html .= '<img src="' . dirname(__DIR__, 2) . '/public' . $deputiSig . '" style="height:45px; margin:4px 0;"><br>';
-        } else {
-            $html .= '<div style="height:50px;"></div>';
-        }
+        $html .= \Core\ExportHelper::renderSignatureImg($deputiSig, 220, 102, 58);
         $html .= '<strong><u>' . htmlspecialchars($deputiUser['full_name'] ?? 'Deputi Pendidikan') . '</u></strong>';
         $html .= '</td>';
 
         $html .= '<td class="sig-cell">';
         $html .= 'Batam, ' . $tglCetak . '<br>Mengesahkan,<br><strong>Direktur Divisi Pendidikan</strong><br>';
-        if (!empty($direkturSig) && file_exists(dirname(__DIR__, 2) . '/public' . $direkturSig)) {
-            $html .= '<img src="' . dirname(__DIR__, 2) . '/public' . $direkturSig . '" style="height:45px; margin:4px 0;"><br>';
-        } else {
-            $html .= '<div style="height:50px;"></div>';
-        }
+        $html .= \Core\ExportHelper::renderSignatureImg($direkturSig, 220, 102, 58);
         $html .= '<strong><u>' . htmlspecialchars($direktur['full_name'] ?? ($direktur['nama'] ?? 'Direktur Pendidikan')) . '</u></strong>';
         $html .= '</td>';
         $html .= '</tr></table>';

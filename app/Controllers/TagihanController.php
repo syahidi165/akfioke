@@ -205,53 +205,10 @@ class TagihanController extends Controller {
     }
 
     /**
-     * Render gambar tanda tangan digital (base64 inline untuk Dompdf) atau spasi kosong jika belum ada.
+     * Render gambar tanda tangan digital (base64 inline untuk Dompdf) berukuran jelas & proporsional.
      */
-    private function renderSignatureImageHtml(?string $sigPath, int $heightPx = 58): string {
-        $sigPath = trim((string)$sigPath);
-        if ($sigPath === '') {
-            return "<div style='height: {$heightPx}px;'></div>";
-        }
-
-        $relPath = ltrim(str_replace('\\', '/', $sigPath), '/');
-        $baseCandidates = [
-            dirname(__DIR__, 2) . '/public',
-            dirname(__DIR__, 2) . '/storage',
-            dirname(__DIR__, 2)
-        ];
-
-        $foundFile = null;
-        foreach ($baseCandidates as $baseDir) {
-            $realBase = realpath($baseDir);
-            if ($realBase === false) {
-                continue;
-            }
-            $candidate = $realBase . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relPath);
-            $realFile = realpath($candidate);
-            if ($realFile !== false && is_file($realFile) && strpos($realFile, $realBase . DIRECTORY_SEPARATOR) === 0) {
-                $foundFile = $realFile;
-                break;
-            }
-        }
-
-        if ($foundFile !== null && is_readable($foundFile)) {
-            $ext = strtolower(pathinfo($foundFile, PATHINFO_EXTENSION));
-            $mime = match ($ext) {
-                'jpg', 'jpeg' => 'image/jpeg',
-                'png'         => 'image/png',
-                'webp'        => 'image/webp',
-                'gif'         => 'image/gif',
-                default       => 'image/png'
-            };
-            $raw = @file_get_contents($foundFile);
-            if ($raw !== false && $raw !== '') {
-                $data = base64_encode($raw);
-                $imgMaxH = max(36, $heightPx - 4);
-                return "<div style='height: {$heightPx}px; margin: 4px 0; text-align: center;'><img src='data:{$mime};base64,{$data}' style='max-height: {$imgMaxH}px; max-width: 150px; object-fit: contain;' /></div>";
-            }
-        }
-
-        return "<div style='height: {$heightPx}px;'></div>";
+    private function renderSignatureImageHtml(?string $sigPath, int $heightPx = 105, int $boxW = 230, int $slotH = 64): string {
+        return ExportHelper::renderSignatureImg($sigPath, $boxW, $heightPx, $slotH);
     }
 
     private function terbilang(float $angka): string {
@@ -1280,7 +1237,7 @@ class TagihanController extends Controller {
         $tuEmp = $this->resolveUnitSigner((int)$bill['unit_id'], 'tata_usaha');
         $tuName = $tuEmp['nama'];
         $tuNipy = $tuEmp['nipy'];
-        $tuSigHtml = $this->renderSignatureImageHtml($tuEmp['signature_path'] ?? null, 60);
+        $tuSigHtml = $this->renderSignatureImageHtml($tuEmp['signature_path'] ?? null, 105, 230, 64);
 
         // Render Kop Surat standar dual logo
         $kopHtml = ExportHelper::renderKop($bill);
@@ -2398,8 +2355,8 @@ class TagihanController extends Controller {
             ? "Mengingat pentingnya penyelesaian administrasi pendidikan ananda, kami mengharapkan kehadiran Bapak/Ibu sesuai jadwal tersebut di atas."
             : "<strong>Kami menunggu konfirmasi Bapak/Ibu terkait rencana penyelesaian pembayaran tunggakan tersebut atau menghubungi Kepala Sekolah di nomor HP {$kepsekPhone}.</strong>";
 
-        $kepsekSigHtml = $this->renderSignatureImageHtml($kepsekInfo['signature_path'] ?? null, 58);
-        $deputiSigHtml = $this->renderSignatureImageHtml($deputiInfo['signature_path'] ?? null, 58);
+        $kepsekSigHtml = $this->renderSignatureImageHtml($kepsekInfo['signature_path'] ?? null, 105, 230, 64);
+        $deputiSigHtml = $this->renderSignatureImageHtml($deputiInfo['signature_path'] ?? null, 105, 230, 64);
 
         $sigBlock = $isYayasan
             ? "<tr>
@@ -2443,7 +2400,7 @@ class TagihanController extends Controller {
                 .data-table th, .data-table td { border: 1px solid #222; padding: 6px 8px; font-size: 11pt; }
                 .data-table th { background: #f1f5f9; text-align: center; font-weight: bold; }
                 .signatures { width: 100%; margin-top: 24px; border-collapse: collapse; page-break-inside: avoid; }
-                .sig-box { width: 50%; text-align: center; vertical-align: top; font-size: 11pt; }
+                .sig-box { width: 50%; text-align: center; vertical-align: top; font-size: 11pt; overflow: visible; }
             </style>
         </head>
         <body>
@@ -2580,7 +2537,9 @@ class TagihanController extends Controller {
         $schoolSignerName  = $isYayasan ? SecurityHelper::escape($deputiInfo['nama']) : SecurityHelper::escape($kepsekInfo['nama']);
         $schoolSignerSigHtml = $this->renderSignatureImageHtml(
             $isYayasan ? ($deputiInfo['signature_path'] ?? null) : ($kepsekInfo['signature_path'] ?? null),
-            64
+            100,
+            230,
+            68
         );
 
         return "
@@ -2645,7 +2604,7 @@ class TagihanController extends Controller {
                 </tr>
                 <tr>
                     <td style='height: 75px;'></td>
-                    <td style='height: 75px; text-align: center; vertical-align: middle;'>{$schoolSignerSigHtml}</td>
+                    <td style='height: 75px; text-align: center; vertical-align: middle; overflow: visible;'>{$schoolSignerSigHtml}</td>
                 </tr>
                 <tr>
                     <td>( <strong>{$parentName}</strong> )</td>
@@ -3288,7 +3247,7 @@ class TagihanController extends Controller {
 
         $tuEmp = $this->resolveUnitSigner((int)$installment['unit_id'], 'tata_usaha');
         $tuName = SecurityHelper::escape($tuEmp['nama']);
-        $tuSigHtml = $this->renderSignatureImageHtml($tuEmp['signature_path'] ?? null, 58);
+        $tuSigHtml = $this->renderSignatureImageHtml($tuEmp['signature_path'] ?? null, 105, 230, 64);
 
         $skemaDesc = '';
         if ($installment['scheme_type'] === 'lunas_tanggal') {
@@ -3343,7 +3302,7 @@ class TagihanController extends Controller {
                 .ledger-table th, .ledger-table td { border: 1px solid #334155; padding: 6px 8px; font-size: 10.5pt; }
                 .ledger-table th { background: #f1f5f9; text-align: center; font-weight: bold; }
                 .signatures { width: 100%; margin-top: 30px; border-collapse: collapse; page-break-inside: avoid; }
-                .sig-box { width: 50%; text-align: center; vertical-align: top; font-size: 10.5pt; }
+                .sig-box { width: 50%; text-align: center; vertical-align: top; font-size: 10.5pt; overflow: visible; }
             </style>
         </head>
         <body>

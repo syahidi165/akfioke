@@ -2,6 +2,7 @@
 // views/deputi/print_rapor.php
 use Core\SecurityHelper;
 use Core\Auth;
+use Core\ExportHelper;
 
 $baseUrl = Auth::baseUrl();
 $isPdfMode = $isPdfMode ?? false;
@@ -14,21 +15,9 @@ if (empty($logoBase64)) {
     }
 }
 
-// Resolusi Base64 TTD
-$resolveSig = function(?string $path) {
-    if (!$path) return null;
-    $p = dirname(__DIR__, 2) . '/public/' . ltrim($path, '/');
-    if (file_exists($p) && is_file($p)) {
-        $ext = strtolower(pathinfo($p, PATHINFO_EXTENSION));
-        $mime = ($ext === 'jpg' || $ext === 'jpeg') ? 'image/jpeg' : 'image/png';
-        return 'data:' . $mime . ';base64,' . base64_encode(file_get_contents($p));
-    }
-    return null;
-};
-
-$deputiSigBase64 = $resolveSig($deputiUser['signature_path'] ?? ($deputiUser['emp_sig'] ?? null));
-$direkturSigBase64 = $resolveSig($direktur['signature_path'] ?? ($direktur['user_sig'] ?? null));
-$yayasanSigBase64 = $resolveSig($ketuaYayasan['signature_path'] ?? ($ketuaYayasan['user_sig'] ?? null));
+$deputiSigPath = $deputiUser['signature_path'] ?? ($deputiUser['emp_sig'] ?? null);
+$direkturSigPath = $direktur['signature_path'] ?? ($direktur['user_sig'] ?? null);
+$yayasanSigPath = $ketuaYayasan['signature_path'] ?? ($ketuaYayasan['user_sig'] ?? null);
 
 $assignedUnits = $assignedUnits ?? [];
 $unitNames = array_column($assignedUnits, 'name');
@@ -42,7 +31,7 @@ $taName = $currentTa['name'] ?? '2026/2027';
     <style>
         @page {
             size: A4 portrait;
-            margin: 10mm 12mm 10mm 12mm;
+            margin: 10mm 11mm 10mm 11mm;
         }
         * {
             box-sizing: border-box;
@@ -58,7 +47,7 @@ $taName = $currentTa['name'] ?? '2026/2027';
         }
         .sheet {
             width: 100%;
-            max-width: 820px;
+            <?= !$isPdfMode ? 'max-width: 790px;' : '' ?>
             margin: 0 auto;
             background: #ffffff;
         }
@@ -79,21 +68,25 @@ $taName = $currentTa['name'] ?? '2026/2027';
         .kop-table {
             width: 100%;
             border-collapse: collapse;
+            table-layout: fixed;
             margin-bottom: 0;
         }
         .kop-logo {
-            width: 65px;
+            width: 12%;
             vertical-align: middle;
             text-align: center;
-            padding-right: 10px;
+            padding-right: 6px;
         }
         .kop-logo img {
-            height: 58px;
+            height: 54px;
             width: auto;
         }
         .kop-text {
+            width: 76%;
             vertical-align: middle;
             text-align: center;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
         }
         .kop-inst {
             font-size: 13pt;
@@ -154,6 +147,7 @@ $taName = $currentTa['name'] ?? '2026/2027';
         .meta-box {
             width: 100%;
             border-collapse: collapse;
+            table-layout: fixed;
             margin-bottom: 10px;
             font-size: 8pt;
             background: #f8fafc;
@@ -162,28 +156,35 @@ $taName = $currentTa['name'] ?? '2026/2027';
         .meta-box td {
             padding: 3px 6px;
             vertical-align: top;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
         }
 
         /* Tabel Penilaian */
         .rapor-tbl {
             width: 100%;
             border-collapse: collapse;
-            font-size: 7.5pt;
+            table-layout: fixed;
+            font-size: 7.3pt;
             margin-bottom: 10px;
         }
         .rapor-tbl th {
             background: #1e3a8a;
             color: #ffffff;
             border: 1px solid #cbd5e1;
-            padding: 4px 5px;
+            padding: 4px 4px;
             text-align: center;
             font-weight: 700;
-            font-size: 7.5pt;
+            font-size: 7.3pt;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
         }
         .rapor-tbl td {
             border: 1px solid #cbd5e1;
-            padding: 3.5px 5px;
+            padding: 3.5px 4px;
             vertical-align: top;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
         }
         .area-row td {
             background: #f1f5f9;
@@ -203,6 +204,7 @@ $taName = $currentTa['name'] ?? '2026/2027';
         .summary-card {
             width: 100%;
             border-collapse: collapse;
+            table-layout: fixed;
             margin-bottom: 12px;
             font-size: 8pt;
             page-break-inside: avoid;
@@ -210,12 +212,15 @@ $taName = $currentTa['name'] ?? '2026/2027';
         .summary-card td {
             border: 1px solid #cbd5e1;
             padding: 5px 8px;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
         }
 
         /* Blok Tanda Tangan */
         .sig-tbl {
             width: 100%;
             border-collapse: collapse;
+            table-layout: fixed;
             margin-top: 10px;
             font-size: 8pt;
             page-break-inside: avoid;
@@ -224,14 +229,7 @@ $taName = $currentTa['name'] ?? '2026/2027';
             text-align: center;
             vertical-align: top;
             width: 33.33%;
-        }
-        .sig-img {
-            height: 45px;
-            width: auto;
-            margin: 4px 0;
-        }
-        .sig-space {
-            height: 48px;
+            overflow: visible;
         }
 
         /* Tabel Panduan Rubrik */
@@ -246,12 +244,15 @@ $taName = $currentTa['name'] ?? '2026/2027';
         .rubrik-tbl {
             width: 100%;
             border-collapse: collapse;
+            table-layout: fixed;
             font-size: 7pt;
             margin-top: 4px;
         }
         .rubrik-tbl th, .rubrik-tbl td {
             border: 1px solid #cbd5e1;
             padding: 2.5px 5px;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
         }
         .rubrik-tbl th {
             background: #f1f5f9;
@@ -315,7 +316,7 @@ $taName = $currentTa['name'] ?? '2026/2027';
                     Telepon: (0778) 7485869 / 0811-700-9257 &bull; Email: pendidikan@alkahfi.sch.id &bull; Website: www.aisbatam.sch.id
                 </div>
             </td>
-            <td style="width: 65px;"></td>
+            <td style="width: 12%;"></td>
         </tr>
     </table>
     <div class="kop-line"></div>
@@ -363,13 +364,13 @@ $taName = $currentTa['name'] ?? '2026/2027';
     <table class="rapor-tbl">
         <thead>
             <tr>
-                <th style="width: 22px;">No</th>
-                <th style="width: 165px; text-align: left;">Area &amp; Indikator Kinerja Utama (KPI)</th>
-                <th style="text-align: left;">Standar Acuan Kerja / Eviden SOP</th>
-                <th style="width: 45px;">Bobot</th>
-                <th style="width: 40px;">Skala</th>
-                <th style="width: 45px;">Capaian</th>
-                <th style="width: 55px;">Skor</th>
+                <th style="width: 4%;">No</th>
+                <th style="width: 25%; text-align: left;">Area &amp; Indikator Kinerja Utama (KPI)</th>
+                <th style="width: 41%; text-align: left;">Standar Acuan Kerja / Eviden SOP</th>
+                <th style="width: 7%;">Bobot</th>
+                <th style="width: 6%;">Skala</th>
+                <th style="width: 8%;">Capaian</th>
+                <th style="width: 9%;">Skor</th>
             </tr>
         </thead>
         <tbody>
@@ -455,31 +456,19 @@ $taName = $currentTa['name'] ?? '2026/2027';
             <td>
                 Yang Dinilai,<br>
                 <strong>Deputi Direktur Pendidikan</strong>
-                <div class="sig-space">
-                    <?php if (!empty($deputiSigBase64)): ?>
-                        <img src="<?= $deputiSigBase64 ?>" class="sig-img" alt="TTD Deputi">
-                    <?php endif; ?>
-                </div>
+                <?= ExportHelper::renderSignatureImg($deputiSigPath, 200, 96, 54) ?>
                 <strong><u>( <?= SecurityHelper::escape($deputiUser['full_name'] ?? 'Deputi Pendidikan') ?> )</u></strong>
             </td>
             <td>
                 Pejabat Penilai,<br>
                 <strong>Direktur Pendidikan</strong>
-                <div class="sig-space">
-                    <?php if (!empty($direkturSigBase64)): ?>
-                        <img src="<?= $direkturSigBase64 ?>" class="sig-img" alt="TTD Direktur">
-                    <?php endif; ?>
-                </div>
+                <?= ExportHelper::renderSignatureImg($direkturSigPath, 200, 96, 54) ?>
                 <strong><u>( <?= SecurityHelper::escape($direktur['full_name'] ?? 'Direktur Pendidikan') ?> )</u></strong>
             </td>
             <td>
                 Menyetujui &amp; Mengesahkan,<br>
                 <strong>Ketua Yayasan Islam Al-Kahfi</strong>
-                <div class="sig-space">
-                    <?php if (!empty($yayasanSigBase64)): ?>
-                        <img src="<?= $yayasanSigBase64 ?>" class="sig-img" alt="TTD Ketua Yayasan">
-                    <?php endif; ?>
-                </div>
+                <?= ExportHelper::renderSignatureImg($yayasanSigPath, 200, 96, 54) ?>
                 <strong><u>( <?= SecurityHelper::escape($ketuaYayasan['full_name'] ?? 'Pembina / Ketua Yayasan') ?> )</u></strong>
             </td>
         </tr>
@@ -490,10 +479,10 @@ $taName = $currentTa['name'] ?? '2026/2027';
         <strong>Panduan Standar Skala Bobot Kinerja (SOP 2017 Rev A):</strong>
         <table class="rubrik-tbl">
             <tr>
-                <th style="width:35px;">Skala</th>
-                <th style="width:125px;">Predikat</th>
-                <th style="width:80px;">Capaian (%)</th>
-                <th>Keterangan Kriteria</th>
+                <th style="width:7%;">Skala</th>
+                <th style="width:21%;">Predikat</th>
+                <th style="width:13%;">Capaian (%)</th>
+                <th style="width:59%;">Keterangan Kriteria</th>
             </tr>
             <tr>
                 <td class="text-center font-bold">5</td>

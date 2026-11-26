@@ -275,5 +275,68 @@ class ExportHelper {
         </div>
         ";
     }
+
+    /**
+     * Render gambar tanda tangan digital dengan skala proporsional penuh untuk Dompdf & cetak browser.
+     * Menjaga rasio aspek asli (tanpa distorsi object-fit di Dompdf) dan memanfaatkan negative margin-top
+     * agar tanda tangan berukuran jelas serta rapi walau sedikit menimpa teks jabatan/nama.
+     */
+    public static function renderSignatureImg(?string $sigPath, int $boxW = 220, int $boxH = 102, int $slotH = 62): string {
+        $sigPath = trim((string)$sigPath);
+        if ($sigPath === '') {
+            return "<div style='height: {$slotH}px;'></div>";
+        }
+
+        $relPath = ltrim(str_replace('\\', '/', $sigPath), '/');
+        $rootDir = dirname(__DIR__);
+        $baseCandidates = [
+            $rootDir . '/public',
+            $rootDir . '/storage',
+            $rootDir
+        ];
+
+        $foundFile = null;
+        foreach ($baseCandidates as $baseDir) {
+            $realBase = realpath($baseDir);
+            if ($realBase === false) {
+                continue;
+            }
+            $candidate = $realBase . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relPath);
+            $realFile = realpath($candidate);
+            if ($realFile !== false && is_file($realFile) && strpos($realFile, $realBase . DIRECTORY_SEPARATOR) === 0) {
+                $foundFile = $realFile;
+                break;
+            }
+        }
+
+        if ($foundFile !== null && is_readable($foundFile)) {
+            $ext = strtolower(pathinfo($foundFile, PATHINFO_EXTENSION));
+            $mime = match ($ext) {
+                'jpg', 'jpeg' => 'image/jpeg',
+                'png'         => 'image/png',
+                'webp'        => 'image/webp',
+                'gif'         => 'image/gif',
+                default       => 'image/png'
+            };
+            $raw = @file_get_contents($foundFile);
+            if ($raw !== false && $raw !== '') {
+                $data = base64_encode($raw);
+                $imgSize = @getimagesize($foundFile);
+                if (is_array($imgSize) && !empty($imgSize[0]) && !empty($imgSize[1])) {
+                    $w = (int)$imgSize[0];
+                    $h = (int)$imgSize[1];
+                    $scale = min($boxW / $w, $boxH / $h);
+                    $renderW = max(1, (int)round($w * $scale));
+                    $renderH = max(1, (int)round($h * $scale));
+                    $marginTop = (int)round(($slotH - $renderH) / 2);
+                    return "<div style='height: {$slotH}px; position: relative; overflow: visible; text-align: center;'><img src='data:{$mime};base64,{$data}' style='width: {$renderW}px; height: {$renderH}px; margin-top: {$marginTop}px; position: relative; z-index: 2;' /></div>";
+                }
+                $fallbackTop = (int)round(($slotH - $boxH) / 2);
+                return "<div style='height: {$slotH}px; position: relative; overflow: visible; text-align: center;'><img src='data:{$mime};base64,{$data}' style='height: {$boxH}px; width: auto; margin-top: {$fallbackTop}px; position: relative; z-index: 2;' /></div>";
+            }
+        }
+
+        return "<div style='height: {$slotH}px;'></div>";
+    }
 }
 

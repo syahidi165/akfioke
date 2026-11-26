@@ -433,16 +433,19 @@ class NilaiBulananController extends Controller {
         $html = "
         <html>
         <head>
+            <meta charset='UTF-8'>
             <style>
-                body { font-family: Helvetica, Arial, sans-serif; font-size: 11px; color: #1e293b; line-height: 1.4; }
+                @page { size: A4 portrait; margin: 12mm 14mm 14mm 14mm; }
+                * { box-sizing: border-box; }
+                body { margin: 0; padding: 0; font-family: Helvetica, Arial, sans-serif; font-size: 11px; color: #1e293b; line-height: 1.4; }
                 .title-doc { text-align: center; font-size: 13px; font-weight: bold; margin: 10px 0; text-transform: uppercase; }
-                .meta-table { width: 100%; margin-bottom: 12px; }
-                .meta-table td { padding: 3px; vertical-align: top; }
-                .table-data { width: 100%; border-collapse: collapse; margin-bottom: 15px; }
-                .table-data th, .table-data td { border: 1px solid #94a3b8; padding: 6px; }
+                .meta-table { width: 100%; border-collapse: collapse; table-layout: fixed; margin-bottom: 12px; }
+                .meta-table td { padding: 3px; vertical-align: top; word-wrap: break-word; overflow-wrap: break-word; }
+                .table-data { width: 100%; border-collapse: collapse; table-layout: fixed; margin-bottom: 15px; }
+                .table-data th, .table-data td { border: 1px solid #94a3b8; padding: 6px; word-wrap: break-word; overflow-wrap: break-word; }
                 .table-data th { background: #f1f5f9; text-align: center; font-weight: bold; }
-                .signatures { width: 100%; margin-top: 30px; border-collapse: collapse; page-break-inside: avoid; }
-                .sig-box { width: 50%; text-align: center; vertical-align: top; }
+                .signatures { width: 100%; margin-top: 30px; border-collapse: collapse; table-layout: fixed; page-break-inside: avoid; }
+                .sig-box { width: 50%; text-align: center; vertical-align: top; overflow: visible; }
             </style>
         </head>
         <body>
@@ -464,7 +467,7 @@ class NilaiBulananController extends Controller {
                 <thead>
                     <tr>
                         <th width='5%'>No</th>
-                        <th>Mata Pelajaran</th>
+                        <th width='41%'>Mata Pelajaran</th>
                         <th width='15%'>Kelompok</th>
                         <th width='12%'>KKM</th>
                         <th width='12%'>Nilai Angka</th>
@@ -601,16 +604,19 @@ class NilaiBulananController extends Controller {
         $html = "
         <html>
         <head>
+            <meta charset='UTF-8'>
             <style>
-                body { font-family: Helvetica, Arial, sans-serif; font-size: 11px; color: #1e293b; line-height: 1.4; }
+                @page { size: A4 portrait; margin: 12mm 14mm 14mm 14mm; }
+                * { box-sizing: border-box; }
+                body { margin: 0; padding: 0; font-family: Helvetica, Arial, sans-serif; font-size: 11px; color: #1e293b; line-height: 1.4; }
                 .title-doc { text-align: center; font-size: 13px; font-weight: bold; margin: 10px 0; text-transform: uppercase; }
-                .meta-table { width: 100%; margin-bottom: 12px; }
-                .meta-table td { padding: 3px; vertical-align: top; }
-                .table-data { width: 100%; border-collapse: collapse; margin-bottom: 15px; }
-                .table-data th, .table-data td { border: 1px solid #94a3b8; padding: 6px; }
+                .meta-table { width: 100%; border-collapse: collapse; table-layout: fixed; margin-bottom: 12px; }
+                .meta-table td { padding: 3px; vertical-align: top; word-wrap: break-word; overflow-wrap: break-word; }
+                .table-data { width: 100%; border-collapse: collapse; table-layout: fixed; margin-bottom: 15px; }
+                .table-data th, .table-data td { border: 1px solid #94a3b8; padding: 6px; word-wrap: break-word; overflow-wrap: break-word; }
                 .table-data th { background: #f1f5f9; text-align: center; font-weight: bold; }
-                .signatures { width: 100%; margin-top: 30px; border-collapse: collapse; page-break-inside: avoid; }
-                .sig-box { width: 50%; text-align: center; vertical-align: top; }
+                .signatures { width: 100%; margin-top: 30px; border-collapse: collapse; table-layout: fixed; page-break-inside: avoid; }
+                .sig-box { width: 50%; text-align: center; vertical-align: top; overflow: visible; }
             </style>
         </head>
         <body>
@@ -632,7 +638,7 @@ class NilaiBulananController extends Controller {
                 <thead>
                     <tr>
                         <th width='5%'>No</th>
-                        <th>Mata Pelajaran</th>
+                        <th width='41%'>Mata Pelajaran</th>
                         <th width='15%'>Kelompok</th>
                         <th width='12%'>KKM</th>
                         <th width='12%'>Nilai Angka</th>

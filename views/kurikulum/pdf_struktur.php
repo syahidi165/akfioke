@@ -140,11 +140,13 @@ foreach ($items as $it) {
             padding: 5px 8px;
             vertical-align: top;
             font-size: 8.5pt;
+            overflow: visible;
         }
         .sig-cell {
             height: 75px;
             position: relative;
             vertical-align: bottom;
+            overflow: visible;
         }
     </style>
 </head>
@@ -377,9 +379,9 @@ foreach ($items as $it) {
 
                 <div class="sig-cell">
                     <!-- TTD & Cap Resmi Deputi AIS -->
-                    <div style="display: flex; align-items: center; gap: 8px;">
+                    <div style="display: flex; align-items: center; gap: 8px; overflow: visible;">
                         <?php if (!empty($deputiSigBase64)): ?>
-                            <img src="<?= $deputiSigBase64 ?>" style="height: 48px; object-fit: contain;">
+                            <img src="<?= $deputiSigBase64 ?>" style="height: 92px; width: auto; max-width: 210px; margin: -18px 0 -14px 0; position: relative; z-index: 2;">
                         <?php endif; ?>
                         <!-- Stempel Deputi SVG/HTML -->
                         <div style="display: inline-block; border: 2px solid #1e3a8a; border-radius: 50%; width: 52px; height: 52px; text-align: center; color: #1e3a8a; font-size: 6.5pt; font-weight: bold; line-height: 1; padding-top: 8px;">
