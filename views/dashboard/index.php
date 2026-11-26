@@ -1,6 +1,7 @@
 <?php
 // views/dashboard/index.php
 use Core\SecurityHelper;
+use Core\Auth;
 ?>
 <div class="page-header">
     <div>
@@ -273,7 +274,7 @@ use Core\SecurityHelper;
                     Akumulasi tagihan berstatus Tertunggak dari seluruh <?= count($tunggakanByUnit ?? []) ?> unit binaan Anda pada Tahun Ajaran aktif (dipisahkan SPP vs Non-SPP)
                 </div>
             </div>
-            <a href="<?= Auth::baseUrl() ?>/tagihan/eskalasi-deputi" class="btn btn-outline btn-sm" style="color: #be185d; border-color: rgba(190, 24, 93, 0.35); font-weight: 600;">
+            <a href="<?= $baseUrl ?>/tagihan/eskalasi-deputi" class="btn btn-outline btn-sm" style="color: #be185d; border-color: rgba(190, 24, 93, 0.35); font-weight: 600;">
                 <i class="fa-solid fa-triangle-exclamation" style="margin-right: 4px;"></i> Buka Eskalasi Penagihan
             </a>
         </div>
