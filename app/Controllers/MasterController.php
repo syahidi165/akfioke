@@ -5920,6 +5920,7 @@ class MasterController extends Controller {
         self::ensureUserRolesUnitColumn();
 
         $allowedRoleNames = [
+            'kepala_sekolah',
             'guru_mapel', 'guru_diniyah', 'guru_tahfidz', 'guru_tk', 'guru_mapel_kbtk',
             'walas', 'guru_supervisor', 'tutor_siswa', 'tutor_sebaya', 'koor_tahfidz',
             'waka_kurikulum', 'waka_kesiswaan', 'panitia_lomba', 'tata_usaha'
@@ -5977,6 +5978,7 @@ class MasterController extends Controller {
         $role = Database::fetch("SELECT id, name, display_name FROM roles WHERE id = ?", [$roleId]);
 
         $allowedRoleNames = [
+            'kepala_sekolah',
             'guru_mapel', 'guru_diniyah', 'guru_tahfidz', 'guru_tk', 'guru_mapel_kbtk',
             'walas', 'guru_supervisor', 'tutor_siswa', 'tutor_sebaya', 'koor_tahfidz',
             'waka_kurikulum', 'waka_kesiswaan', 'panitia_lomba', 'tata_usaha'
@@ -6012,7 +6014,10 @@ class MasterController extends Controller {
             'role_name'      => $role['name']
         ]);
 
-        $this->setFlash('success', "Berhasil menugaskan {$emp['nama']} sebagai {$role['display_name']} di {$unit['name']} (Rapor AKFI tetap 1 pada Unit Induk).");
+        $extraNote = ($role['name'] === 'kepala_sekolah')
+            ? " (Rangkap Kepala Sekolah: administrasi/approval/TTD {$unit['name']} aktif via switcher header; 1 Rapor AKFI tetap pada Unit Induk)"
+            : " (Rapor AKFI tetap 1 pada Unit Induk)";
+        $this->setFlash('success', "Berhasil menugaskan {$emp['nama']} sebagai {$role['display_name']} di {$unit['name']}{$extraNote}.");
         $this->redirect(Auth::baseUrl() . '/master/cross-unit');
     }
 

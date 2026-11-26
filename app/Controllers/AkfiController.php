@@ -152,15 +152,18 @@ class AkfiController extends Controller {
             [json_encode($existingItems), $assessmentId]
         );
 
-        // Notifikasi ke Kepala Sekolah / Atasan Langsung
-        $unitId = $assessment['unit_id'];
+        // Notifikasi ke Kepala Sekolah Unit (baik KS Induk maupun KS Rangkap/Lintas Unit)
+        $unitId = (int)$assessment['unit_id'];
         $kepsekUser = Database::fetch(
             "SELECT u.id FROM users u 
              JOIN user_roles ur ON u.id = ur.user_id 
              JOIN roles r ON ur.role_id = r.id 
              JOIN employees e ON u.id = e.user_id 
-             WHERE r.name = 'kepala_sekolah' AND e.unit_id = ? LIMIT 1",
-            [$unitId]
+             WHERE r.name = 'kepala_sekolah' AND e.is_deleted = 0 AND e.status = 'Aktif'
+               AND ((e.unit_id = ? AND COALESCE(ur.unit_id, 0) = 0) OR ur.unit_id = ?)
+             ORDER BY CASE WHEN e.unit_id = ? THEN 0 ELSE 1 END, ur.is_primary DESC
+             LIMIT 1",
+            [$unitId, $unitId, $unitId]
         );
         if ($kepsekUser) {
             Notification::send((int)$kepsekUser['id'], 'Pengajuan AKFI Baru', 'Pegawai telah mengajukan penilaian mandiri AKFI dan siap dinilai atasan.', 'info', '/akfi/assess/' . $assessmentId);
@@ -599,14 +602,17 @@ class AkfiController extends Controller {
                  LEFT JOIN users usr ON e.user_id = usr.id
                  LEFT JOIN user_roles ur ON usr.id = ur.user_id
                  LEFT JOIN roles r ON ur.role_id = r.id AND r.name = 'kepala_sekolah'
-                 WHERE e.unit_id = ? AND e.is_deleted = 0 
+                 WHERE e.is_deleted = 0 AND e.status = 'Aktif'
                    AND (
-                       r.id IS NOT NULL 
-                       OR e.level_posisi = 'Kepala Sekolah'
-                       OR e.level_posisi LIKE '%Kepala Sekolah%'
-                       OR e.level_posisi LIKE '%Kepsek%'
-                       OR e.level_posisi LIKE '%Kanit%'
-                       OR e.level_posisi LIKE '%Kepala Satuan%'
+                       (e.unit_id = ? AND (
+                           r.id IS NOT NULL 
+                           OR e.level_posisi = 'Kepala Sekolah'
+                           OR e.level_posisi LIKE '%Kepala Sekolah%'
+                           OR e.level_posisi LIKE '%Kepsek%'
+                           OR e.level_posisi LIKE '%Kanit%'
+                           OR e.level_posisi LIKE '%Kepala Satuan%'
+                       ))
+                       OR (r.id IS NOT NULL AND ur.unit_id = ?)
                    )
                    AND e.level_posisi NOT LIKE '%Kepala Lab%'
                    AND e.level_posisi NOT LIKE '%Kepala Perpustakaan%'
@@ -614,9 +620,10 @@ class AkfiController extends Controller {
                    AND e.level_posisi NOT LIKE '%Kepala Tata Usaha%'
                    AND e.level_posisi NOT LIKE '%Kepala Bengkel%'
                    AND e.level_posisi NOT LIKE '%Kepala Ruang%'
-                 ORDER BY (CASE WHEN r.id IS NOT NULL THEN 1 WHEN e.level_posisi LIKE '%Kepala Sekolah%' THEN 2 ELSE 3 END) ASC
+                 ORDER BY (CASE WHEN e.unit_id = ? THEN 0 ELSE 1 END) ASC,
+                          (CASE WHEN r.id IS NOT NULL THEN 1 WHEN e.level_posisi LIKE '%Kepala Sekolah%' THEN 2 ELSE 3 END) ASC
                  LIMIT 1",
-                [$uId]
+                [$uId, $uId, $uId]
             );
 
             $assessment = null;
@@ -1059,17 +1066,22 @@ class AkfiController extends Controller {
             default => 'Kurang (E)'
         };
 
-        // Fetch official signatories fallback
+        // Fetch official signatories fallback (mendukung Kepala Sekolah Induk maupun Kepala Sekolah Rangkap/Lintas Unit)
+        $assessUnitId = (int)$assessment['unit_id'];
         $kepsekUnit = Database::fetch(
             "SELECT e.nama, e.nipy, COALESCE(e.signature_path, u.signature_path) as signature_path 
              FROM employees e 
              LEFT JOIN users u ON e.user_id = u.id 
              LEFT JOIN user_roles ur ON u.id = ur.user_id 
              LEFT JOIN roles r ON ur.role_id = r.id AND r.name = 'kepala_sekolah'
-             WHERE e.unit_id = ? AND e.is_deleted = 0 
-               AND (r.id IS NOT NULL OR e.position LIKE '%Kepala Sekolah%' OR e.level_posisi LIKE '%Kepala Sekolah%' OR e.level_posisi LIKE '%Kanit%')
-             ORDER BY r.id DESC LIMIT 1",
-            [$assessment['unit_id']]
+             WHERE e.is_deleted = 0 AND e.status = 'Aktif'
+               AND (
+                   (e.unit_id = ? AND (r.id IS NOT NULL OR e.position LIKE '%Kepala Sekolah%' OR e.level_posisi LIKE '%Kepala Sekolah%' OR e.level_posisi LIKE '%Kanit%'))
+                   OR (r.id IS NOT NULL AND ur.unit_id = ?)
+               )
+             ORDER BY CASE WHEN e.unit_id = ? THEN 0 ELSE 1 END, r.id DESC
+             LIMIT 1",
+            [$assessUnitId, $assessUnitId, $assessUnitId]
         );
 
         $deputiUser = Database::fetch(
