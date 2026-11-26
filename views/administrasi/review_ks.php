@@ -163,6 +163,11 @@ $activeAcademicYearName = Auth::academicYearName() ?? 'Tahun Ajaran Aktif';
                                 <?php if (!empty($k['nipy']) && $k['nipy'] !== '-'): ?>
                                     <span class="nipy-pill"><i class="fa-solid fa-id-badge"></i> <?= SecurityHelper::escape($k['nipy']) ?></span>
                                 <?php endif; ?>
+                                <?php if (!empty($k['is_cross_unit'])): ?>
+                                    <span class="badge" style="font-size: 10.5px; background: #fef3c7; color: #b45309; border: 1px solid #fcd34d; padding: 2px 7px;" title="Kepala Sekolah merangkap tugas dari unit induk asal">
+                                        <i class="fa-solid fa-shuffle"></i> Lintas Unit<?= !empty($k['home_unit_name']) ? ' (Induk: ' . SecurityHelper::escape($k['home_unit_name']) . ')' : '' ?>
+                                    </span>
+                                <?php endif; ?>
                             </div>
                         </div>
                     </div>
@@ -354,6 +359,7 @@ $activeAcademicYearName = Auth::academicYearName() ?? 'Tahun Ajaran Aktif';
                     <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
                         <span id="modalKsUnit" class="badge badge-info" style="font-size: 11px;"></span>
                         <span id="modalKsNipy" class="badge badge-secondary" style="font-size: 11px;"></span>
+                        <span id="modalKsCrossUnitBadge" class="badge" style="display: none; font-size: 11px; background: #fef3c7; color: #b45309; border: 1px solid #fcd34d;"></span>
                         <span class="badge" style="background: #e0f2fe; color: #0369a1; font-size: 11px;">18 Arsip Kepala Sekolah</span>
                     </div>
                 </div>
@@ -846,6 +852,16 @@ function openKsDetail(index) {
     document.getElementById('modalKsName').innerText = k.name || 'Kepala Sekolah';
     document.getElementById('modalKsUnit').innerText = k.unit_name || '-';
     document.getElementById('modalKsNipy').innerText = 'NIPY: ' + (k.nipy || '-');
+    const crossBadge = document.getElementById('modalKsCrossUnitBadge');
+    if (crossBadge) {
+        if (k.is_cross_unit) {
+            crossBadge.style.display = 'inline-block';
+            crossBadge.innerHTML = '<i class="fa-solid fa-shuffle"></i> Lintas Unit' + (k.home_unit_name ? ' (Induk: ' + escapeHtml(k.home_unit_name) + ')' : '');
+        } else {
+            crossBadge.style.display = 'none';
+            crossBadge.innerText = '';
+        }
+    }
 
     // Avatar Inisial
     const words = (k.name || 'KS').trim().split(' ');

@@ -216,6 +216,7 @@ class AdministrasiController extends Controller {
     // --- APPROVAL ADMINISTRASI KS OLEH DEPUTI (18 ARSIP) ---
     public function reviewKs(): void {
         $this->requireRole('deputi_pendidikan');
+        \App\Controllers\MasterController::ensureUserRolesUnitColumn();
         $unitFilter = (int)($_GET['unit_id'] ?? 0);
         $taId = Auth::academicYearId();
         $deputiId = Auth::id();
@@ -260,23 +261,35 @@ class AdministrasiController extends Controller {
             $uploadsByUnit[(int)$up['unit_id']][] = $up;
         }
 
-        // 3. Ambil data Unit & Kepala Sekolah HANYA dari unit binaan Deputi
-        $kepsekRows = Database::fetchAll("
-            SELECT u.id as unit_id, u.name as unit_name, u.level as unit_level,
-                   e.id as employee_id, e.nama as kepsek_nama, e.nipy as kepsek_nipy,
-                   usr.id as user_id, usr.full_name as user_full_name, usr.email as user_email
-            FROM units u
-            LEFT JOIN employees e ON u.id = e.unit_id 
-                 AND (e.level_posisi = 'Kepala Sekolah' OR e.position LIKE '%Kepala Sekolah%')
-                 AND e.is_deleted = 0
-            LEFT JOIN users usr ON e.user_id = usr.id
-            WHERE u.id IN ($deputiUnitClause)
-            ORDER BY u.id ASC
-        ");
-
+        // 3. Ambil data Kepala Sekolah tiap unit binaan Deputi (Unit Induk maupun Rangkap / Lintas Unit)
         $kepsekByUnit = [];
-        foreach ($kepsekRows as $kr) {
-            $kepsekByUnit[(int)$kr['unit_id']] = $kr;
+        foreach ($units as $u) {
+            $uId = (int)$u['id'];
+            $kr = Database::fetch(
+                "SELECT ? as unit_id, ? as unit_name, ? as unit_level,
+                        e.id as employee_id, e.nama as kepsek_nama, e.nipy as kepsek_nipy,
+                        usr.id as user_id, usr.full_name as user_full_name, usr.email as user_email,
+                        CASE WHEN e.unit_id = ? THEN 0 ELSE 1 END as is_cross_unit,
+                        home_u.name as home_unit_name
+                 FROM employees e
+                 LEFT JOIN units home_u ON e.unit_id = home_u.id
+                 LEFT JOIN users usr ON e.user_id = usr.id
+                 LEFT JOIN user_roles ur ON usr.id = ur.user_id
+                 LEFT JOIN roles r ON ur.role_id = r.id AND r.name = 'kepala_sekolah'
+                 WHERE e.is_deleted = 0 AND e.status = 'Aktif'
+                   AND (
+                       (e.unit_id = ? AND (r.id IS NOT NULL OR e.level_posisi = 'Kepala Sekolah' OR e.level_posisi LIKE '%Kepala Sekolah%' OR e.position LIKE '%Kepala Sekolah%' OR e.level_posisi LIKE '%Kepsek%' OR e.level_posisi LIKE '%Kanit%'))
+                       OR (r.id IS NOT NULL AND ur.unit_id = ?)
+                   )
+                 ORDER BY (CASE WHEN e.unit_id = ? THEN 0 ELSE 1 END) ASC,
+                          (CASE WHEN r.id IS NOT NULL THEN 1 ELSE 2 END) ASC,
+                          e.id ASC
+                 LIMIT 1",
+                [$uId, $u['name'], $u['level'] ?? '', $uId, $uId, $uId, $uId]
+            );
+            if ($kr) {
+                $kepsekByUnit[$uId] = $kr;
+            }
         }
 
         // 4. Susun struktur kartu ($ksCards) dan $summary
@@ -540,6 +553,8 @@ class AdministrasiController extends Controller {
                 'employee_id'             => $kInfo['employee_id'] ?? null,
                 'name'                    => $displayName,
                 'nipy'                    => !empty($kInfo['kepsek_nipy']) ? $kInfo['kepsek_nipy'] : '-',
+                'is_cross_unit'           => !empty($kInfo['is_cross_unit']),
+                'home_unit_name'          => $kInfo['home_unit_name'] ?? '',
                 'role_display'            => 'Kepala Sekolah',
                 'expected_count'          => $totalExpected,
                 'uploaded_count'          => $totalUploaded,

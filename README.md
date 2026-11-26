@@ -76,7 +76,7 @@ Aplikasi web enterprise yang dikembangkan khusus untuk **Yayasan Islam Al Kahfi 
   - Batas waktu (*deadline*) administrasi KS diatur multi-slot oleh Deputi (`/deputi/deadlines-ks`).
   - **Form Deadline Waka Kurikulum (`/administrasi/deadlines`):** Disesuaikan dengan tipe frekuensi dokumen: **1x Setahun**, **2x Setahun** (Semester 1 & Semester 2), dan **Setiap Bulan**.
   - **Format Bulan Akademik Juli–Juni:** Seluruh halaman unggah administrasi bulanan (`ks_uploads`, `mapel_uploads`, `walas_uploads`, `tu_uploads`) menggunakan urutan bulan **Juli s/d Juni**.
-  - Verifikasi & approval dokumen satu-persatu maupun *batch approval* oleh Kepala Sekolah dan Deputi/Pengawas.
+  - Verifikasi & approval dokumen satu-persatu maupun *batch approval* oleh Kepala Sekolah dan Deputi/Pengawas (menu Approval Admin KS `/administrasi/review-ks` otomatis menampilkan nama asli, NIPY, serta badge **`Lintas Unit (Induk: ...)`** bagi Kepala Sekolah yang merangkap).
 
 ### 7. Modul Tahfidz & Kalkulator Mushaf Madinah (15 Baris/Halaman)
 - Dataset 114 Surah & 604 Halaman Mushaf Madinah (`lines_count = pages * 15`), target ketuntasan bulanan/semester (TK/KB $\ge 150$ baris, SD/SMP/SMA $\ge 300$ baris).
