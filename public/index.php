@@ -299,10 +299,12 @@ Router::get('/tagihan/cetak-fr8001d/:id', [TagihanController::class, 'printSurat
 Router::post('/tagihan/approve-kesepakatan-fr8001d', [TagihanController::class, 'approveKesepakatanFR8001D']);
 Router::post('/tagihan/mark-selesai-kepsek', [TagihanController::class, 'markSelesaiKepsek']);
 Router::post('/tagihan/eskalasi-deputi', [TagihanController::class, 'eskalasiDeputi']);
+Router::post('/tagihan/kepsek/kirim-email', [TagihanController::class, 'kirimEmailKepsek']);
 
 // Alur Yayasan / Deputi Direktur Pendidikan (FR 8001C Kop Yayasan & FR 8001D)
 Router::get('/tagihan/eskalasi-deputi', [TagihanController::class, 'deputiEskalasiList']);
 Router::post('/tagihan/deputi/schedule', [TagihanController::class, 'saveDeputiSchedule']);
+Router::post('/tagihan/deputi/kirim-email', [TagihanController::class, 'kirimEmailDeputi']);
 Router::get('/tagihan/cetak-fr8001c-deputi/:id', [TagihanController::class, 'printSuratFR8001CDeputi']);
 Router::get('/tagihan/cetak-fr8001d-deputi/:id', [TagihanController::class, 'printSuratFR8001DDeputi']);
 Router::post('/tagihan/mark-selesai-deputi', [TagihanController::class, 'markSelesaiDeputi']);

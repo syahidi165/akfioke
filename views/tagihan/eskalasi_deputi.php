@@ -24,6 +24,26 @@ $baseUrl = Auth::baseUrl();
     </div>
 </div>
 
+<!-- Versi Data Impor Tagihan TU per Unit -->
+<div style="background: #fdf2f8; border: 1px solid #fbcfe8; border-left: 4px solid #be185d; border-radius: 8px; padding: 10px 16px; margin-bottom: 18px; font-size: 0.8125rem;">
+    <div style="display: flex; align-items: center; gap: 8px; color: #831843; flex-wrap: wrap;">
+        <i class="fa-solid fa-clock-rotate-left"></i>
+        <strong>Versi Data Impor TU per Unit:</strong>
+        <?php if (!empty($importMetaByUnit)): ?>
+            <?php foreach ($importMetaByUnit as $uId => $uMeta):
+                $uTs = strtotime($uMeta['imported_at']);
+            ?>
+                <span class="badge" style="background: #fff; color: #831843; border: 1px solid #f9a8d4; font-size: 11px; padding: 4px 8px;">
+                    <strong><?= SecurityHelper::escape($uMeta['unit_name'] ?? ('Unit #' . $uId)) ?>:</strong>
+                    <?= SecurityHelper::formatTanggalIndo(date('Y-m-d', $uTs)) ?>, <?= date('H:i', $uTs) ?> WIB
+                </span>
+            <?php endforeach; ?>
+        <?php else: ?>
+            <span style="color: #64748b;">Belum ada riwayat impor berkas tagihan dari Tata Usaha unit.</span>
+        <?php endif; ?>
+    </div>
+</div>
+
 <!-- Stats Deputi -->
 <div class="stats-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-bottom: 24px;">
     <div class="card" style="padding: 16px 20px; border-left: 4px solid #be185d; background: #fff; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.06);">
@@ -110,6 +130,23 @@ $baseUrl = Auth::baseUrl();
                                     <div style="font-size: 0.75rem; color: #334155; margin-top: 2px;">
                                         Orang Tua: <strong><?= SecurityHelper::escape($b['parent_name'] ?: 'Wali') ?></strong> (<?= SecurityHelper::escape($b['parent_phone'] ?: '-') ?>)
                                     </div>
+                                    <div style="font-size: 0.72rem; margin-top: 3px; color: <?= !empty($b['parent_email']) ? '#0369a1' : '#94a3b8' ?>;">
+                                        <i class="fa-solid fa-envelope"></i>
+                                        <?= !empty($b['parent_email']) ? SecurityHelper::escape($b['parent_email']) : 'Email ortu belum diisi' ?>
+                                    </div>
+                                    <?php
+                                        $uMetaRow = $importMetaByUnit[(int)$b['unit_id']] ?? null;
+                                        if (!empty($uMetaRow['imported_at'])):
+                                            $uTsRow = strtotime($uMetaRow['imported_at']);
+                                    ?>
+                                        <div style="font-size: 0.7rem; margin-top: 3px; color: #831843;">
+                                            <i class="fa-solid fa-clock-rotate-left"></i> Data TU: <?= SecurityHelper::formatTanggalIndo(date('Y-m-d', $uTsRow)) ?>, <?= date('H:i', $uTsRow) ?> WIB
+                                        </div>
+                                    <?php else: ?>
+                                        <div style="font-size: 0.7rem; margin-top: 3px; color: #94a3b8;">
+                                            <i class="fa-solid fa-clock-rotate-left"></i> Belum ada impor TU
+                                        </div>
+                                    <?php endif; ?>
                                 </td>
 
                                 <td style="padding: 10px; font-family: monospace; font-weight: 600; color: #0369a1; font-size: 0.875rem;">
@@ -173,6 +210,17 @@ $baseUrl = Auth::baseUrl();
                                         <a href="<?= $baseUrl ?>/tagihan/cetak-fr8001d-deputi/<?= $b['id'] ?>" target="_blank" class="btn btn-outline btn-sm" style="padding: 4px 8px; font-size: 0.75rem; color: #7c3aed; border-color: #7c3aed;" title="Cetak Form Kesepakatan FR 8001D Kop Yayasan">
                                             <i class="fa-solid fa-file-signature"></i> FR 8001D
                                         </a>
+
+                                        <!-- Kirim Email Resmi Yayasan (Lampiran PDF FR 8001C / FR 8001D) -->
+                                        <button type="button" class="btn btn-outline btn-sm" style="padding: 4px 8px; font-size: 0.75rem; color: #0369a1; border-color: #0369a1;"
+                                                data-bill-id="<?= (int)$b['id'] ?>"
+                                                data-student-name="<?= SecurityHelper::escape($b['student_name']) ?>"
+                                                data-unit-name="<?= SecurityHelper::escape($b['unit_name']) ?>"
+                                                data-parent-email="<?= SecurityHelper::escape($b['parent_email'] ?? '') ?>"
+                                                onclick="openEmailDeputiModal(this)"
+                                                title="Kirim Surat Yayasan FR 8001C / FR 8001D via Email dengan Lampiran PDF">
+                                            <i class="fa-solid fa-paper-plane"></i> Kirim Email
+                                        </button>
 
                                         <!-- Setujui Kesepakatan FR 8001D Saat Ortu Hadir -->
                                         <button type="button" class="btn btn-primary btn-sm" style="padding: 4px 8px; font-size: 0.75rem; background: #059669; border-color: #059669; font-weight: 600;" onclick="openDeputiKesepakatanModal(<?= $b['id'] ?>, <?= $b['student_id'] ?>, <?= $b['unit_id'] ?>, '<?= SecurityHelper::escape($b['student_name']) ?>', '<?= SecurityHelper::escape($b['unit_name']) ?>', '<?= SecurityHelper::escape($b['parent_name'] ?? '') ?>', '<?= SecurityHelper::escape($b['nik'] ?? '') ?>', '<?= SecurityHelper::escape($b['parent_phone'] ?? '') ?>', '<?= SecurityHelper::escape($b['alamat'] ?? '') ?>', <?= (float)$b['amount'] ?>)" title="Setujui Kesepakatan FR 8001D & Masukkan ke Buku Cicilan TU">
@@ -382,6 +430,49 @@ $baseUrl = Auth::baseUrl();
     </div>
 </div>
 
+<!-- Modal Kirim Email Yayasan FR 8001C / FR 8001D (Lampiran PDF) -->
+<div id="modalKirimEmailDeputi" class="modal-backdrop" style="display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.6); z-index: 9999; align-items: center; justify-content: center; backdrop-filter: blur(2px);">
+    <div style="background: #fff; width: 100%; max-width: 500px; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.15); overflow: hidden; margin: 20px;">
+        <div style="background: #f0f9ff; border-bottom: 1px solid #bae6fd; padding: 16px 20px; display: flex; justify-content: space-between; align-items: center;">
+            <h4 style="margin: 0; font-size: 1rem; font-weight: 700; color: #0369a1; display: flex; align-items: center; gap: 8px;">
+                <i class="fa-solid fa-paper-plane"></i> Kirim Surat Yayasan FR 8001C / FR 8001D via Email
+            </h4>
+            <button type="button" onclick="closeEmailDeputiModal()" style="background: none; border: none; font-size: 1.25rem; cursor: pointer; color: #94a3b8;">&times;</button>
+        </div>
+        <form action="<?= $baseUrl ?>/tagihan/deputi/kirim-email" method="POST">
+            <?= CSRF::field() ?>
+            <input type="hidden" name="bill_id" id="emailDeputiBillId" value="">
+            <div style="padding: 20px;">
+                <div style="font-size: 0.875rem; margin-bottom: 14px; color: #334155;">
+                    Santri: <strong id="emailDeputiStudentName">-</strong> (<span id="emailDeputiUnitName">-</span>)
+                </div>
+                <div class="form-group" style="margin-bottom: 12px;">
+                    <label class="form-label" style="font-weight: 600; font-size: 0.8125rem;">Email Orang Tua / Wali <span style="color: #ef4444;">*</span></label>
+                    <input type="email" name="target_email" id="emailDeputiTargetEmail" class="form-control" required placeholder="contoh@email.com" style="font-size: 0.8125rem;">
+                </div>
+                <div class="form-group" style="margin-bottom: 12px;">
+                    <label class="form-label" style="font-weight: 600; font-size: 0.8125rem;">Dokumen Lampiran PDF (Kop Yayasan) <span style="color: #ef4444;">*</span></label>
+                    <select name="doc_type" id="emailDeputiDocType" class="form-control" style="font-size: 0.8125rem;">
+                        <option value="fr8001c">Surat Pemanggilan Yayasan (FR 8001C - PDF)</option>
+                        <option value="fr8001d">Berita Acara &amp; Pernyataan Yayasan (FR 8001D - PDF)</option>
+                        <option value="both">Keduanya (Lampiran PDF FR 8001C + FR 8001D)</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" style="font-weight: 600; font-size: 0.8125rem;">Catatan Tambahan (Opsional)</label>
+                    <textarea name="extra_note" id="emailDeputiNote" rows="2" class="form-control" placeholder="Pesan pengantar tambahan dari Direktorat Pendidikan..." style="font-size: 0.8125rem;"></textarea>
+                </div>
+            </div>
+            <div style="background: #f8fafc; border-top: 1px solid #e2e8f0; padding: 12px 20px; display: flex; justify-content: flex-end; gap: 10px;">
+                <button type="button" class="btn btn-outline" onclick="closeEmailDeputiModal()">Batal</button>
+                <button type="submit" class="btn btn-primary" style="background: #0369a1; border-color: #0369a1; font-weight: 600;">
+                    <i class="fa-solid fa-paper-plane" style="margin-right: 6px;"></i> Kirim Email &amp; Lampiran PDF
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
 <script>
 function openSelesaiDeputiModal(billId, studentName) {
     document.getElementById('selesaiDeputiBillId').value = billId;
@@ -439,5 +530,17 @@ function toggleDeputiScheme() {
     document.getElementById('deputiBoxSchemeA').style.display = (type === 'lunas_tanggal') ? 'block' : 'none';
     document.getElementById('deputiBoxSchemeB').style.display = (type === 'cicil_bulan') ? 'flex' : 'none';
     document.getElementById('deputiBoxSchemeC').style.display = (type === 'cicil_nominal') ? 'flex' : 'none';
+}
+function openEmailDeputiModal(btn) {
+    document.getElementById('emailDeputiBillId').value = btn.getAttribute('data-bill-id') || '';
+    document.getElementById('emailDeputiStudentName').innerText = btn.getAttribute('data-student-name') || '-';
+    document.getElementById('emailDeputiUnitName').innerText = btn.getAttribute('data-unit-name') || '-';
+    document.getElementById('emailDeputiTargetEmail').value = btn.getAttribute('data-parent-email') || '';
+    document.getElementById('emailDeputiDocType').value = 'fr8001c';
+    document.getElementById('emailDeputiNote').value = '';
+    document.getElementById('modalKirimEmailDeputi').style.display = 'flex';
+}
+function closeEmailDeputiModal() {
+    document.getElementById('modalKirimEmailDeputi').style.display = 'none';
 }
 </script>

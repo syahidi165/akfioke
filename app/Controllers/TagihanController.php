@@ -9,6 +9,7 @@ use Core\AuditLog;
 use Core\ExportHelper;
 use Core\SecurityHelper;
 use Core\Notification;
+use Core\Setting;
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
 
@@ -33,6 +34,52 @@ class TagihanController extends Controller {
         }
         $digits = preg_replace('/[^0-9]/', '', $str);
         return $digits !== '' ? (float)$digits : 0.0;
+    }
+
+    private function saveUnitImportMeta(int $unitId, array $meta): void {
+        if ($unitId <= 0) {
+            return;
+        }
+        try {
+            Setting::set('tagihan_import_unit_' . $unitId, json_encode($meta, JSON_UNESCAPED_UNICODE));
+        } catch (\Throwable $e) {
+            error_log('Gagal menyimpan metadata impor tagihan unit #' . $unitId . ': ' . $e->getMessage());
+        }
+    }
+
+    private function getUnitLastImportMeta(int $unitId): ?array {
+        if ($unitId <= 0) {
+            return null;
+        }
+        try {
+            $raw = Setting::get('tagihan_import_unit_' . $unitId);
+            if (!empty($raw)) {
+                $decoded = json_decode($raw, true);
+                if (is_array($decoded) && !empty($decoded['imported_at'])) {
+                    return $decoded;
+                }
+            }
+            $logRow = Database::fetch(
+                "SELECT a.created_at, u.full_name
+                 FROM audit_logs a
+                 LEFT JOIN users u ON a.user_id = u.id
+                 WHERE a.action = 'IMPORT_BILLS_SNAPSHOT_SYNC' AND a.record_id = ?
+                 ORDER BY a.created_at DESC, a.id DESC
+                 LIMIT 1",
+                [$unitId]
+            );
+            if ($logRow && !empty($logRow['created_at'])) {
+                return [
+                    'imported_at' => $logRow['created_at'],
+                    'filename'    => '',
+                    'format'      => '',
+                    'by_name'     => $logRow['full_name'] ?: 'Tata Usaha'
+                ];
+            }
+        } catch (\Throwable $e) {
+            // Abaikan bila tabel belum siap
+        }
+        return null;
     }
 
     /**
@@ -221,7 +268,8 @@ class TagihanController extends Controller {
             'tunggakanCount'  => $tunggakanCount,
             'rasioTunggakan'  => $rasioTunggakan,
             'unit'            => $unit,
-            'importPreview'   => $importPreview
+            'importPreview'   => $importPreview,
+            'lastImportMeta'  => $this->getUnitLastImportMeta($unitId)
         ]);
     }
 
@@ -1077,6 +1125,8 @@ class TagihanController extends Controller {
             $rowsToProcess = $preview['valid'];
         }
 
+        $importFilename = (string)($preview['filename'] ?? '');
+        $importFormat = (string)($preview['format'] ?? 'fr8001a');
         $stats = $this->applyBillImportRows(
             $rowsToProcess,
             $unitId,
@@ -1087,6 +1137,17 @@ class TagihanController extends Controller {
             (string)$preview['due_date']
         );
         unset($_SESSION['bill_import_preview']);
+
+        $currentUser = Auth::user();
+        $this->saveUnitImportMeta($unitId, [
+            'imported_at'  => date('Y-m-d H:i:s'),
+            'filename'     => $importFilename,
+            'format'       => $importFormat,
+            'by_name'      => $currentUser['full_name'] ?? 'Tata Usaha',
+            'imported'     => (int)($stats['imported'] ?? 0),
+            'overwritten'  => (int)($stats['overwritten'] ?? 0),
+            'marked_lunas' => (int)($stats['marked_lunas'] ?? 0)
+        ]);
 
         AuditLog::log('IMPORT_BILLS_SNAPSHOT_SYNC', 'bills', $unitId, null, $stats);
 
@@ -1860,7 +1921,8 @@ class TagihanController extends Controller {
             'bills'               => $bills,
             'pendingCount'        => $pendingCount,
             'totalNominalPending' => $totalNominalPending,
-            'kepsekEmp'           => $kepsekEmp
+            'kepsekEmp'           => $kepsekEmp,
+            'lastImportMeta'      => $this->getUnitLastImportMeta($unitId)
         ]);
     }
 
@@ -1900,6 +1962,204 @@ class TagihanController extends Controller {
         ]);
 
         $this->setFlash('success', 'Jadwal pemanggilan orang tua (FR 8001C) berhasil ditetapkan. Anda dapat langsung mencetak surat pemanggilan.');
+        $this->redirect(Auth::baseUrl() . '/tagihan/approval');
+    }
+
+    private function sendOfficialBillEmail(int $billId, string $docType, bool $isDeputi, ?string $customEmail = null, string $extraNote = ''): array {
+        if (!in_array($docType, ['fr8001c', 'fr8001d', 'both'], true)) {
+            return ['found' => false, 'email_sent' => false, 'reason' => 'invalid_doc', 'error' => 'Jenis dokumen email tidak valid.'];
+        }
+
+        $bill = Database::fetch(
+            "SELECT b.*, s.nama as student_name, s.nis,
+                    COALESCE(NULLIF(s.father_name, ''), NULLIF(s.mother_name, ''), 'Wali Santri') as parent_name,
+                    s.parent_phone, s.parent_email, s.address as alamat, s.nik,
+                    (SELECT c2.name FROM class_students cs2 JOIN classes c2 ON cs2.class_id = c2.id
+                     WHERE cs2.student_id = s.id AND cs2.status = 'Aktif' AND c2.unit_id = b.unit_id
+                     ORDER BY cs2.academic_year_id DESC, cs2.id DESC LIMIT 1) as class_name,
+                    u.name as unit_name, u.phone as unit_phone, u.phone, u.email as unit_email, u.email,
+                    u.bank_name, u.bank_account, u.bank_holder, u.kop_title, u.kop_subtitle, u.address,
+                    u.code, u.level, u.npsn, u.akreditasi, u.nomor_akreditasi, u.nomor_izin_operasional, u.logo_path
+             FROM bills b
+             JOIN students s ON b.student_id = s.id
+             JOIN units u ON b.unit_id = u.id
+             WHERE b.id = ?",
+            [$billId]
+        );
+
+        if (!$bill) {
+            return ['found' => false, 'email_sent' => false, 'reason' => 'not_found', 'error' => 'Data tagihan tidak ditemukan.'];
+        }
+
+        $targetEmail = trim((string)($customEmail !== null && $customEmail !== '' ? $customEmail : ($bill['parent_email'] ?? '')));
+        if ($targetEmail === '' || !filter_var($targetEmail, FILTER_VALIDATE_EMAIL)) {
+            return ['found' => true, 'email_sent' => false, 'reason' => 'no_email', 'email' => $targetEmail, 'error' => 'Alamat email orang tua tidak tersedia atau tidak valid.'];
+        }
+
+        $smtp = $this->getSmtpConfig((int)$bill['unit_id']);
+        if (empty($smtp)) {
+            return ['found' => true, 'email_sent' => false, 'reason' => 'no_smtp', 'email' => $targetEmail, 'error' => 'Pengaturan SMTP unit belum dikonfigurasi.'];
+        }
+
+        $attachments = [];
+        $cleanNis = preg_replace('/[^a-zA-Z0-9_\-]/', '_', (string)$bill['nis']);
+        try {
+            @ini_set('memory_limit', '512M');
+            @set_time_limit(120);
+
+            if ($docType === 'fr8001c' || $docType === 'both') {
+                $htmlC = $this->generateFR8001CHtml($bill, $isDeputi);
+                $bytesC = ExportHelper::getPdfBytes($htmlC, 'A4', 'portrait');
+                if (empty($bytesC)) {
+                    return ['found' => true, 'email_sent' => false, 'reason' => 'pdf_error', 'email' => $targetEmail, 'error' => 'Gagal membuat lampiran PDF FR 8001C.'];
+                }
+                $attachments[] = [
+                    'bytes' => $bytesC,
+                    'name'  => 'Surat_Panggilan_' . ($isDeputi ? 'Yayasan_' : '') . 'FR8001C_' . $cleanNis . '.pdf',
+                    'label' => $isDeputi ? 'Surat Pemanggilan Yayasan (FR 8001C)' : 'Surat Pemanggilan Kepala Sekolah (FR 8001C)'
+                ];
+            }
+
+            if ($docType === 'fr8001d' || $docType === 'both') {
+                $htmlD = $this->generateFR8001DHtml($bill, $isDeputi);
+                $bytesD = ExportHelper::getPdfBytes($htmlD, 'A4', 'portrait');
+                if (empty($bytesD)) {
+                    return ['found' => true, 'email_sent' => false, 'reason' => 'pdf_error', 'email' => $targetEmail, 'error' => 'Gagal membuat lampiran PDF FR 8001D.'];
+                }
+                $attachments[] = [
+                    'bytes' => $bytesD,
+                    'name'  => 'Berita_Acara_dan_Pernyataan_' . ($isDeputi ? 'Yayasan_' : '') . 'FR8001D_' . $cleanNis . '.pdf',
+                    'label' => 'Berita Acara & Surat Pernyataan Komitmen (FR 8001D)'
+                ];
+            }
+        } catch (\Throwable $pdfEx) {
+            error_log('Gagal merender lampiran PDF resmi FR 8001C/D: ' . $pdfEx->getMessage());
+            return ['found' => true, 'email_sent' => false, 'reason' => 'pdf_error', 'email' => $targetEmail, 'error' => $pdfEx->getMessage()];
+        }
+
+        $levelTitle = $isDeputi ? 'Direktorat Pendidikan Yayasan Al-Kahfi Batam' : SecurityHelper::escape($bill['unit_name']);
+        $docSummaryLabel = $docType === 'both' ? 'FR 8001C & FR 8001D' : strtoupper($docType);
+        $scheduleHtml = '';
+        if ($isDeputi && !empty($bill['deputi_schedule_date'])) {
+            $ts = strtotime($bill['deputi_schedule_date']);
+            $scheduleHtml = "<div style='background:#fdf2f8; border-left:4px solid #be185d; padding:10px 14px; margin:12px 0;'><strong>Jadwal Pertemuan Yayasan:</strong><br>" . SecurityHelper::formatTanggalIndo(date('Y-m-d', $ts)) . " pukul " . date('H:i', $ts) . " WIB &bull; " . SecurityHelper::escape($bill['deputi_schedule_place'] ?: 'Kantor Yayasan') . "</div>";
+        } elseif (!$isDeputi && !empty($bill['kepsek_schedule_date'])) {
+            $ts = strtotime($bill['kepsek_schedule_date']);
+            $scheduleHtml = "<div style='background:#f0fdfa; border-left:4px solid #0f766e; padding:10px 14px; margin:12px 0;'><strong>Jadwal Pertemuan Sekolah:</strong><br>" . SecurityHelper::formatTanggalIndo(date('Y-m-d', $ts)) . " pukul " . date('H:i', $ts) . " WIB &bull; " . SecurityHelper::escape($bill['kepsek_schedule_place'] ?: 'Ruang Kepala Sekolah') . "</div>";
+        }
+
+        $noteHtml = '';
+        if (trim($extraNote) !== '') {
+            $noteHtml = "<div style='background:#f8fafc; border:1px solid #cbd5e1; border-radius:6px; padding:10px 12px; margin:12px 0;'><strong>Catatan Tambahan:</strong><br>" . nl2br(SecurityHelper::escape($extraNote)) . "</div>";
+        }
+
+        $attListHtml = '<ul style="margin:6px 0 12px 18px; padding:0;">';
+        foreach ($attachments as $att) {
+            $attListHtml .= '<li>' . SecurityHelper::escape($att['label']) . ' (<code>' . SecurityHelper::escape($att['name']) . '</code>)</li>';
+        }
+        $attListHtml .= '</ul>';
+
+        $emailSent = false;
+        $emailError = null;
+        try {
+            $mail = new PHPMailer(true);
+            $this->configureMailer($mail, $smtp);
+
+            $fromEmail = !empty($smtp['from_email']) ? trim($smtp['from_email']) : trim($smtp['username']);
+            $fromName  = $isDeputi ? ('Direktorat Pendidikan - ' . $bill['unit_name']) : (!empty($smtp['from_name']) ? trim($smtp['from_name']) : ($bill['unit_name'] ?? 'Kepala Sekolah'));
+            $mail->setFrom($fromEmail, $fromName);
+            $mail->addAddress($targetEmail, $bill['parent_name'] ?: $bill['student_name']);
+            $mail->isHTML(true);
+            $mail->Subject = "[{$docSummaryLabel} - " . ($isDeputi ? 'Yayasan AIS' : $bill['unit_name']) . "] Ananda " . $bill['student_name'];
+            $mail->Body = "
+                <div style='font-family: Arial, sans-serif; line-height: 1.6; max-width: 620px; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px; color: #1e293b;'>
+                    <h4 style='color: " . ($isDeputi ? '#be185d' : '#0f766e') . "; margin-top: 0;'>Penyampaian Dokumen Resmi Penagihan ({$docSummaryLabel})</h4>
+                    <p><em>Assalamu'alaikum warahmatullahi wabarakatuh,</em></p>
+                    <p>Yth. Orang Tua / Wali dari ananda <strong>" . SecurityHelper::escape($bill['student_name']) . "</strong> (NIS: " . SecurityHelper::escape($bill['nis']) . " &ndash; " . SecurityHelper::escape($bill['unit_name']) . "),</p>
+                    <p>Bersama email ini kami dari <strong>{$levelTitle}</strong> menyampaikan dokumen resmi terkait kewajiban pembiayaan pendidikan sebesar <strong>" . SecurityHelper::formatRupiah((float)$bill['amount']) . "</strong>:</p>
+                    {$attListHtml}
+                    {$scheduleHtml}
+                    {$noteHtml}
+                    <p>Seluruh dokumen telah kami lampirkan dalam format PDF pada email ini untuk dapat dipelajari dan ditindaklanjuti.</p>
+                    <p><em>Wassalamu'alaikum warahmatullahi wabarakatuh.</em></p>
+                </div>";
+
+            foreach ($attachments as $att) {
+                $mail->addStringAttachment($att['bytes'], $att['name'], 'base64', 'application/pdf');
+            }
+
+            $mail->send();
+            $emailSent = true;
+        } catch (\Throwable $e) {
+            $emailError = (isset($mail) && !empty($mail->ErrorInfo)) ? $mail->ErrorInfo : $e->getMessage();
+            error_log('Gagal mengirim email resmi FR 8001C/D: ' . $emailError);
+        }
+
+        if ($emailSent && ($docType === 'fr8001c' || $docType === 'both')) {
+            if ($isDeputi) {
+                Database::execute(
+                    "UPDATE bills
+                     SET deputi_summon_sent_at = COALESCE(deputi_summon_sent_at, NOW()),
+                         pipeline_stage = CASE WHEN pipeline_stage = 'escalated_deputi' THEN 'deputi_summon_sent' ELSE pipeline_stage END
+                     WHERE id = ?",
+                    [$billId]
+                );
+            } else {
+                Database::execute(
+                    "UPDATE bills
+                     SET kepsek_summon_sent_at = COALESCE(kepsek_summon_sent_at, NOW()),
+                         pipeline_stage = CASE WHEN pipeline_stage = 'escalated_kepsek' THEN 'kepsek_summon_sent' ELSE pipeline_stage END
+                     WHERE id = ?",
+                    [$billId]
+                );
+            }
+        }
+
+        AuditLog::log($isDeputi ? 'SEND_EMAIL_DEPUTI_FR8001' : 'SEND_EMAIL_KEPSEK_FR8001', 'bills', $billId, null, [
+            'doc_type'    => $docType,
+            'email'       => $targetEmail,
+            'attachments' => array_column($attachments, 'name'),
+            'email_sent'  => $emailSent,
+            'email_error' => $emailError
+        ]);
+
+        return [
+            'found'       => true,
+            'email_sent'  => $emailSent,
+            'reason'      => $emailSent ? 'sent' : 'smtp_error',
+            'email'       => $targetEmail,
+            'attachments' => array_column($attachments, 'name'),
+            'error'       => $emailError
+        ];
+    }
+
+    public function kirimEmailKepsek(): void {
+        $this->requireRole('kepala_sekolah');
+        $billId = (int)($_POST['bill_id'] ?? 0);
+        $unitId = Auth::unitId();
+        $docType = strtolower(trim((string)($_POST['doc_type'] ?? 'fr8001c')));
+        $customEmail = trim((string)($_POST['target_email'] ?? ''));
+        $extraNote = trim((string)($_POST['extra_note'] ?? ''));
+
+        $owned = Database::fetch("SELECT id FROM bills WHERE id = ? AND unit_id = ?", [$billId, $unitId]);
+        if (!$owned) {
+            $this->setFlash('danger', 'Data tagihan tidak ditemukan atau bukan milik unit Anda.');
+            $this->redirect(Auth::baseUrl() . '/tagihan/approval');
+            return;
+        }
+
+        $res = $this->sendOfficialBillEmail($billId, $docType, false, $customEmail, $extraNote);
+        if ($res['email_sent']) {
+            $attCount = count($res['attachments'] ?? []);
+            $this->setFlash('success', "Email berhasil dikirim ke {$res['email']} beserta {$attCount} lampiran PDF (" . strtoupper($docType) . ').');
+        } elseif (($res['reason'] ?? '') === 'no_email') {
+            $this->setFlash('warning', 'Alamat email tujuan kosong atau tidak valid. Harap isi alamat email orang tua dengan benar.');
+        } elseif (($res['reason'] ?? '') === 'no_smtp') {
+            $this->setFlash('warning', 'Pengiriman email dilewati karena pengaturan SMTP email unit belum dikonfigurasi.');
+        } else {
+            $this->setFlash('danger', 'Gagal mengirim email ke orang tua: ' . ($res['error'] ?? 'Kesalahan SMTP / PDF.'));
+        }
+
         $this->redirect(Auth::baseUrl() . '/tagihan/approval');
     }
 
@@ -2561,11 +2821,39 @@ class TagihanController extends Controller {
             }
         }
 
+        $importMetaByUnit = [];
+        try {
+            $unitRows = Database::fetchAll(
+                "SELECT id, name FROM units WHERE deleted_at IS NULL AND UPPER(COALESCE(level, '')) != 'YAYASAN' ORDER BY id ASC"
+            );
+            foreach ($unitRows as $ur) {
+                $uId = (int)$ur['id'];
+                $meta = $this->getUnitLastImportMeta($uId);
+                if ($meta !== null) {
+                    $meta['unit_name'] = $ur['name'];
+                    $importMetaByUnit[$uId] = $meta;
+                }
+            }
+        } catch (\Throwable $e) {
+            // Abaikan error query unit
+        }
+        foreach ($bills as $bRow) {
+            $uId = (int)$bRow['unit_id'];
+            if (!isset($importMetaByUnit[$uId])) {
+                $meta = $this->getUnitLastImportMeta($uId);
+                if ($meta !== null) {
+                    $meta['unit_name'] = $bRow['unit_name'];
+                    $importMetaByUnit[$uId] = $meta;
+                }
+            }
+        }
+
         $this->view('tagihan/eskalasi_deputi', [
-            'pageTitle'    => 'Eskalasi Penagihan Yayasan & Pemanggilan Deputi (FR 8001C Kop Yayasan)',
-            'bills'        => $bills,
-            'pendingCount' => $pendingCount,
-            'totalNominal' => $totalNominal
+            'pageTitle'        => 'Eskalasi Penagihan Yayasan & Pemanggilan Deputi (FR 8001C Kop Yayasan)',
+            'bills'            => $bills,
+            'pendingCount'     => $pendingCount,
+            'totalNominal'     => $totalNominal,
+            'importMetaByUnit' => $importMetaByUnit
         ]);
     }
 
@@ -2603,6 +2891,36 @@ class TagihanController extends Controller {
         ]);
 
         $this->setFlash('success', 'Jadwal pemanggilan tingkat Yayasan (Kop Yayasan) berhasil ditetapkan.');
+        $this->redirect(Auth::baseUrl() . '/tagihan/eskalasi-deputi');
+    }
+
+    public function kirimEmailDeputi(): void {
+        $this->requireRole('deputi_pendidikan');
+        $billId = (int)($_POST['bill_id'] ?? 0);
+        $docType = strtolower(trim((string)($_POST['doc_type'] ?? 'fr8001c')));
+        $customEmail = trim((string)($_POST['target_email'] ?? ''));
+        $extraNote = trim((string)($_POST['extra_note'] ?? ''));
+
+        if ($billId <= 0) {
+            $this->setFlash('danger', 'ID tagihan tidak valid.');
+            $this->redirect(Auth::baseUrl() . '/tagihan/eskalasi-deputi');
+            return;
+        }
+
+        $res = $this->sendOfficialBillEmail($billId, $docType, true, $customEmail, $extraNote);
+        if (!$res['found']) {
+            $this->setFlash('danger', $res['error'] ?? 'Data tagihan tidak ditemukan.');
+        } elseif ($res['email_sent']) {
+            $attCount = count($res['attachments'] ?? []);
+            $this->setFlash('success', "Email resmi Yayasan berhasil dikirim ke {$res['email']} beserta {$attCount} lampiran PDF (" . strtoupper($docType) . ').');
+        } elseif (($res['reason'] ?? '') === 'no_email') {
+            $this->setFlash('warning', 'Alamat email tujuan kosong atau tidak valid. Harap isi alamat email orang tua terlebih dahulu.');
+        } elseif (($res['reason'] ?? '') === 'no_smtp') {
+            $this->setFlash('warning', 'Pengiriman email dilewati karena pengaturan SMTP email unit santri belum dikonfigurasi.');
+        } else {
+            $this->setFlash('danger', 'Gagal mengirim email Yayasan: ' . ($res['error'] ?? 'Kesalahan SMTP / PDF.'));
+        }
+
         $this->redirect(Auth::baseUrl() . '/tagihan/eskalasi-deputi');
     }
 

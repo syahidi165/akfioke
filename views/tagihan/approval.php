@@ -24,6 +24,31 @@ $baseUrl = Auth::baseUrl();
     </div>
 </div>
 
+<!-- Versi Data Impor Tagihan TU -->
+<div style="background: #f0fdfa; border: 1px solid #99f6e4; border-left: 4px solid #0d9488; border-radius: 8px; padding: 10px 16px; margin-bottom: 18px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 0.8125rem;">
+    <div style="display: flex; align-items: center; gap: 8px; color: #115e59;">
+        <i class="fa-solid fa-clock-rotate-left"></i>
+        <?php if (!empty($lastImportMeta['imported_at'])):
+            $impTs = strtotime($lastImportMeta['imported_at']);
+            $fmtLabel = !empty($lastImportMeta['format']) ? strtoupper((string)$lastImportMeta['format']) : 'EXCEL';
+        ?>
+            <span>
+                <strong>Versi Data Tagihan TU Terakhir:</strong>
+                <?= SecurityHelper::formatTanggalIndo(date('Y-m-d', $impTs)) ?>, pukul <?= date('H:i', $impTs) ?> WIB
+                &bull; Format: <span class="badge" style="background: #ccfbf1; color: #0f766e; font-size: 11px;"><?= SecurityHelper::escape($fmtLabel) ?></span>
+                <?php if (!empty($lastImportMeta['filename'])): ?>
+                    &bull; File: <code><?= SecurityHelper::escape($lastImportMeta['filename']) ?></code>
+                <?php endif; ?>
+                <?php if (!empty($lastImportMeta['by_name'])): ?>
+                    &bull; Oleh: <strong><?= SecurityHelper::escape($lastImportMeta['by_name']) ?></strong>
+                <?php endif; ?>
+            </span>
+        <?php else: ?>
+            <span><strong>Versi Data Tagihan TU:</strong> Belum ada riwayat impor berkas tagihan Excel dari Tata Usaha.</span>
+        <?php endif; ?>
+    </div>
+</div>
+
 <!-- Stats Ringkasan KS -->
 <div class="stats-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-bottom: 24px;">
     <div class="card" style="padding: 16px 20px; border-left: 4px solid #f59e0b; background: #fff; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.06);">
@@ -112,6 +137,10 @@ $baseUrl = Auth::baseUrl();
                                             &bull; <?= SecurityHelper::escape($b['parent_phone']) ?>
                                         <?php endif; ?>
                                     </div>
+                                    <div style="font-size: 0.72rem; margin-top: 3px; color: <?= !empty($b['parent_email']) ? '#0369a1' : '#94a3b8' ?>;">
+                                        <i class="fa-solid fa-envelope"></i>
+                                        <?= !empty($b['parent_email']) ? SecurityHelper::escape($b['parent_email']) : 'Email ortu belum diisi' ?>
+                                    </div>
                                 </td>
 
                                 <!-- 2 Kolom FR 8001C: Tunggakan SPP -->
@@ -179,6 +208,16 @@ $baseUrl = Auth::baseUrl();
                                         <a href="<?= $baseUrl ?>/tagihan/cetak-fr8001d/<?= $b['id'] ?>" target="_blank" class="btn btn-outline btn-sm" style="padding: 4px 8px; font-size: 0.75rem; color: #7c3aed; border-color: #7c3aed;" title="Cetak Form Kesepakatan FR 8001D untuk Orang Tua">
                                             <i class="fa-solid fa-file-signature"></i> FR 8001D
                                         </a>
+
+                                        <!-- Kirim Surat via Email (Lampiran PDF FR 8001C / FR 8001D) -->
+                                        <button type="button" class="btn btn-outline btn-sm" style="padding: 4px 8px; font-size: 0.75rem; color: #0369a1; border-color: #0369a1;"
+                                                data-bill-id="<?= (int)$b['id'] ?>"
+                                                data-student-name="<?= SecurityHelper::escape($b['student_name']) ?>"
+                                                data-parent-email="<?= SecurityHelper::escape($b['parent_email'] ?? '') ?>"
+                                                onclick="openEmailKepsekModal(this)"
+                                                title="Kirim Surat FR 8001C / FR 8001D via Email dengan Lampiran PDF">
+                                            <i class="fa-solid fa-paper-plane"></i> Kirim Email
+                                        </button>
 
                                         <!-- Modal Kesepakatan Saat Ortu Datang -->
                                         <button type="button" class="btn btn-primary btn-sm" style="padding: 4px 8px; font-size: 0.75rem; background: #059669; border-color: #059669; font-weight: 600;" onclick="openKesepakatanModal(<?= $b['id'] ?>, <?= $b['student_id'] ?>, '<?= SecurityHelper::escape($b['student_name']) ?>', '<?= SecurityHelper::escape($b['class_name'] ?? '') ?>', '<?= SecurityHelper::escape($b['parent_name'] ?? '') ?>', '<?= SecurityHelper::escape($b['nik'] ?? '') ?>', '<?= SecurityHelper::escape($b['parent_phone'] ?? '') ?>', '<?= SecurityHelper::escape($b['alamat'] ?? '') ?>', <?= (float)$b['amount'] ?>)" title="Setujui Kesepakatan Orang Tua (FR 8001D) & Teruskan ke Buku Cicilan TU">
@@ -447,6 +486,49 @@ $baseUrl = Auth::baseUrl();
     </div>
 </div>
 
+<!-- Modal 5: Kirim Email FR 8001C / FR 8001D oleh Kepala Sekolah (Lampiran PDF) -->
+<div id="modalKirimEmailKepsek" class="modal-backdrop" style="display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.6); z-index: 9999; align-items: center; justify-content: center; backdrop-filter: blur(2px);">
+    <div style="background: #fff; width: 100%; max-width: 500px; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.15); overflow: hidden; margin: 20px;">
+        <div style="background: #f0f9ff; border-bottom: 1px solid #bae6fd; padding: 16px 20px; display: flex; justify-content: space-between; align-items: center;">
+            <h4 style="margin: 0; font-size: 1rem; font-weight: 700; color: #0369a1; display: flex; align-items: center; gap: 8px;">
+                <i class="fa-solid fa-paper-plane"></i> Kirim Surat FR 8001C / FR 8001D via Email
+            </h4>
+            <button type="button" onclick="closeEmailKepsekModal()" style="background: none; border: none; font-size: 1.25rem; cursor: pointer; color: #94a3b8;">&times;</button>
+        </div>
+        <form action="<?= $baseUrl ?>/tagihan/kepsek/kirim-email" method="POST">
+            <?= CSRF::field() ?>
+            <input type="hidden" name="bill_id" id="emailKepsekBillId" value="">
+            <div style="padding: 20px;">
+                <div style="font-size: 0.875rem; margin-bottom: 14px; color: #334155;">
+                    Santri: <strong id="emailKepsekStudentName">-</strong>
+                </div>
+                <div class="form-group" style="margin-bottom: 12px;">
+                    <label class="form-label" style="font-weight: 600; font-size: 0.8125rem;">Email Orang Tua / Wali <span style="color: #ef4444;">*</span></label>
+                    <input type="email" name="target_email" id="emailKepsekTargetEmail" class="form-control" required placeholder="contoh@email.com" style="font-size: 0.8125rem;">
+                </div>
+                <div class="form-group" style="margin-bottom: 12px;">
+                    <label class="form-label" style="font-weight: 600; font-size: 0.8125rem;">Dokumen Lampiran PDF <span style="color: #ef4444;">*</span></label>
+                    <select name="doc_type" id="emailKepsekDocType" class="form-control" style="font-size: 0.8125rem;">
+                        <option value="fr8001c">Surat Pemanggilan Kepala Sekolah (FR 8001C - PDF)</option>
+                        <option value="fr8001d">Formulir Kesepakatan &amp; Pernyataan (FR 8001D - PDF)</option>
+                        <option value="both">Keduanya (Lampiran PDF FR 8001C + FR 8001D)</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" style="font-weight: 600; font-size: 0.8125rem;">Catatan Tambahan (Opsional)</label>
+                    <textarea name="extra_note" id="emailKepsekNote" rows="2" class="form-control" placeholder="Pesan pengantar tambahan untuk orang tua..." style="font-size: 0.8125rem;"></textarea>
+                </div>
+            </div>
+            <div style="background: #f8fafc; border-top: 1px solid #e2e8f0; padding: 12px 20px; display: flex; justify-content: flex-end; gap: 10px;">
+                <button type="button" class="btn btn-outline" onclick="closeEmailKepsekModal()">Batal</button>
+                <button type="submit" class="btn btn-primary" style="background: #0369a1; border-color: #0369a1; font-weight: 600;">
+                    <i class="fa-solid fa-paper-plane" style="margin-right: 6px;"></i> Kirim Email &amp; Lampiran PDF
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
 <script>
 // Filter tabel pencarian
 document.addEventListener('DOMContentLoaded', function() {
@@ -519,5 +601,16 @@ function openEskalasiDeputiModal(billId, studentName, amount) {
 }
 function closeEskalasiDeputiModal() {
     document.getElementById('modalEskalasiDeputi').style.display = 'none';
+}
+function openEmailKepsekModal(btn) {
+    document.getElementById('emailKepsekBillId').value = btn.getAttribute('data-bill-id') || '';
+    document.getElementById('emailKepsekStudentName').innerText = btn.getAttribute('data-student-name') || '-';
+    document.getElementById('emailKepsekTargetEmail').value = btn.getAttribute('data-parent-email') || '';
+    document.getElementById('emailKepsekDocType').value = 'fr8001c';
+    document.getElementById('emailKepsekNote').value = '';
+    document.getElementById('modalKirimEmailKepsek').style.display = 'flex';
+}
+function closeEmailKepsekModal() {
+    document.getElementById('modalKirimEmailKepsek').style.display = 'none';
 }
 </script>

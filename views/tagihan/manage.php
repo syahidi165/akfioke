@@ -53,6 +53,31 @@ foreach ($bills as $b) {
     </div>
 </div>
 
+<!-- Versi Data Impor Tagihan TU -->
+<div style="background: #f0fdfa; border: 1px solid #99f6e4; border-left: 4px solid #0d9488; border-radius: 8px; padding: 10px 16px; margin-bottom: 18px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 0.8125rem;">
+    <div style="display: flex; align-items: center; gap: 8px; color: #115e59;">
+        <i class="fa-solid fa-clock-rotate-left"></i>
+        <?php if (!empty($lastImportMeta['imported_at'])):
+            $impTs = strtotime($lastImportMeta['imported_at']);
+            $fmtLabel = !empty($lastImportMeta['format']) ? strtoupper((string)$lastImportMeta['format']) : 'EXCEL';
+        ?>
+            <span>
+                <strong>Versi Data Impor TU Terakhir:</strong>
+                <?= SecurityHelper::formatTanggalIndo(date('Y-m-d', $impTs)) ?>, pukul <?= date('H:i', $impTs) ?> WIB
+                &bull; Format: <span class="badge" style="background: #ccfbf1; color: #0f766e; font-size: 11px;"><?= SecurityHelper::escape($fmtLabel) ?></span>
+                <?php if (!empty($lastImportMeta['filename'])): ?>
+                    &bull; File: <code><?= SecurityHelper::escape($lastImportMeta['filename']) ?></code>
+                <?php endif; ?>
+                <?php if (!empty($lastImportMeta['by_name'])): ?>
+                    &bull; Oleh: <strong><?= SecurityHelper::escape($lastImportMeta['by_name']) ?></strong>
+                <?php endif; ?>
+            </span>
+        <?php else: ?>
+            <span><strong>Versi Data Impor TU:</strong> Belum ada riwayat impor berkas tagihan Excel pada unit ini.</span>
+        <?php endif; ?>
+    </div>
+</div>
+
 <!-- Stats Grid -->
 <div class="stats-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 16px; margin-bottom: 24px;">
     <div class="card" style="padding: 16px 20px; border-left: 4px solid #0d9488; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.05); border-radius: 8px;">
