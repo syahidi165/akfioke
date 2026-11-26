@@ -14,23 +14,22 @@ class NilaiBulananController extends Controller {
     // --- 1. INPUT NILAI BULANAN MAPEL ---
     // --- 1. INPUT NILAI BULANAN MAPEL ---
     public function index(): void {
-        $this->requireRole(['guru_mapel', 'guru_mapel_kbtk', 'guru_tahta', 'guru_tk', 'guru_diniyah', 'waka_kurikulum', 'kepala_sekolah']);
+        $this->requireRole(['guru_mapel', 'guru_mapel_kbtk', 'guru_tahfidz', 'guru_tahta', 'guru_tk', 'guru_diniyah', 'waka_kurikulum', 'kepala_sekolah']);
         $unitId = Auth::unitId();
         $taId = Auth::academicYearId();
         $isExecutive = Auth::hasAnyRole(['waka_kurikulum', 'kepala_sekolah', 'deputi_pendidikan', 'operator_yayasan']);
 
         if (!$isExecutive) {
-            // Guru Mapel / Guru Diniyah isolation: hanya kelas & mapel yang diajarkan
-            $emp = Database::fetch("SELECT id FROM employees WHERE user_id = ? AND is_deleted = 0", [Auth::id()]);
-            $empId = (int)($emp['id'] ?? 0);
+            // Guru Mapel / Guru Diniyah / Guru Tahfidz isolation: hanya kelas & mapel yang diajarkan pada unit & TA aktif
+            $empId = (int)(Auth::employeeId() ?? 0);
 
             $classes = Database::fetchAll(
                 "SELECT DISTINCT c.* 
                  FROM classes c 
                  JOIN teacher_subjects ts ON c.id = ts.class_id 
-                 WHERE ts.employee_id = ? AND ts.academic_year_id = ? 
+                 WHERE ts.employee_id = ? AND ts.academic_year_id = ? AND c.unit_id = ? 
                  ORDER BY c.name ASC",
-                [$empId, $taId]
+                [$empId, $taId, $unitId]
             );
 
             $allowedClassIds = array_column($classes, 'id');
@@ -132,7 +131,7 @@ class NilaiBulananController extends Controller {
     }
 
     public function saveGrades(): void {
-        $this->requireRole(['guru_mapel', 'guru_mapel_kbtk', 'guru_tahta', 'guru_tk', 'guru_diniyah', 'waka_kurikulum']);
+        $this->requireRole(['guru_mapel', 'guru_mapel_kbtk', 'guru_tahfidz', 'guru_tahta', 'guru_tk', 'guru_diniyah', 'waka_kurikulum']);
         $classId = (int)($_POST['class_id'] ?? 0);
         $subjectId = (int)($_POST['subject_id'] ?? 0);
         $monthNum = (int)($_POST['month_num'] ?? date('n'));
@@ -145,8 +144,7 @@ class NilaiBulananController extends Controller {
 
         // Validasi hak mengajar guru mapel
         if (!$isExecutive) {
-            $emp = Database::fetch("SELECT id FROM employees WHERE user_id = ? AND is_deleted = 0", [$userId]);
-            $empId = (int)($emp['id'] ?? 0);
+            $empId = (int)(Auth::employeeId() ?? 0);
 
             $isAssigned = Database::fetch(
                 "SELECT id FROM teacher_subjects WHERE employee_id = ? AND subject_id = ? AND class_id = ? AND academic_year_id = ?",
@@ -188,14 +186,8 @@ class NilaiBulananController extends Controller {
         $isExecutive = Auth::hasAnyRole(['waka_kurikulum', 'kepala_sekolah', 'deputi_pendidikan', 'operator_yayasan']);
 
         if (!$isExecutive && Auth::hasRole('walas')) {
-            // Isolasi Walas: hanya kelas yang diampunya sebagai wali kelas
-            $emp = Database::fetch("SELECT id FROM employees WHERE user_id = ? AND is_deleted = 0", [Auth::id()]);
-            $empId = (int)($emp['id'] ?? 0);
-
-            $classes = Database::fetchAll(
-                "SELECT * FROM classes WHERE walas_id = ? AND academic_year_id = ? ORDER BY name ASC",
-                [$empId, $taId]
-            );
+            // Isolasi Walas: hanya kelas pada unit & TA aktif yang diampunya sebagai wali kelas
+            $classes = Auth::walasClasses($unitId, $taId);
 
             $allowedClassIds = array_column($classes, 'id');
             $reqClassId = (int)($_GET['class_id'] ?? 0);
@@ -249,10 +241,7 @@ class NilaiBulananController extends Controller {
         $isExecutive = Auth::hasAnyRole(['waka_kurikulum', 'kepala_sekolah', 'deputi_pendidikan', 'operator_yayasan']);
 
         if (!$isExecutive && Auth::hasRole('walas')) {
-            $emp = Database::fetch("SELECT id FROM employees WHERE user_id = ? AND is_deleted = 0", [Auth::id()]);
-            $empId = (int)($emp['id'] ?? 0);
-            $isAssigned = Database::fetch("SELECT id FROM classes WHERE id = ? AND walas_id = ? AND academic_year_id = ?", [$classId, $empId, $taId]);
-            if (!$isAssigned) {
+            if (!Auth::isWalasOfClass($classId, $taId)) {
                 http_response_code(403);
                 die('Akses Ditolak: Anda hanya memiliki wewenang mengunduh ledger untuk kelas binaan Anda.');
             }
@@ -294,10 +283,7 @@ class NilaiBulananController extends Controller {
         $isExecutive = Auth::hasAnyRole(['waka_kurikulum', 'kepala_sekolah', 'deputi_pendidikan', 'operator_yayasan']);
 
         if (!$isExecutive && Auth::hasRole('walas')) {
-            $emp = Database::fetch("SELECT id FROM employees WHERE user_id = ? AND is_deleted = 0", [Auth::id()]);
-            $empId = (int)($emp['id'] ?? 0);
-            $isAssigned = Database::fetch("SELECT id FROM classes WHERE id = ? AND walas_id = ? AND academic_year_id = ?", [$classId, $empId, $taId]);
-            if (!$isAssigned) {
+            if (!Auth::isWalasOfClass($classId, $taId)) {
                 http_response_code(403);
                 die('Akses Ditolak: Anda hanya memiliki wewenang mengunduh ledger untuk kelas binaan Anda.');
             }
@@ -380,16 +366,35 @@ class NilaiBulananController extends Controller {
         $student = Database::fetch(
             "SELECT s.*, c.name as class_name, c.id as class_id, u.name as unit_name, 
                     u.kop_title, u.kop_subtitle, u.address, u.phone, u.email,
-                    ay.name as academic_year_name, w.nama as walas_name 
+                    ay.name as academic_year_name, COALESCE(w1.nama, w2.nama) as walas_name 
              FROM students s 
              JOIN units u ON s.unit_id = u.id 
-             JOIN class_students cs ON s.id = cs.student_id AND cs.status = 'Aktif' 
+             JOIN class_students cs ON s.id = cs.student_id AND cs.status = 'Aktif' AND cs.academic_year_id = ?
              JOIN classes c ON cs.class_id = c.id 
              JOIN academic_years ay ON cs.academic_year_id = ay.id 
-             LEFT JOIN employees w ON c.walas_id = w.id 
-             WHERE s.id = ?",
-            [$studentId]
+             LEFT JOIN employees w1 ON c.walas_id = w1.id AND w1.is_deleted = 0
+             LEFT JOIN employees w2 ON c.walas_id = w2.user_id AND w2.is_deleted = 0
+             WHERE s.id = ?
+             ORDER BY cs.id DESC LIMIT 1",
+            [$taId, $studentId]
         );
+        if (!$student) {
+            $student = Database::fetch(
+                "SELECT s.*, c.name as class_name, c.id as class_id, u.name as unit_name, 
+                        u.kop_title, u.kop_subtitle, u.address, u.phone, u.email,
+                        ay.name as academic_year_name, COALESCE(w1.nama, w2.nama) as walas_name 
+                 FROM students s 
+                 JOIN units u ON s.unit_id = u.id 
+                 JOIN class_students cs ON s.id = cs.student_id AND cs.status = 'Aktif' 
+                 JOIN classes c ON cs.class_id = c.id 
+                 JOIN academic_years ay ON cs.academic_year_id = ay.id 
+                 LEFT JOIN employees w1 ON c.walas_id = w1.id AND w1.is_deleted = 0
+                 LEFT JOIN employees w2 ON c.walas_id = w2.user_id AND w2.is_deleted = 0
+                 WHERE s.id = ?
+                 ORDER BY cs.academic_year_id DESC, cs.id DESC LIMIT 1",
+                [$studentId]
+            );
+        }
 
         if (!$student) {
             die('Data santri tidak ditemukan.');
@@ -409,13 +414,7 @@ class NilaiBulananController extends Controller {
         }
 
         if (Auth::hasRole('walas')) {
-            $emp = Database::fetch("SELECT id FROM employees WHERE user_id = ? AND is_deleted = 0", [Auth::id()]);
-            $empId = (int)($emp['id'] ?? 0);
-            $checkWalas = Database::fetch(
-                "SELECT id FROM classes WHERE id = ? AND walas_id = ?",
-                [(int)$student['class_id'], $empId]
-            );
-            if (!$checkWalas) {
+            if (!Auth::isWalasOfClass((int)$student['class_id'])) {
                 http_response_code(403);
                 die('Akses ditolak: Anda hanya berwenang mencetak rapor santri pada kelas binaan Anda.');
             }
@@ -532,16 +531,35 @@ class NilaiBulananController extends Controller {
         $student = Database::fetch(
             "SELECT s.*, c.name as class_name, c.id as class_id, u.name as unit_name, 
                     u.kop_title, u.kop_subtitle, u.address, u.phone, u.email,
-                    ay.name as academic_year_name, w.nama as walas_name 
+                    ay.name as academic_year_name, COALESCE(w1.nama, w2.nama) as walas_name 
              FROM students s 
              JOIN units u ON s.unit_id = u.id 
-             JOIN class_students cs ON s.id = cs.student_id AND cs.status = 'Aktif' 
+             JOIN class_students cs ON s.id = cs.student_id AND cs.status = 'Aktif' AND cs.academic_year_id = ?
              JOIN classes c ON cs.class_id = c.id 
              JOIN academic_years ay ON cs.academic_year_id = ay.id 
-             LEFT JOIN employees w ON c.walas_id = w.id 
-             WHERE s.id = ?",
-            [$studentId]
+             LEFT JOIN employees w1 ON c.walas_id = w1.id AND w1.is_deleted = 0
+             LEFT JOIN employees w2 ON c.walas_id = w2.user_id AND w2.is_deleted = 0
+             WHERE s.id = ?
+             ORDER BY cs.id DESC LIMIT 1",
+            [$taId, $studentId]
         );
+        if (!$student) {
+            $student = Database::fetch(
+                "SELECT s.*, c.name as class_name, c.id as class_id, u.name as unit_name, 
+                        u.kop_title, u.kop_subtitle, u.address, u.phone, u.email,
+                        ay.name as academic_year_name, COALESCE(w1.nama, w2.nama) as walas_name 
+                 FROM students s 
+                 JOIN units u ON s.unit_id = u.id 
+                 JOIN class_students cs ON s.id = cs.student_id AND cs.status = 'Aktif' 
+                 JOIN classes c ON cs.class_id = c.id 
+                 JOIN academic_years ay ON cs.academic_year_id = ay.id 
+                 LEFT JOIN employees w1 ON c.walas_id = w1.id AND w1.is_deleted = 0
+                 LEFT JOIN employees w2 ON c.walas_id = w2.user_id AND w2.is_deleted = 0
+                 WHERE s.id = ?
+                 ORDER BY cs.academic_year_id DESC, cs.id DESC LIMIT 1",
+                [$studentId]
+            );
+        }
 
         if (!$student) {
             die('Data santri tidak ditemukan.');
@@ -561,13 +579,7 @@ class NilaiBulananController extends Controller {
         }
 
         if (Auth::hasRole('walas')) {
-            $emp = Database::fetch("SELECT id FROM employees WHERE user_id = ? AND is_deleted = 0", [Auth::id()]);
-            $empId = (int)($emp['id'] ?? 0);
-            $checkWalas = Database::fetch(
-                "SELECT id FROM classes WHERE id = ? AND walas_id = ?",
-                [(int)$student['class_id'], $empId]
-            );
-            if (!$checkWalas) {
+            if (!Auth::isWalasOfClass((int)$student['class_id'])) {
                 http_response_code(403);
                 die('Akses ditolak: Anda hanya berwenang mencetak rapor santri pada kelas binaan Anda.');
             }

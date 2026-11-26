@@ -251,4 +251,12 @@ try {
     echo "[SKIP] Migrasi AKFI Lintas Unit: " . $e->getMessage() . "\n";
 }
 
+// 14. Migrasi Normalisasi ID Wali Kelas & Tutor Tahfidz (users.id -> employees.id)
+try {
+    require_once __DIR__ . '/migrate_fix_walas_teacher_ids.php';
+    echo "[OK] Normalisasi ID Wali Kelas & Tutor Tahfidz selesai.\n";
+} catch (\Throwable $e) {
+    echo "[SKIP] Normalisasi ID Walas/Tahfidz: " . $e->getMessage() . "\n";
+}
+
 echo "=== MIGRASI SELESAI DENGAN SUKSES! ===\n";

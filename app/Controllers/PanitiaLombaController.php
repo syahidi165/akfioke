@@ -480,24 +480,21 @@ class PanitiaLombaController extends Controller {
 
         $myClass = null;
         if ($isWalas) {
-            $userId = Auth::id();
-            $userEmp = Database::fetch("SELECT id FROM employees WHERE user_id = ?", [$userId]);
-            $empId = (int)($userEmp['id'] ?? 0);
-            $myClass = Database::fetch(
-                "SELECT * FROM classes WHERE (walas_employee_id = ? OR walas_id = ? OR walas_id = ?) AND academic_year_id = ? AND unit_id = ?",
-                [$empId, $empId, $userId, $taId, $unitId]
-            );
+            $myClasses = Auth::walasClasses($unitId, $taId);
+            $myClass = $myClasses[0] ?? null;
 
-            if ($myClass) {
+            if (!empty($myClasses)) {
+                $myClassIds = array_map('intval', array_column($myClasses, 'id'));
+                $inMyCls = implode(',', array_fill(0, count($myClassIds), '?'));
                 // Santri khusus kelas yang diampu walas
                 $students = Database::fetchAll(
                     "SELECT s.*, c.name as class_name 
                      FROM students s 
                      JOIN class_students cs ON s.id = cs.student_id AND cs.status = 'Aktif' 
                      JOIN classes c ON cs.class_id = c.id 
-                     WHERE cs.class_id = ? AND s.unit_id = ? 
-                     ORDER BY s.nama ASC",
-                    [$myClass['id'], $unitId]
+                     WHERE cs.class_id IN ({$inMyCls}) AND s.unit_id = ? 
+                     ORDER BY c.name ASC, s.nama ASC",
+                    array_merge($myClassIds, [$unitId])
                 );
                 // Prestasi santri di kelasnya
                 $prestasi = Database::fetchAll(
@@ -505,9 +502,9 @@ class PanitiaLombaController extends Controller {
                      FROM prestasi_siswa ps 
                      JOIN students s ON ps.student_id = s.id 
                      JOIN class_students cs ON s.id = cs.student_id AND cs.status = 'Aktif' 
-                     WHERE cs.class_id = ? AND ps.academic_year_id = ? AND ps.category = 'Swasta' 
+                     WHERE cs.class_id IN ({$inMyCls}) AND ps.academic_year_id = ? AND ps.category = 'Swasta' 
                      ORDER BY ps.id DESC",
-                    [$myClass['id'], $taId]
+                    array_merge($myClassIds, [$taId])
                 );
             } else {
                 $students = [];
@@ -545,21 +542,17 @@ class PanitiaLombaController extends Controller {
         $level = trim($_POST['level'] ?? 'Tingkat Kota / Wilayah');
 
         // Validasi: pastikan santri terdaftar di kelas walas
-        $userEmp = Database::fetch("SELECT id FROM employees WHERE user_id = ?", [$userId]);
-        $empId = (int)($userEmp['id'] ?? 0);
-        $myClass = Database::fetch(
-            "SELECT * FROM classes WHERE (walas_employee_id = ? OR walas_id = ? OR walas_id = ?) AND academic_year_id = ? AND unit_id = ?",
-            [$empId, $empId, $userId, $taId, $unitId]
-        );
-        if (!$myClass) {
+        $myClasses = Auth::walasClasses($unitId, $taId);
+        if (empty($myClasses)) {
             $this->setFlash('danger', 'Akses ditolak: Anda tidak memiliki rombel kelas aktif.');
             $this->redirect(Auth::baseUrl() . '/prestasi/walas');
             return;
         }
-
+        $myClassIds = array_map('intval', array_column($myClasses, 'id'));
+        $inMyCls = implode(',', array_fill(0, count($myClassIds), '?'));
         $inClass = Database::fetch(
-            "SELECT id FROM class_students WHERE student_id = ? AND class_id = ? AND status = 'Aktif'",
-            [$studentId, $myClass['id']]
+            "SELECT id FROM class_students WHERE student_id = ? AND class_id IN ({$inMyCls}) AND status = 'Aktif'",
+            array_merge([$studentId], $myClassIds)
         );
         if (!$inClass) {
             $this->setFlash('danger', 'Akses ditolak: Anda hanya dapat mencatat prestasi untuk santri di kelas Anda sendiri.');

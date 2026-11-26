@@ -21,34 +21,36 @@ class AlumniController extends Controller {
         $taId = Auth::academicYearId();
         $userId = Auth::id();
 
-        // Cari informasi akun walas dan kelas yang diampu
-        $userEmp = Database::fetch("SELECT * FROM employees WHERE user_id = ?", [$userId]);
-        $myClass = null;
-        if ($userEmp) {
-            $myClass = Database::fetch(
-                "SELECT * FROM classes WHERE (walas_employee_id = ? OR walas_id = ? OR walas_id = ?) AND academic_year_id = ? AND unit_id = ?",
-                [$userEmp['id'], $userEmp['id'], $userId, $taId, $unitId]
-            );
-        }
+        // Cari informasi akun walas dan seluruh kelas yang diampu
+        $userEmp = Database::fetch(
+            "SELECT * FROM employees WHERE user_id = ? AND is_deleted = 0 ORDER BY CASE WHEN status = 'Aktif' THEN 0 ELSE 1 END, id DESC LIMIT 1",
+            [$userId]
+        );
+        $myClasses = Auth::walasClasses($unitId, $taId);
+        $myClass = $myClasses[0] ?? null;
 
         $activeRole = Auth::activeRoleName();
         $isWalas = ($activeRole === 'walas');
 
-        $isFinalGrade = false;
-        if ($myClass) {
-            $lvl = strtoupper($myClass['level'] ?? '');
-            $nm = strtoupper($myClass['name'] ?? '');
-            $isFinalGrade = (str_contains($lvl, '6') || str_contains($lvl, '9') || 
-                             str_contains($lvl, '12') || str_contains($lvl, 'TK B') || 
-                             str_contains($nm, 'KELAS 6') || str_contains($nm, 'KELAS 9') || 
-                             str_contains($nm, 'KELAS 12') || str_contains($nm, 'TK B') ||
-                             str_contains($nm, ' 6') || str_contains($nm, ' 9') || str_contains($nm, ' 12'));
+        $finalClassIds = [];
+        foreach ($myClasses as $mc) {
+            $lvl = strtoupper($mc['level'] ?? '');
+            $nm = strtoupper($mc['name'] ?? '');
+            if (str_contains($lvl, '6') || str_contains($lvl, '9') ||
+                str_contains($lvl, '12') || str_contains($lvl, 'TK B') ||
+                str_contains($nm, 'KELAS 6') || str_contains($nm, 'KELAS 9') ||
+                str_contains($nm, 'KELAS 12') || str_contains($nm, 'TK B') ||
+                str_contains($nm, ' 6') || str_contains($nm, ' 9') || str_contains($nm, ' 12')) {
+                $finalClassIds[] = (int)$mc['id'];
+            }
         }
+        $isFinalGrade = !empty($finalClassIds);
 
         $students = [];
         if ($isWalas) {
-            if ($isFinalGrade && $myClass) {
-                // Walas tingkat akhir: HANYA santri di kelasnya sendiri
+            if ($isFinalGrade) {
+                $inCls = implode(',', array_fill(0, count($finalClassIds), '?'));
+                // Walas tingkat akhir: HANYA santri di kelas binaan tingkat akhir
                 $query = "SELECT s.*, cs.class_id, c.name as class_name, c.level as class_level, u.name as unit_name,
                                  at.id as tracking_id, at.destination_type, at.destination_name, at.is_favorite, at.major, at.notes as alumni_notes
                           FROM students s
@@ -57,9 +59,9 @@ class AlumniController extends Controller {
                           JOIN units u ON s.unit_id = u.id
                           LEFT JOIN alumni_tracking at ON s.id = at.student_id
                           WHERE s.status = 'Aktif'
-                            AND cs.class_id = ?
-                          ORDER BY s.nama ASC";
-                $students = Database::fetchAll($query, [$taId, $myClass['id']]);
+                            AND cs.class_id IN ({$inCls})
+                          ORDER BY c.name ASC, s.nama ASC";
+                $students = Database::fetchAll($query, array_merge([$taId], $finalClassIds));
             } else {
                 // Bukan walas tingkat akhir: kosongkan daftar santri
                 $students = [];
@@ -83,17 +85,21 @@ class AlumniController extends Controller {
         }
 
         // Rekap riil seluruh rekomendasi yang telah tersimpan
-        if ($isWalas && $myClass) {
+        if ($isWalas && !empty($myClasses)) {
+            $myClassIds = array_map('intval', array_column($myClasses, 'id'));
+            $inMyCls = implode(',', array_fill(0, count($myClassIds), '?'));
             $savedRecommendations = Database::fetchAll(
                 "SELECT at.*, s.nama as student_name, s.nis, c.name as class_name, c.level as class_level 
                  FROM alumni_tracking at 
                  JOIN students s ON at.student_id = s.id 
                  JOIN class_students cs ON s.id = cs.student_id AND cs.academic_year_id = ?
                  JOIN classes c ON cs.class_id = c.id
-                 WHERE cs.class_id = ?
+                 WHERE cs.class_id IN ({$inMyCls})
                  ORDER BY at.id DESC",
-                [$taId, $myClass['id']]
+                array_merge([$taId], $myClassIds)
             );
+        } elseif ($isWalas) {
+            $savedRecommendations = [];
         } else {
             $savedRecommendations = Database::fetchAll(
                 "SELECT at.*, s.nama as student_name, s.nis, c.name as class_name, c.level as class_level 
@@ -139,22 +145,18 @@ class AlumniController extends Controller {
 
         $activeRole = Auth::activeRoleName();
         if ($activeRole === 'walas') {
-            $userId = Auth::id();
             $taId = Auth::academicYearId();
-            $userEmp = Database::fetch("SELECT id FROM employees WHERE user_id = ?", [$userId]);
-            $empId = (int)($userEmp['id'] ?? 0);
-            $myClass = Database::fetch(
-                "SELECT * FROM classes WHERE (walas_employee_id = ? OR walas_id = ? OR walas_id = ?) AND academic_year_id = ? AND unit_id = ?",
-                [$empId, $empId, $userId, $taId, $unitId]
-            );
-            if (!$myClass) {
+            $myClasses = Auth::walasClasses($unitId, $taId);
+            if (empty($myClasses)) {
                 $this->setFlash('danger', 'Akses ditolak: Anda tidak memiliki rombel kelas aktif.');
                 $this->redirect(Auth::baseUrl() . '/walas/rekomendasi');
                 return;
             }
+            $myClassIds = array_map('intval', array_column($myClasses, 'id'));
+            $inMyCls = implode(',', array_fill(0, count($myClassIds), '?'));
             $inClass = Database::fetch(
-                "SELECT id FROM class_students WHERE student_id = ? AND class_id = ? AND academic_year_id = ?",
-                [$studentId, $myClass['id'], $taId]
+                "SELECT id FROM class_students WHERE student_id = ? AND class_id IN ({$inMyCls}) AND academic_year_id = ?",
+                array_merge([$studentId], $myClassIds, [$taId])
             );
             if (!$inClass) {
                 $this->setFlash('danger', 'Akses ditolak: Santri ini bukan siswa di kelas yang Anda ampu.');

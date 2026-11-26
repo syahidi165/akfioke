@@ -291,8 +291,77 @@ class Auth {
         self::startSession();
         $userId = self::id();
         if (!$userId) return null;
-        $emp = Database::fetch("SELECT id FROM employees WHERE user_id = ? AND is_deleted = 0 LIMIT 1", [$userId]);
+        $emp = Database::fetch(
+            "SELECT id FROM employees
+             WHERE user_id = ? AND is_deleted = 0
+             ORDER BY CASE WHEN status = 'Aktif' THEN 0 ELSE 1 END, id DESC
+             LIMIT 1",
+            [$userId]
+        );
         return $emp ? (int)$emp['id'] : null;
+    }
+
+    /**
+     * Ambil daftar rombel/kelas yang diampu akun aktif sebagai Wali Kelas (mencocokkan employees.id maupun fallback users.id).
+     */
+    public static function walasClasses(?int $unitId = null, ?int $taId = null): array {
+        $unitId = $unitId ?? (int)(self::unitId() ?? 0);
+        $taId = $taId ?? (int)(self::academicYearId() ?? 0);
+        $empId = (int)(self::employeeId() ?? 0);
+        $userId = (int)(self::id() ?? 0);
+        if ($empId <= 0 && $userId <= 0) {
+            return [];
+        }
+
+        try {
+            return Database::fetchAll(
+                "SELECT * FROM classes
+                 WHERE unit_id = ? AND academic_year_id = ?
+                   AND (walas_id = ? OR walas_employee_id = ? OR walas_id = ?)
+                 ORDER BY name ASC",
+                [$unitId, $taId, $empId, $empId, $userId]
+            );
+        } catch (\Throwable $e) {
+            return Database::fetchAll(
+                "SELECT * FROM classes
+                 WHERE unit_id = ? AND academic_year_id = ?
+                   AND (walas_id = ? OR walas_id = ?)
+                 ORDER BY name ASC",
+                [$unitId, $taId, $empId, $userId]
+            );
+        }
+    }
+
+    /**
+     * Validasi apakah akun aktif saat ini adalah Wali Kelas dari class_id tertentu.
+     */
+    public static function isWalasOfClass(int $classId, ?int $taId = null): bool {
+        if ($classId <= 0) {
+            return false;
+        }
+        $empId = (int)(self::employeeId() ?? 0);
+        $userId = (int)(self::id() ?? 0);
+        if ($empId <= 0 && $userId <= 0) {
+            return false;
+        }
+
+        $sql = "SELECT id FROM classes WHERE id = ? AND (walas_id = ? OR walas_employee_id = ? OR walas_id = ?)";
+        $params = [$classId, $empId, $empId, $userId];
+        if ($taId !== null && $taId > 0) {
+            $sql .= " AND academic_year_id = ?";
+            $params[] = $taId;
+        }
+        try {
+            return (bool)Database::fetch($sql, $params);
+        } catch (\Throwable $e) {
+            $fallbackSql = "SELECT id FROM classes WHERE id = ? AND (walas_id = ? OR walas_id = ?)";
+            $fallbackParams = [$classId, $empId, $userId];
+            if ($taId !== null && $taId > 0) {
+                $fallbackSql .= " AND academic_year_id = ?";
+                $fallbackParams[] = $taId;
+            }
+            return (bool)Database::fetch($fallbackSql, $fallbackParams);
+        }
     }
 
     public static function user(): ?array {

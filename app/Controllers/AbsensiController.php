@@ -178,7 +178,7 @@ class AbsensiController extends Controller {
         $this->requireRole(['walas', 'waka_kesiswaan', 'kepala_sekolah', 'deputi_pendidikan', 'direktur_pendidikan', 'guru_tahfidz']);
         $unitId = Auth::unitId();
         $taId = Auth::academicYearId();
-        $empId = Auth::employeeId() ?? 0;
+        $empId = (int)(Auth::employeeId() ?? 0);
         $activeRole = Auth::activeRoleName();
         $isWalasOnly = ($activeRole === 'walas' && !Auth::hasAnyRole(['waka_kesiswaan', 'kepala_sekolah', 'deputi_pendidikan']));
         $isTahfidzOnly = ($activeRole === 'guru_tahfidz');
@@ -190,28 +190,16 @@ class AbsensiController extends Controller {
 
         if ($isTahfidzOnly) {
             $halaqahList = Database::fetchAll(
-                "SELECT * FROM tahfidz_halaqah 
-                 WHERE tutor_employee_id = ? AND academic_year_id = ? AND type = 'Siswa' 
+                "SELECT * FROM tahfidz_halaqah
+                 WHERE unit_id = ? AND academic_year_id = ? AND type = 'Siswa'
+                   AND (tutor_employee_id = ? OR tutor_employee_id = ?)
                  ORDER BY name ASC",
-                [$empId, $taId]
+                [$unitId, $taId, $empId, Auth::id()]
             );
-            if (empty($halaqahList)) {
-                $halaqahList = Database::fetchAll(
-                    "SELECT * FROM tahfidz_halaqah WHERE unit_id = ? AND academic_year_id = ? AND type = 'Siswa' ORDER BY name ASC",
-                    [$unitId, $taId]
-                );
-            }
             $selectedHalaqahId = (int)($_GET['halaqah_id'] ?? ($halaqahList[0]['id'] ?? 0));
         } else {
             if ($isWalasOnly) {
-                $classes = Database::fetchAll(
-                    "SELECT * FROM classes WHERE unit_id = ? AND academic_year_id = ? AND (walas_id = ? OR walas_employee_id = ? OR walas_id = ?) ORDER BY name ASC",
-                    [$unitId, $taId, $empId, $empId, Auth::id()]
-                );
-                if (empty($classes)) {
-                    // Fallback jika tidak tercatat di walas_id, ambil dari unit
-                    $classes = Database::fetchAll("SELECT * FROM classes WHERE unit_id = ? AND academic_year_id = ? ORDER BY name ASC", [$unitId, $taId]);
-                }
+                $classes = Auth::walasClasses($unitId, $taId);
             } else {
                 $classes = Database::fetchAll("SELECT * FROM classes WHERE unit_id = ? AND academic_year_id = ? ORDER BY name ASC", [$unitId, $taId]);
             }

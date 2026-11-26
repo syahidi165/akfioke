@@ -143,8 +143,7 @@ class SupervisiController extends Controller {
         $userId = Auth::id();
         $activeRole = Auth::activeRoleName();
 
-        $emp = Database::fetch("SELECT id FROM employees WHERE user_id = ?", [$userId]);
-        $empId = $emp['id'] ?? 0;
+        $empId = (int)(Auth::employeeId() ?? 0);
 
         // Jika Guru Supervisor, hanya boleh melihat jadwal di mana dia ditunjuk sebagai supervisor dan bukan dirinya sendiri
         if ($activeRole === 'guru_supervisor') {
@@ -208,8 +207,7 @@ class SupervisiController extends Controller {
 
         // Validasi pembatasan untuk guru_supervisor
         if ($activeRole === 'guru_supervisor') {
-            $emp = Database::fetch("SELECT id FROM employees WHERE user_id = ?", [$userId]);
-            $empId = (int)($emp['id'] ?? 0);
+            $empId = (int)(Auth::employeeId() ?? 0);
             if ((int)$session['supervisor_id'] !== $empId || (int)$session['teacher_id'] === $empId) {
                 $this->setFlash('danger', 'Akses ditolak: Anda hanya berwenang menilai guru yang dijadwalkan untuk Anda.');
                 $this->redirect(Auth::baseUrl() . '/supervisi/penilaian');

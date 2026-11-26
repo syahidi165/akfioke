@@ -1,7 +1,7 @@
 # MASEKO / AKFIOKE — Sistem Manajemen Sekolah Terpadu & Penilaian Kinerja (AKFI)
 ### Yayasan Islam Al Kahfi Batam
 
-> *Terakhir diperbarui: 26 November 2026 (Sinkronisasi codebase hingga Dashboard Deputi Akumulasi Tunggakan Unit Binaan SPP/Non-SPP, Rapor AKFI Lintas Unit Rata-Rata Live & Cetak Gabungan PDF, TTD Digital Pejabat Penagihan, & Eskalasi Massal TU ke KS)*
+> *Terakhir diperbarui: 26 November 2026 (Sinkronisasi codebase hingga Penyeragaman Query Penugasan Walas/Guru & Normalisasi ID, Dashboard Deputi Tunggakan Binaan SPP/Non-SPP, Rapor AKFI Lintas Unit Rata-Rata Live, TTD Digital Form Penagihan, & Eskalasi Massal TU ke KS)*
 
 Aplikasi web enterprise yang dikembangkan khusus untuk **Yayasan Islam Al Kahfi Batam** menggunakan **PHP 8.x Native + MariaDB/MySQL**, dirancang responsif dengan orientasi **Sidebar**, dukungan **Progressive Web App (PWA)**, multi-role switcher, **Delegasi Izin Switch Akun**, filter **Tahun Ajaran & Semester (Opsi B: 1 TA = 2 Semester Juli–Juni)** global, penyimpanan multi-tier (**Hot & Cold Storage NAS**), serta berjalan secara **offline-ready** tanpa ketergantungan CDN eksternal.
 

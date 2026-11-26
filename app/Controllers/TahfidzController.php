@@ -43,12 +43,29 @@ class TahfidzController extends Controller {
         $taId = Auth::academicYearId();
         $userId = Auth::id();
 
-        // Cari halaqah yang diampu guru saat ini
-        $emp = Database::fetch("SELECT id FROM employees WHERE user_id = ?", [$userId]);
-        $empId = $emp['id'] ?? 0;
+        // Cari halaqah yang diampu guru saat ini (unit-scoped & mendukung fallback user_id -> emp_id)
+        $empId = (int)(Auth::employeeId() ?? 0);
+        $activeRole = Auth::activeRoleName();
 
-        $halaqahList = Database::fetchAll("SELECT * FROM tahfidz_halaqah WHERE unit_id = ? AND academic_year_id = ? AND type = 'Siswa'", [$unitId, $taId]);
-        $currentHalaqah = Database::fetch("SELECT * FROM tahfidz_halaqah WHERE tutor_employee_id = ? AND academic_year_id = ? AND type = 'Siswa' LIMIT 1", [$empId, $taId]) ?: ($halaqahList[0] ?? null);
+        if ($activeRole === 'guru_tahfidz') {
+            $halaqahList = Database::fetchAll(
+                "SELECT * FROM tahfidz_halaqah
+                 WHERE unit_id = ? AND academic_year_id = ? AND type = 'Siswa'
+                   AND (tutor_employee_id = ? OR tutor_employee_id = ?)
+                 ORDER BY name ASC",
+                [$unitId, $taId, $empId, $userId]
+            );
+            $currentHalaqah = $halaqahList[0] ?? null;
+        } else {
+            $halaqahList = Database::fetchAll("SELECT * FROM tahfidz_halaqah WHERE unit_id = ? AND academic_year_id = ? AND type = 'Siswa' ORDER BY name ASC", [$unitId, $taId]);
+            $currentHalaqah = Database::fetch(
+                "SELECT * FROM tahfidz_halaqah
+                 WHERE unit_id = ? AND academic_year_id = ? AND type = 'Siswa'
+                   AND (tutor_employee_id = ? OR tutor_employee_id = ?)
+                 LIMIT 1",
+                [$unitId, $taId, $empId, $userId]
+            ) ?: ($halaqahList[0] ?? null);
+        }
 
         $students = [];
         $setoranLogs = [];
@@ -266,19 +283,21 @@ class TahfidzController extends Controller {
         $userId = Auth::id();
         $activeRole = Auth::activeRoleName();
 
-        // Cari data pegawai guru ini
-        $emp = Database::fetch("SELECT id, nama FROM employees WHERE user_id = ?", [$userId]);
-        $empId = (int)($emp['id'] ?? 0);
+        // Cari data pegawai guru ini (aktif, tidak terhapus)
+        $empId = (int)(Auth::employeeId() ?? 0);
 
-        // Ambil halaqah santri yang diampu guru ini pada tahun ajaran aktif (type = 'Siswa')
+        // Ambil halaqah santri yang diampu guru ini pada unit & tahun ajaran aktif (type = 'Siswa')
         $myHalaqahs = Database::fetchAll(
-            "SELECT * FROM tahfidz_halaqah WHERE tutor_employee_id = ? AND academic_year_id = ? AND type = 'Siswa'",
-            [$empId, $taId]
+            "SELECT * FROM tahfidz_halaqah
+             WHERE unit_id = ? AND academic_year_id = ? AND type = 'Siswa'
+               AND (tutor_employee_id = ? OR tutor_employee_id = ?)
+             ORDER BY name ASC",
+            [$unitId, $taId, $empId, $userId]
         );
         $myHalaqahIds = array_column($myHalaqahs, 'id');
 
-        // Batasi hanya halaqah ustadz bersangkutan jika login sebagai guru_tahfidz atau peran guru
-        $isGuruTahfidz = ($activeRole === 'guru_tahfidz' || !Auth::hasRole(['koor_tahfidz', 'kepala_sekolah', 'operator_sekolah', 'operator_yayasan']));
+        // Batasi hanya halaqah ustadz bersangkutan jika login sebagai guru_tahfidz atau non-koor/pimpinan
+        $isGuruTahfidz = ($activeRole === 'guru_tahfidz' || !Auth::hasAnyRole(['koor_tahfidz', 'kepala_sekolah', 'operator_sekolah', 'operator_yayasan']));
 
         if ($isGuruTahfidz) {
             // HANYA santri yang terdaftar di kelompok halaqah ustadz ini
@@ -373,16 +392,16 @@ class TahfidzController extends Controller {
         }
 
         // Validasi kepemilikan halaqah untuk guru tahfidz
-        $isGuruTahfidz = ($activeRole === 'guru_tahfidz' || !Auth::hasRole(['koor_tahfidz', 'kepala_sekolah', 'operator_sekolah', 'operator_yayasan']));
+        $isGuruTahfidz = ($activeRole === 'guru_tahfidz' || !Auth::hasAnyRole(['koor_tahfidz', 'kepala_sekolah', 'operator_sekolah', 'operator_yayasan']));
         if ($isGuruTahfidz) {
-            $emp = Database::fetch("SELECT id FROM employees WHERE user_id = ?", [$userId]);
-            $empId = (int)($emp['id'] ?? 0);
+            $empId = (int)(Auth::employeeId() ?? 0);
 
             $isMember = Database::fetch(
                 "SELECT 1 FROM tahfidz_halaqah_members hm 
                  JOIN tahfidz_halaqah h ON hm.halaqah_id = h.id 
-                 WHERE hm.student_id = ? AND h.tutor_employee_id = ? AND h.academic_year_id = ? AND h.type = 'Siswa'",
-                [$studentId, $empId, $taId]
+                 WHERE hm.student_id = ? AND h.unit_id = ? AND h.academic_year_id = ? AND h.type = 'Siswa'
+                   AND (h.tutor_employee_id = ? OR h.tutor_employee_id = ?)",
+                [$studentId, $unitId, $taId, $empId, $userId]
             );
 
             if (!$isMember) {

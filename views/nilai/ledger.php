@@ -31,7 +31,7 @@ $nilaiTerendah = !empty($allAvgs) ? min($allAvgs) : 0;
                 <i class="fa-solid fa-file-pdf"></i> Cetak PDF (Landscape)
             </a>
         <?php endif; ?>
-        <?php if (Auth::hasAnyRole(['guru_mapel', 'guru_mapel_kbtk', 'guru_tahta', 'guru_tk', 'guru_diniyah', 'waka_kurikulum', 'kepala_sekolah'])): ?>
+        <?php if (Auth::hasAnyRole(['guru_mapel', 'guru_mapel_kbtk', 'guru_tahfidz', 'guru_tahta', 'guru_tk', 'guru_diniyah', 'waka_kurikulum', 'kepala_sekolah'])): ?>
             <a href="<?= $baseUrl ?>/nilai/bulanan?class_id=<?= $selectedClassId ?>&month_num=<?= $selectedMonth ?>" class="btn btn-primary">
                 <i class="fa-solid fa-pen-to-square"></i> Input Nilai
             </a>
