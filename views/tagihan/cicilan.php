@@ -229,12 +229,12 @@ $baseUrl = Auth::baseUrl();
                                         </button>
 
                                         <?php if (!empty($ins['signed_fr8001c_path'])): ?>
-                                            <a href="<?= $baseUrl ?>/<?= htmlspecialchars($ins['signed_fr8001c_path']) ?>" target="_blank" class="btn btn-outline btn-sm" style="padding: 4px 6px; font-size: 0.72rem; color: #0369a1; border-color: #bae6fd;" title="Lihat Scan TTD FR 8001C">
+                                            <a href="<?= $baseUrl ?>/tagihan/signed-doc/<?= (int)$ins['bill_id'] ?>/c" target="_blank" class="btn btn-outline btn-sm" style="padding: 4px 6px; font-size: 0.72rem; color: #0369a1; border-color: #bae6fd;" title="Lihat Scan TTD FR 8001C">
                                                 <i class="fa-solid fa-file-pdf"></i> 8001C
                                             </a>
                                         <?php endif; ?>
                                         <?php if (!empty($ins['signed_fr8001d_path'])): ?>
-                                            <a href="<?= $baseUrl ?>/<?= htmlspecialchars($ins['signed_fr8001d_path']) ?>" target="_blank" class="btn btn-outline btn-sm" style="padding: 4px 6px; font-size: 0.72rem; color: #6d28d9; border-color: #ddd6fe;" title="Lihat Scan TTD Perjanjian FR 8001D">
+                                            <a href="<?= $baseUrl ?>/tagihan/signed-doc/<?= (int)$ins['bill_id'] ?>/d" target="_blank" class="btn btn-outline btn-sm" style="padding: 4px 6px; font-size: 0.72rem; color: #6d28d9; border-color: #ddd6fe;" title="Lihat Scan TTD Perjanjian FR 8001D">
                                                 <i class="fa-solid fa-file-signature"></i> 8001D
                                             </a>
                                         <?php endif; ?>

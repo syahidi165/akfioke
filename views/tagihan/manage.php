@@ -454,12 +454,12 @@ foreach ($bills as $b) {
                                         <?php if (!empty($b['signed_fr8001c_path']) || !empty($b['signed_fr8001d_path'])): ?>
                                             <div style="margin-top: 5px; display: flex; gap: 4px; justify-content: center; flex-wrap: wrap;">
                                                 <?php if (!empty($b['signed_fr8001c_path'])): ?>
-                                                    <a href="<?= $baseUrl ?>/<?= ltrim(SecurityHelper::escape($b['signed_fr8001c_path']), '/') ?>" target="_blank" class="badge" style="background: #dcfce7; color: #15803d; font-size: 10px; text-decoration: none;" title="Lihat Scan FR 8001C Bertanda Tangan">
+                                                    <a href="<?= $baseUrl ?>/tagihan/signed-doc/<?= (int)$b['id'] ?>/c" target="_blank" class="badge" style="background: #dcfce7; color: #15803d; font-size: 10px; text-decoration: none;" title="Lihat Scan FR 8001C Bertanda Tangan">
                                                         <i class="fa-solid fa-file-signature"></i> TTD 8001C
                                                     </a>
                                                 <?php endif; ?>
                                                 <?php if (!empty($b['signed_fr8001d_path'])): ?>
-                                                    <a href="<?= $baseUrl ?>/<?= ltrim(SecurityHelper::escape($b['signed_fr8001d_path']), '/') ?>" target="_blank" class="badge" style="background: #dbeafe; color: #1d4ed8; font-size: 10px; text-decoration: none;" title="Lihat Scan FR 8001D Bertanda Tangan">
+                                                    <a href="<?= $baseUrl ?>/tagihan/signed-doc/<?= (int)$b['id'] ?>/d" target="_blank" class="badge" style="background: #dbeafe; color: #1d4ed8; font-size: 10px; text-decoration: none;" title="Lihat Scan FR 8001D Bertanda Tangan">
                                                         <i class="fa-solid fa-file-signature"></i> TTD 8001D
                                                     </a>
                                                 <?php endif; ?>

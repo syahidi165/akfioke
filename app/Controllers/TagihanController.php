@@ -1627,9 +1627,15 @@ class TagihanController extends Controller {
 
     private function handleSignedUploads(int $billId, string $level): array {
         $paths = [];
-        $uploadDir = dirname(__DIR__, 2) . '/public/uploads/tagihan/signed';
-        if (!is_dir($uploadDir)) {
-            @mkdir($uploadDir, 0777, true);
+        $publicDir = dirname(__DIR__, 2) . '/public/uploads/tagihan/signed';
+        $storageDir = dirname(__DIR__, 2) . '/storage/uploads/tagihan/signed';
+
+        if (!is_dir($publicDir)) {
+            @mkdir($publicDir, 0775, true);
+        }
+        $uploadDir = (is_dir($publicDir) && is_writable($publicDir)) ? $publicDir : $storageDir;
+        if ($uploadDir === $storageDir && !is_dir($storageDir)) {
+            @mkdir($storageDir, 0775, true);
         }
 
         $filesToProcess = [
@@ -1644,14 +1650,122 @@ class TagihanController extends Controller {
                 if (in_array($ext, $allowed, true)) {
                     $newFilename = 'signed_' . $inputName . '_' . $billId . '_' . time() . '.' . $ext;
                     $targetPath = $uploadDir . '/' . $newFilename;
-                    if (move_uploaded_file($_FILES[$inputName]['tmp_name'], $targetPath)) {
+                    $moved = @move_uploaded_file($_FILES[$inputName]['tmp_name'], $targetPath);
+                    if (!$moved && $uploadDir !== $storageDir) {
+                        if (!is_dir($storageDir)) {
+                            @mkdir($storageDir, 0775, true);
+                        }
+                        if (is_dir($storageDir) && is_writable($storageDir)) {
+                            $moved = @move_uploaded_file($_FILES[$inputName]['tmp_name'], $storageDir . '/' . $newFilename);
+                        }
+                    }
+                    if ($moved) {
                         $paths[$colName] = 'uploads/tagihan/signed/' . $newFilename;
+                    } else {
+                        error_log("Gagal memindahkan berkas {$inputName} untuk tagihan #{$billId} ke {$targetPath}");
                     }
                 }
             }
         }
 
         return $paths;
+    }
+
+    /**
+     * Streaming aman dokumen FR 8001C / FR 8001D bertanda tangan orang tua tanpa bergantung pada konfigurasi docroot/rewrite server.
+     */
+    public function viewSignedDoc(string $id, string $type): void {
+        $this->requireRole(['tata_usaha', 'kepala_sekolah', 'deputi_pendidikan', 'operator_yayasan', 'direktur_pendidikan', 'keuangan_yayasan']);
+        self::ensureSignedColumns();
+
+        $billId = (int)$id;
+        $docType = strtolower(trim($type));
+        $colMap = [
+            'c' => 'signed_fr8001c_path',
+            'd' => 'signed_fr8001d_path'
+        ];
+
+        if ($billId <= 0 || !isset($colMap[$docType])) {
+            http_response_code(404);
+            header('Content-Type: text/plain; charset=UTF-8');
+            echo 'Dokumen tagihan tidak valid atau tidak ditemukan.';
+            return;
+        }
+
+        $bill = Database::fetch(
+            "SELECT id, unit_id, signed_fr8001c_path, signed_fr8001d_path FROM bills WHERE id = ?",
+            [$billId]
+        );
+        if (!$bill) {
+            http_response_code(404);
+            header('Content-Type: text/plain; charset=UTF-8');
+            echo 'Data tagihan tidak ditemukan.';
+            return;
+        }
+
+        $role = Auth::activeRoleName();
+        if (in_array($role, ['tata_usaha', 'kepala_sekolah'], true) && (int)$bill['unit_id'] !== (int)Auth::unitId()) {
+            http_response_code(403);
+            header('Content-Type: text/plain; charset=UTF-8');
+            echo 'Anda tidak memiliki akses ke dokumen tagihan unit ini.';
+            return;
+        }
+
+        $relPath = ltrim(str_replace('\\', '/', (string)($bill[$colMap[$docType]] ?? '')), '/');
+        if ($relPath === '') {
+            http_response_code(404);
+            header('Content-Type: text/plain; charset=UTF-8');
+            echo 'Berkas TTD belum diunggah untuk tagihan ini.';
+            return;
+        }
+
+        $foundFile = null;
+        $baseCandidates = [
+            dirname(__DIR__, 2) . '/public',
+            dirname(__DIR__, 2) . '/storage',
+            dirname(__DIR__, 2)
+        ];
+        foreach ($baseCandidates as $baseDir) {
+            $realBase = realpath($baseDir);
+            if ($realBase === false) {
+                continue;
+            }
+            $candidate = $realBase . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relPath);
+            $realFile = realpath($candidate);
+            if ($realFile !== false && is_file($realFile) && strpos($realFile, $realBase . DIRECTORY_SEPARATOR) === 0) {
+                $foundFile = $realFile;
+                break;
+            }
+        }
+
+        if ($foundFile === null) {
+            http_response_code(404);
+            header('Content-Type: text/plain; charset=UTF-8');
+            echo 'Berkas dokumen TTD tidak ditemukan di server.';
+            return;
+        }
+
+        $ext = strtolower(pathinfo($foundFile, PATHINFO_EXTENSION));
+        $mimeMap = [
+            'pdf'  => 'application/pdf',
+            'jpg'  => 'image/jpeg',
+            'jpeg' => 'image/jpeg',
+            'png'  => 'image/png'
+        ];
+        $mime = $mimeMap[$ext] ?? 'application/octet-stream';
+        $safeFilename = basename($foundFile);
+
+        while (ob_get_level() > 0) {
+            ob_end_clean();
+        }
+
+        header('Content-Type: ' . $mime);
+        header('Content-Disposition: inline; filename="' . str_replace('"', '', $safeFilename) . '"');
+        header('Content-Length: ' . (string)filesize($foundFile));
+        header('X-Content-Type-Options: nosniff');
+        header('Cache-Control: private, max-age=3600');
+        readfile($foundFile);
+        exit;
     }
 
     /**

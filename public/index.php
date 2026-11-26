@@ -281,6 +281,7 @@ Router::post('/tagihan/confirm-import', [TagihanController::class, 'confirmImpor
 Router::post('/tagihan/save', [TagihanController::class, 'saveBill']);
 Router::post('/tagihan/delete', [TagihanController::class, 'deleteBill']);
 Router::post('/tagihan/upload-signed-doc', [TagihanController::class, 'uploadSignedDoc']);
+Router::get('/tagihan/signed-doc/:id/:type', [TagihanController::class, 'viewSignedDoc']);
 
 // Alur Surat TU (FR 8001B) & Eskalasi
 Router::get('/tagihan/cetak-fr8001b/:id', [TagihanController::class, 'printSuratFR8001B']);
