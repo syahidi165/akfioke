@@ -1965,11 +1965,7 @@ class TagihanController extends Controller {
         $this->redirect(Auth::baseUrl() . '/tagihan/approval');
     }
 
-    private function sendOfficialBillEmail(int $billId, string $docType, bool $isDeputi, ?string $customEmail = null, string $extraNote = ''): array {
-        if (!in_array($docType, ['fr8001c', 'fr8001d', 'both'], true)) {
-            return ['found' => false, 'email_sent' => false, 'reason' => 'invalid_doc', 'error' => 'Jenis dokumen email tidak valid.'];
-        }
-
+    private function sendOfficialBillEmail(int $billId, bool $isDeputi, ?string $customEmail = null, string $extraNote = ''): array {
         $bill = Database::fetch(
             "SELECT b.*, s.nama as student_name, s.nis,
                     COALESCE(NULLIF(s.father_name, ''), NULLIF(s.mother_name, ''), 'Wali Santri') as parent_name,
@@ -2001,44 +1997,25 @@ class TagihanController extends Controller {
             return ['found' => true, 'email_sent' => false, 'reason' => 'no_smtp', 'email' => $targetEmail, 'error' => 'Pengaturan SMTP unit belum dikonfigurasi.'];
         }
 
-        $attachments = [];
         $cleanNis = preg_replace('/[^a-zA-Z0-9_\-]/', '_', (string)$bill['nis']);
+        $attName = 'Surat_Panggilan_' . ($isDeputi ? 'Yayasan_' : '') . 'FR8001C_' . $cleanNis . '.pdf';
+        $attLabel = $isDeputi ? 'Surat Pemanggilan Yayasan (FR 8001C)' : 'Surat Pemanggilan Kepala Sekolah (FR 8001C)';
+
         try {
             @ini_set('memory_limit', '512M');
             @set_time_limit(120);
 
-            if ($docType === 'fr8001c' || $docType === 'both') {
-                $htmlC = $this->generateFR8001CHtml($bill, $isDeputi);
-                $bytesC = ExportHelper::getPdfBytes($htmlC, 'A4', 'portrait');
-                if (empty($bytesC)) {
-                    return ['found' => true, 'email_sent' => false, 'reason' => 'pdf_error', 'email' => $targetEmail, 'error' => 'Gagal membuat lampiran PDF FR 8001C.'];
-                }
-                $attachments[] = [
-                    'bytes' => $bytesC,
-                    'name'  => 'Surat_Panggilan_' . ($isDeputi ? 'Yayasan_' : '') . 'FR8001C_' . $cleanNis . '.pdf',
-                    'label' => $isDeputi ? 'Surat Pemanggilan Yayasan (FR 8001C)' : 'Surat Pemanggilan Kepala Sekolah (FR 8001C)'
-                ];
-            }
-
-            if ($docType === 'fr8001d' || $docType === 'both') {
-                $htmlD = $this->generateFR8001DHtml($bill, $isDeputi);
-                $bytesD = ExportHelper::getPdfBytes($htmlD, 'A4', 'portrait');
-                if (empty($bytesD)) {
-                    return ['found' => true, 'email_sent' => false, 'reason' => 'pdf_error', 'email' => $targetEmail, 'error' => 'Gagal membuat lampiran PDF FR 8001D.'];
-                }
-                $attachments[] = [
-                    'bytes' => $bytesD,
-                    'name'  => 'Berita_Acara_dan_Pernyataan_' . ($isDeputi ? 'Yayasan_' : '') . 'FR8001D_' . $cleanNis . '.pdf',
-                    'label' => 'Berita Acara & Surat Pernyataan Komitmen (FR 8001D)'
-                ];
+            $htmlC = $this->generateFR8001CHtml($bill, $isDeputi);
+            $pdfBytes = ExportHelper::getPdfBytes($htmlC, 'A4', 'portrait');
+            if (empty($pdfBytes)) {
+                return ['found' => true, 'email_sent' => false, 'reason' => 'pdf_error', 'email' => $targetEmail, 'error' => 'Gagal membuat lampiran PDF FR 8001C.'];
             }
         } catch (\Throwable $pdfEx) {
-            error_log('Gagal merender lampiran PDF resmi FR 8001C/D: ' . $pdfEx->getMessage());
+            error_log('Gagal merender lampiran PDF resmi FR 8001C: ' . $pdfEx->getMessage());
             return ['found' => true, 'email_sent' => false, 'reason' => 'pdf_error', 'email' => $targetEmail, 'error' => $pdfEx->getMessage()];
         }
 
         $levelTitle = $isDeputi ? 'Direktorat Pendidikan Yayasan Al-Kahfi Batam' : SecurityHelper::escape($bill['unit_name']);
-        $docSummaryLabel = $docType === 'both' ? 'FR 8001C & FR 8001D' : strtoupper($docType);
         $scheduleHtml = '';
         if ($isDeputi && !empty($bill['deputi_schedule_date'])) {
             $ts = strtotime($bill['deputi_schedule_date']);
@@ -2053,12 +2030,6 @@ class TagihanController extends Controller {
             $noteHtml = "<div style='background:#f8fafc; border:1px solid #cbd5e1; border-radius:6px; padding:10px 12px; margin:12px 0;'><strong>Catatan Tambahan:</strong><br>" . nl2br(SecurityHelper::escape($extraNote)) . "</div>";
         }
 
-        $attListHtml = '<ul style="margin:6px 0 12px 18px; padding:0;">';
-        foreach ($attachments as $att) {
-            $attListHtml .= '<li>' . SecurityHelper::escape($att['label']) . ' (<code>' . SecurityHelper::escape($att['name']) . '</code>)</li>';
-        }
-        $attListHtml .= '</ul>';
-
         $emailSent = false;
         $emailError = null;
         try {
@@ -2070,32 +2041,29 @@ class TagihanController extends Controller {
             $mail->setFrom($fromEmail, $fromName);
             $mail->addAddress($targetEmail, $bill['parent_name'] ?: $bill['student_name']);
             $mail->isHTML(true);
-            $mail->Subject = "[{$docSummaryLabel} - " . ($isDeputi ? 'Yayasan AIS' : $bill['unit_name']) . "] Ananda " . $bill['student_name'];
+            $mail->Subject = "[FR 8001C - " . ($isDeputi ? 'Yayasan AIS' : $bill['unit_name']) . "] Ananda " . $bill['student_name'];
             $mail->Body = "
                 <div style='font-family: Arial, sans-serif; line-height: 1.6; max-width: 620px; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px; color: #1e293b;'>
-                    <h4 style='color: " . ($isDeputi ? '#be185d' : '#0f766e') . "; margin-top: 0;'>Penyampaian Dokumen Resmi Penagihan ({$docSummaryLabel})</h4>
+                    <h4 style='color: " . ($isDeputi ? '#be185d' : '#0f766e') . "; margin-top: 0;'>Penyampaian Surat Pemanggilan Resmi (FR 8001C)</h4>
                     <p><em>Assalamu'alaikum warahmatullahi wabarakatuh,</em></p>
                     <p>Yth. Orang Tua / Wali dari ananda <strong>" . SecurityHelper::escape($bill['student_name']) . "</strong> (NIS: " . SecurityHelper::escape($bill['nis']) . " &ndash; " . SecurityHelper::escape($bill['unit_name']) . "),</p>
-                    <p>Bersama email ini kami dari <strong>{$levelTitle}</strong> menyampaikan dokumen resmi terkait kewajiban pembiayaan pendidikan sebesar <strong>" . SecurityHelper::formatRupiah((float)$bill['amount']) . "</strong>:</p>
-                    {$attListHtml}
+                    <p>Bersama email ini kami dari <strong>{$levelTitle}</strong> menyampaikan dokumen resmi <strong>" . SecurityHelper::escape($attLabel) . "</strong> (<code>" . SecurityHelper::escape($attName) . "</code>) terkait kewajiban pembiayaan pendidikan sebesar <strong>" . SecurityHelper::formatRupiah((float)$bill['amount']) . "</strong>.</p>
                     {$scheduleHtml}
                     {$noteHtml}
-                    <p>Seluruh dokumen telah kami lampirkan dalam format PDF pada email ini untuk dapat dipelajari dan ditindaklanjuti.</p>
+                    <p>Surat pemanggilan telah kami lampirkan dalam format PDF pada email ini untuk dapat dipelajari dan ditindaklanjuti.</p>
                     <p><em>Wassalamu'alaikum warahmatullahi wabarakatuh.</em></p>
                 </div>";
 
-            foreach ($attachments as $att) {
-                $mail->addStringAttachment($att['bytes'], $att['name'], 'base64', 'application/pdf');
-            }
+            $mail->addStringAttachment($pdfBytes, $attName, 'base64', 'application/pdf');
 
             $mail->send();
             $emailSent = true;
         } catch (\Throwable $e) {
             $emailError = (isset($mail) && !empty($mail->ErrorInfo)) ? $mail->ErrorInfo : $e->getMessage();
-            error_log('Gagal mengirim email resmi FR 8001C/D: ' . $emailError);
+            error_log('Gagal mengirim email resmi FR 8001C: ' . $emailError);
         }
 
-        if ($emailSent && ($docType === 'fr8001c' || $docType === 'both')) {
+        if ($emailSent) {
             if ($isDeputi) {
                 Database::execute(
                     "UPDATE bills
@@ -2115,21 +2083,21 @@ class TagihanController extends Controller {
             }
         }
 
-        AuditLog::log($isDeputi ? 'SEND_EMAIL_DEPUTI_FR8001' : 'SEND_EMAIL_KEPSEK_FR8001', 'bills', $billId, null, [
-            'doc_type'    => $docType,
+        AuditLog::log($isDeputi ? 'SEND_EMAIL_DEPUTI_FR8001C' : 'SEND_EMAIL_KEPSEK_FR8001C', 'bills', $billId, null, [
+            'doc_type'    => 'fr8001c',
             'email'       => $targetEmail,
-            'attachments' => array_column($attachments, 'name'),
+            'attachment'  => $attName,
             'email_sent'  => $emailSent,
             'email_error' => $emailError
         ]);
 
         return [
-            'found'       => true,
-            'email_sent'  => $emailSent,
-            'reason'      => $emailSent ? 'sent' : 'smtp_error',
-            'email'       => $targetEmail,
-            'attachments' => array_column($attachments, 'name'),
-            'error'       => $emailError
+            'found'      => true,
+            'email_sent' => $emailSent,
+            'reason'     => $emailSent ? 'sent' : 'smtp_error',
+            'email'      => $targetEmail,
+            'attachment' => $attName,
+            'error'      => $emailError
         ];
     }
 
@@ -2137,7 +2105,6 @@ class TagihanController extends Controller {
         $this->requireRole('kepala_sekolah');
         $billId = (int)($_POST['bill_id'] ?? 0);
         $unitId = Auth::unitId();
-        $docType = strtolower(trim((string)($_POST['doc_type'] ?? 'fr8001c')));
         $customEmail = trim((string)($_POST['target_email'] ?? ''));
         $extraNote = trim((string)($_POST['extra_note'] ?? ''));
 
@@ -2148,10 +2115,9 @@ class TagihanController extends Controller {
             return;
         }
 
-        $res = $this->sendOfficialBillEmail($billId, $docType, false, $customEmail, $extraNote);
+        $res = $this->sendOfficialBillEmail($billId, false, $customEmail, $extraNote);
         if ($res['email_sent']) {
-            $attCount = count($res['attachments'] ?? []);
-            $this->setFlash('success', "Email berhasil dikirim ke {$res['email']} beserta {$attCount} lampiran PDF (" . strtoupper($docType) . ').');
+            $this->setFlash('success', "Email berhasil dikirim ke {$res['email']} beserta lampiran PDF Surat Pemanggilan FR 8001C.");
         } elseif (($res['reason'] ?? '') === 'no_email') {
             $this->setFlash('warning', 'Alamat email tujuan kosong atau tidak valid. Harap isi alamat email orang tua dengan benar.');
         } elseif (($res['reason'] ?? '') === 'no_smtp') {
@@ -2897,7 +2863,6 @@ class TagihanController extends Controller {
     public function kirimEmailDeputi(): void {
         $this->requireRole('deputi_pendidikan');
         $billId = (int)($_POST['bill_id'] ?? 0);
-        $docType = strtolower(trim((string)($_POST['doc_type'] ?? 'fr8001c')));
         $customEmail = trim((string)($_POST['target_email'] ?? ''));
         $extraNote = trim((string)($_POST['extra_note'] ?? ''));
 
@@ -2907,12 +2872,11 @@ class TagihanController extends Controller {
             return;
         }
 
-        $res = $this->sendOfficialBillEmail($billId, $docType, true, $customEmail, $extraNote);
+        $res = $this->sendOfficialBillEmail($billId, true, $customEmail, $extraNote);
         if (!$res['found']) {
             $this->setFlash('danger', $res['error'] ?? 'Data tagihan tidak ditemukan.');
         } elseif ($res['email_sent']) {
-            $attCount = count($res['attachments'] ?? []);
-            $this->setFlash('success', "Email resmi Yayasan berhasil dikirim ke {$res['email']} beserta {$attCount} lampiran PDF (" . strtoupper($docType) . ').');
+            $this->setFlash('success', "Email resmi Yayasan berhasil dikirim ke {$res['email']} beserta lampiran PDF Surat Pemanggilan FR 8001C.");
         } elseif (($res['reason'] ?? '') === 'no_email') {
             $this->setFlash('warning', 'Alamat email tujuan kosong atau tidak valid. Harap isi alamat email orang tua terlebih dahulu.');
         } elseif (($res['reason'] ?? '') === 'no_smtp') {

@@ -211,15 +211,15 @@ $baseUrl = Auth::baseUrl();
                                             <i class="fa-solid fa-file-signature"></i> FR 8001D
                                         </a>
 
-                                        <!-- Kirim Email Resmi Yayasan (Lampiran PDF FR 8001C / FR 8001D) -->
+                                        <!-- Kirim Email Resmi Yayasan (Lampiran PDF FR 8001C) -->
                                         <button type="button" class="btn btn-outline btn-sm" style="padding: 4px 8px; font-size: 0.75rem; color: #0369a1; border-color: #0369a1;"
                                                 data-bill-id="<?= (int)$b['id'] ?>"
                                                 data-student-name="<?= SecurityHelper::escape($b['student_name']) ?>"
                                                 data-unit-name="<?= SecurityHelper::escape($b['unit_name']) ?>"
                                                 data-parent-email="<?= SecurityHelper::escape($b['parent_email'] ?? '') ?>"
                                                 onclick="openEmailDeputiModal(this)"
-                                                title="Kirim Surat Yayasan FR 8001C / FR 8001D via Email dengan Lampiran PDF">
-                                            <i class="fa-solid fa-paper-plane"></i> Kirim Email
+                                                title="Kirim Surat Pemanggilan Yayasan FR 8001C via Email dengan Lampiran PDF">
+                                            <i class="fa-solid fa-paper-plane"></i> Kirim Email 8001C
                                         </button>
 
                                         <!-- Setujui Kesepakatan FR 8001D Saat Ortu Hadir -->
@@ -430,12 +430,12 @@ $baseUrl = Auth::baseUrl();
     </div>
 </div>
 
-<!-- Modal Kirim Email Yayasan FR 8001C / FR 8001D (Lampiran PDF) -->
+<!-- Modal Kirim Email Yayasan FR 8001C (Lampiran PDF) -->
 <div id="modalKirimEmailDeputi" class="modal-backdrop" style="display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.6); z-index: 9999; align-items: center; justify-content: center; backdrop-filter: blur(2px);">
     <div style="background: #fff; width: 100%; max-width: 500px; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.15); overflow: hidden; margin: 20px;">
         <div style="background: #f0f9ff; border-bottom: 1px solid #bae6fd; padding: 16px 20px; display: flex; justify-content: space-between; align-items: center;">
             <h4 style="margin: 0; font-size: 1rem; font-weight: 700; color: #0369a1; display: flex; align-items: center; gap: 8px;">
-                <i class="fa-solid fa-paper-plane"></i> Kirim Surat Yayasan FR 8001C / FR 8001D via Email
+                <i class="fa-solid fa-paper-plane"></i> Kirim Surat Pemanggilan Yayasan FR 8001C via Email
             </h4>
             <button type="button" onclick="closeEmailDeputiModal()" style="background: none; border: none; font-size: 1.25rem; cursor: pointer; color: #94a3b8;">&times;</button>
         </div>
@@ -446,17 +446,13 @@ $baseUrl = Auth::baseUrl();
                 <div style="font-size: 0.875rem; margin-bottom: 14px; color: #334155;">
                     Santri: <strong id="emailDeputiStudentName">-</strong> (<span id="emailDeputiUnitName">-</span>)
                 </div>
+                <div style="background: #fdf2f8; border: 1px solid #fbcfe8; border-radius: 6px; padding: 8px 12px; margin-bottom: 12px; font-size: 0.8125rem; color: #831843;">
+                    <i class="fa-solid fa-file-pdf" style="margin-right: 6px;"></i>
+                    Lampiran otomatis: <strong>Surat Pemanggilan Yayasan (FR 8001C - PDF)</strong>
+                </div>
                 <div class="form-group" style="margin-bottom: 12px;">
                     <label class="form-label" style="font-weight: 600; font-size: 0.8125rem;">Email Orang Tua / Wali <span style="color: #ef4444;">*</span></label>
                     <input type="email" name="target_email" id="emailDeputiTargetEmail" class="form-control" required placeholder="contoh@email.com" style="font-size: 0.8125rem;">
-                </div>
-                <div class="form-group" style="margin-bottom: 12px;">
-                    <label class="form-label" style="font-weight: 600; font-size: 0.8125rem;">Dokumen Lampiran PDF (Kop Yayasan) <span style="color: #ef4444;">*</span></label>
-                    <select name="doc_type" id="emailDeputiDocType" class="form-control" style="font-size: 0.8125rem;">
-                        <option value="fr8001c">Surat Pemanggilan Yayasan (FR 8001C - PDF)</option>
-                        <option value="fr8001d">Berita Acara &amp; Pernyataan Yayasan (FR 8001D - PDF)</option>
-                        <option value="both">Keduanya (Lampiran PDF FR 8001C + FR 8001D)</option>
-                    </select>
                 </div>
                 <div class="form-group">
                     <label class="form-label" style="font-weight: 600; font-size: 0.8125rem;">Catatan Tambahan (Opsional)</label>
@@ -466,7 +462,7 @@ $baseUrl = Auth::baseUrl();
             <div style="background: #f8fafc; border-top: 1px solid #e2e8f0; padding: 12px 20px; display: flex; justify-content: flex-end; gap: 10px;">
                 <button type="button" class="btn btn-outline" onclick="closeEmailDeputiModal()">Batal</button>
                 <button type="submit" class="btn btn-primary" style="background: #0369a1; border-color: #0369a1; font-weight: 600;">
-                    <i class="fa-solid fa-paper-plane" style="margin-right: 6px;"></i> Kirim Email &amp; Lampiran PDF
+                    <i class="fa-solid fa-paper-plane" style="margin-right: 6px;"></i> Kirim Email FR 8001C (PDF)
                 </button>
             </div>
         </form>
@@ -536,7 +532,6 @@ function openEmailDeputiModal(btn) {
     document.getElementById('emailDeputiStudentName').innerText = btn.getAttribute('data-student-name') || '-';
     document.getElementById('emailDeputiUnitName').innerText = btn.getAttribute('data-unit-name') || '-';
     document.getElementById('emailDeputiTargetEmail').value = btn.getAttribute('data-parent-email') || '';
-    document.getElementById('emailDeputiDocType').value = 'fr8001c';
     document.getElementById('emailDeputiNote').value = '';
     document.getElementById('modalKirimEmailDeputi').style.display = 'flex';
 }
