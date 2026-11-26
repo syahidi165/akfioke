@@ -96,19 +96,29 @@ $baseUrl = Auth::baseUrl();
 
     <div class="card-body" style="padding: 0;">
         <div style="overflow-x: auto;">
-            <table class="table" style="margin-bottom: 0; width: 100%; border-collapse: collapse;">
+            <table id="tableApprovalKs" class="table" style="margin-bottom: 0; width: 100%; border-collapse: collapse;">
                 <thead>
                     <tr style="background: #f1f5f9; border-bottom: 2px solid #cbd5e1; font-size: 0.8125rem; text-transform: uppercase;">
                         <th style="width: 40px; text-align: center; padding: 10px;">No</th>
-                        <th style="padding: 10px;">Santri &amp; Orang Tua</th>
-                        <th style="padding: 10px; width: 170px;">Tunggakan SPP (Rp)</th>
-                        <th style="padding: 10px; width: 180px;">Tunggakan Non-SPP (Rp)</th>
-                        <th style="text-align: right; width: 140px; padding: 10px;">JUMLAH (Total)</th>
-                        <th style="padding: 10px; width: 180px; text-align: center;">Jadwal Panggilan (FR 8001C)</th>
+                        <th class="sortable-th" data-sort-key="student" data-sort-type="text" onclick="sortApprovalTable(this)" style="padding: 10px; cursor: pointer; user-select: none;" title="Klik untuk mengurutkan berdasarkan nama santri">
+                            Santri &amp; Orang Tua <i class="fa-solid fa-sort sort-icon" style="color: #94a3b8; margin-left: 4px;"></i>
+                        </th>
+                        <th class="sortable-th" data-sort-key="spp" data-sort-type="number" onclick="sortApprovalTable(this)" style="padding: 10px; width: 170px; cursor: pointer; user-select: none;" title="Klik untuk mengurutkan berdasarkan Tunggakan SPP">
+                            Tunggakan SPP (Rp) <i class="fa-solid fa-sort sort-icon" style="color: #94a3b8; margin-left: 4px;"></i>
+                        </th>
+                        <th class="sortable-th" data-sort-key="non-spp" data-sort-type="number" onclick="sortApprovalTable(this)" style="padding: 10px; width: 180px; cursor: pointer; user-select: none;" title="Klik untuk mengurutkan berdasarkan Tunggakan Non-SPP">
+                            Tunggakan Non-SPP (Rp) <i class="fa-solid fa-sort sort-icon" style="color: #94a3b8; margin-left: 4px;"></i>
+                        </th>
+                        <th class="sortable-th" data-sort-key="total" data-sort-type="number" onclick="sortApprovalTable(this)" style="text-align: right; width: 150px; padding: 10px; cursor: pointer; user-select: none;" title="Klik untuk mengurutkan berdasarkan Jumlah Total Tunggakan">
+                            JUMLAH (Total) <i class="fa-solid fa-sort sort-icon" style="color: #94a3b8; margin-left: 4px;"></i>
+                        </th>
+                        <th class="sortable-th" data-sort-key="schedule" data-sort-type="number" onclick="sortApprovalTable(this)" style="padding: 10px; width: 180px; text-align: center; cursor: pointer; user-select: none;" title="Klik untuk mengurutkan berdasarkan Jadwal Panggilan">
+                            Jadwal Panggilan (FR 8001C) <i class="fa-solid fa-sort sort-icon" style="color: #94a3b8; margin-left: 4px;"></i>
+                        </th>
                         <th style="text-align: center; width: 220px; padding: 10px;">Aksi Kepala Sekolah</th>
                     </tr>
                 </thead>
-                <tbody>
+                <tbody id="tbodyApprovalKs">
                     <?php if (empty($bills)): ?>
                         <tr>
                             <td colspan="7" style="text-align: center; padding: 40px; color: #64748b;">
@@ -121,8 +131,15 @@ $baseUrl = Auth::baseUrl();
                             $stage = $b['pipeline_stage'];
                             $isScheduled = !empty($b['kepsek_schedule_date']);
                         ?>
-                            <tr class="data-row" data-search="<?= strtolower(SecurityHelper::escape($b['student_name'] . ' ' . $b['nis'] . ' ' . ($b['parent_name'] ?? ''))) ?>" style="border-bottom: 1px solid #f1f5f9;">
-                                <td style="text-align: center; color: #64748b; font-size: 0.8125rem; padding: 10px;"><?= $idx + 1 ?></td>
+                            <tr class="data-row"
+                                data-search="<?= strtolower(SecurityHelper::escape($b['student_name'] . ' ' . $b['nis'] . ' ' . ($b['parent_name'] ?? ''))) ?>"
+                                data-student="<?= strtolower(SecurityHelper::escape($b['student_name'])) ?>"
+                                data-spp="<?= (float)$b['amount_spp'] ?>"
+                                data-non-spp="<?= (float)$b['amount_non_spp'] ?>"
+                                data-total="<?= (float)$b['amount'] ?>"
+                                data-schedule="<?= $isScheduled ? (int)strtotime($b['kepsek_schedule_date']) : 0 ?>"
+                                style="border-bottom: 1px solid #f1f5f9;">
+                                <td class="row-no" style="text-align: center; color: #64748b; font-size: 0.8125rem; padding: 10px;"><?= $idx + 1 ?></td>
                                 
                                 <td style="padding: 10px;">
                                     <div style="font-weight: 700; color: #0f172a; font-size: 0.9375rem;">
@@ -607,5 +624,56 @@ function openEmailKepsekModal(btn) {
 }
 function closeEmailKepsekModal() {
     document.getElementById('modalKirimEmailKepsek').style.display = 'none';
+}
+
+let currentSortKey = '';
+let currentSortDir = 'desc';
+function sortApprovalTable(th) {
+    const tbody = document.getElementById('tbodyApprovalKs');
+    if (!tbody) return;
+    const key = th.getAttribute('data-sort-key');
+    const type = th.getAttribute('data-sort-type') || 'text';
+    if (!key) return;
+
+    if (currentSortKey === key) {
+        currentSortDir = (currentSortDir === 'desc') ? 'asc' : 'desc';
+    } else {
+        currentSortKey = key;
+        currentSortDir = (type === 'number') ? 'desc' : 'asc';
+    }
+
+    const rows = Array.from(tbody.querySelectorAll('tr.data-row'));
+    const attrName = 'data-' + key;
+    rows.sort(function(a, b) {
+        const valA = a.getAttribute(attrName) || '';
+        const valB = b.getAttribute(attrName) || '';
+        if (type === 'number') {
+            const numA = parseFloat(valA) || 0;
+            const numB = parseFloat(valB) || 0;
+            return currentSortDir === 'asc' ? (numA - numB) : (numB - numA);
+        }
+        return currentSortDir === 'asc'
+            ? valA.localeCompare(valB, 'id')
+            : valB.localeCompare(valA, 'id');
+    });
+
+    let visibleNo = 1;
+    rows.forEach(function(row) {
+        tbody.appendChild(row);
+        if (row.style.display !== 'none') {
+            const noCell = row.querySelector('.row-no');
+            if (noCell) noCell.innerText = visibleNo++;
+        }
+    });
+
+    document.querySelectorAll('#tableApprovalKs thead th.sortable-th .sort-icon').forEach(function(icon) {
+        icon.className = 'fa-solid fa-sort sort-icon';
+        icon.style.color = '#94a3b8';
+    });
+    const activeIcon = th.querySelector('.sort-icon');
+    if (activeIcon) {
+        activeIcon.className = (currentSortDir === 'asc' ? 'fa-solid fa-sort-up' : 'fa-solid fa-sort-down') + ' sort-icon';
+        activeIcon.style.color = '#0f766e';
+    }
 }
 </script>

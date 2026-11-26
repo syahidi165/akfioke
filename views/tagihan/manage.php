@@ -304,6 +304,9 @@ foreach ($bills as $b) {
                 <button type="button" class="btn btn-primary btn-sm" onclick="submitBulkFR8001B()" style="height: 34px; background: #4338ca; border-color: #4338ca; font-weight: 600; font-size: 0.8125rem;" title="Kirim Email + PDF FR 8001B untuk seluruh baris yang dicentang">
                     <i class="fa-solid fa-paper-plane" style="margin-right: 5px;"></i> Kirim Massal FR 8001B
                 </button>
+                <button type="button" class="btn btn-primary btn-sm" onclick="openBulkEskalasiModal()" style="height: 34px; background: #d97706; border-color: #d97706; font-weight: 600; font-size: 0.8125rem;" title="Eskalasi massal seluruh tagihan tertunggak yang dicentang ke Kepala Sekolah">
+                    <i class="fa-solid fa-arrow-up-right-from-square" style="margin-right: 5px;"></i> Eskalasi Massal ke KS
+                </button>
             </div>
         </div>
 
@@ -582,6 +585,40 @@ foreach ($bills as $b) {
                 <button type="button" class="btn btn-outline" onclick="closeEskalasiModal()">Batal</button>
                 <button type="submit" class="btn btn-primary" style="background: #d97706; border-color: #d97706; font-weight: 600;">
                     <i class="fa-solid fa-paper-plane" style="margin-right: 6px;"></i> Teruskan ke Kepala Sekolah
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Modal Eskalasi Massal ke Kepala Sekolah -->
+<div id="modalBulkEskalasiKepsek" class="modal-backdrop" style="display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.6); z-index: 9999; align-items: center; justify-content: center; backdrop-filter: blur(2px);">
+    <div style="background: #fff; width: 100%; max-width: 500px; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.15); overflow: hidden; margin: 20px;">
+        <div style="background: #fffbeb; border-bottom: 1px solid #fef3c7; padding: 16px 20px; display: flex; justify-content: space-between; align-items: center;">
+            <h4 style="margin: 0; font-size: 1rem; font-weight: 700; color: #b45309; display: flex; align-items: center; gap: 8px;">
+                <i class="fa-solid fa-arrow-up-right-from-square"></i> Eskalasi Massal Penagihan ke Kepala Sekolah
+            </h4>
+            <button type="button" onclick="closeBulkEskalasiModal()" style="background: none; border: none; font-size: 1.25rem; cursor: pointer; color: #94a3b8;">&times;</button>
+        </div>
+        <form id="formBulkEskalasiKepsek" action="<?= $baseUrl ?>/tagihan/bulk-eskalasi-kepsek" method="POST">
+            <?= CSRF::field() ?>
+            <div id="bulkEskalasiInputs"></div>
+            <div style="padding: 20px;">
+                <p style="font-size: 0.875rem; color: #334155; margin-top: 0; line-height: 1.5;">
+                    Seluruh tagihan tertunggak yang dicentang akan diteruskan secara massal ke menu penagihan Kepala Sekolah untuk pemanggilan resmi orang tua (FR 8001C).
+                </p>
+                <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 10px 14px; margin-bottom: 14px; font-size: 0.875rem;">
+                    Jumlah Tagihan Terpilih: <strong id="bulkEskalasiCount" style="color: #b45309;">0</strong> santri
+                </div>
+                <div class="form-group">
+                    <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Catatan Rekomendasi TU (Opsional)</label>
+                    <textarea name="escalation_notes" id="bulkEskalasiNotes" class="form-control" rows="3" style="font-size: 0.8125rem;">Orang tua belum merespons pesan reminder TU, diajukan untuk pemanggilan Kepala Sekolah (eskalasi massal).</textarea>
+                </div>
+            </div>
+            <div style="background: #f8fafc; border-top: 1px solid #e2e8f0; padding: 12px 20px; display: flex; justify-content: flex-end; gap: 10px;">
+                <button type="button" class="btn btn-outline" onclick="closeBulkEskalasiModal()">Batal</button>
+                <button type="submit" class="btn btn-primary" style="background: #d97706; border-color: #d97706; font-weight: 600;">
+                    <i class="fa-solid fa-paper-plane" style="margin-right: 6px;"></i> Teruskan Massal ke Kepala Sekolah
                 </button>
             </div>
         </form>
@@ -986,6 +1023,35 @@ function submitBulkFR8001B() {
         container.appendChild(inp);
     });
     document.getElementById('formBulkFR8001B').submit();
+}
+
+function openBulkEskalasiModal() {
+    const selected = [];
+    document.querySelectorAll('.bill-row').forEach(function(row) {
+        if (row.style.display !== 'none') {
+            const cb = row.querySelector('.bill-cb');
+            if (cb && cb.checked) selected.push(cb.value);
+        }
+    });
+    if (selected.length === 0) {
+        alert('Centang minimal satu tagihan tertunggak pada tabel terlebih dahulu untuk melakukan eskalasi massal ke Kepala Sekolah.');
+        return;
+    }
+    const container = document.getElementById('bulkEskalasiInputs');
+    container.innerHTML = '';
+    selected.forEach(function(id) {
+        const inp = document.createElement('input');
+        inp.type = 'hidden';
+        inp.name = 'bill_ids[]';
+        inp.value = id;
+        container.appendChild(inp);
+    });
+    document.getElementById('bulkEskalasiCount').innerText = selected.length;
+    document.getElementById('modalBulkEskalasiKepsek').style.display = 'flex';
+}
+
+function closeBulkEskalasiModal() {
+    document.getElementById('modalBulkEskalasiKepsek').style.display = 'none';
 }
 
 function openUploadSignedModal(billId, studentName) {

@@ -1627,37 +1627,86 @@ class TagihanController extends Controller {
     public function bulkEscalateToKepsek(): void {
         $this->requireRole('tata_usaha');
         $unitId = Auth::unitId();
-        $billIds = $_POST['bill_ids'] ?? [];
+        $rawBillIds = $_POST['bill_ids'] ?? [];
+        $notes = trim((string)($_POST['escalation_notes'] ?? ''));
+        if ($notes === '') {
+            $notes = 'Orang tua belum merespons pengingat TU, diajukan pemanggilan Kepala Sekolah (eskalasi massal).';
+        }
 
-        if (empty($billIds) || !is_array($billIds)) {
-            $this->setFlash('warning', 'Pilih minimal satu tagihan untuk diajukan ke Kepala Sekolah.');
+        $billIds = [];
+        if (is_array($rawBillIds)) {
+            $billIds = array_values(array_unique(array_filter(array_map('intval', $rawBillIds), static function ($id) {
+                return $id > 0;
+            })));
+        }
+
+        if (empty($billIds)) {
+            $this->setFlash('warning', 'Pilih minimal satu tagihan tertunggak pada tabel untuk dieskalasikan ke Kepala Sekolah.');
             $this->redirect(Auth::baseUrl() . '/tagihan/manage');
             return;
         }
 
-        $count = 0;
-        foreach ($billIds as $bId) {
-            $billId = (int)$bId;
-            Database::execute(
-                "UPDATE bills SET pipeline_stage = 'escalated_kepsek' WHERE id = ? AND unit_id = ? AND status = 'Tertunggak'",
+        $blockedStages = ['escalated_deputi', 'deputi_summon_sent', 'selesai_tu', 'selesai_kepsek', 'selesai_deputi'];
+        $escalatedIds = [];
+        $skippedCount = 0;
+
+        foreach ($billIds as $billId) {
+            $row = Database::fetch(
+                "SELECT id, pipeline_stage FROM bills WHERE id = ? AND unit_id = ? AND status = 'Tertunggak'",
                 [$billId, $unitId]
             );
-            $count++;
+            if (!$row || in_array((string)($row['pipeline_stage'] ?? ''), $blockedStages, true)) {
+                $skippedCount++;
+                continue;
+            }
+
+            Database::execute(
+                "UPDATE bills
+                 SET pipeline_stage = 'escalated_kepsek',
+                     notes = CONCAT(COALESCE(notes, ''), '\n[Eskalasi Massal ke KS]: ', ?)
+                 WHERE id = ? AND unit_id = ? AND status = 'Tertunggak'",
+                [$notes, $billId, $unitId]
+            );
+            $escalatedIds[] = $billId;
         }
 
+        $count = count($escalatedIds);
         if ($count > 0) {
             $kepsek = Database::fetch(
-                "SELECT u.id FROM users u 
-                 JOIN user_roles ur ON u.id = ur.user_id 
-                 JOIN roles r ON ur.role_id = r.id 
-                 JOIN employees e ON u.id = e.user_id 
-                 WHERE r.name = 'kepala_sekolah' AND e.unit_id = ? LIMIT 1",
-                [$unitId]
+                "SELECT u.id FROM users u
+                 JOIN user_roles ur ON u.id = ur.user_id
+                 JOIN roles r ON ur.role_id = r.id
+                 JOIN employees e ON u.id = e.user_id
+                 WHERE r.name = 'kepala_sekolah'
+                   AND (e.unit_id = ? OR ur.unit_id = ?)
+                 ORDER BY CASE WHEN e.unit_id = ? THEN 0 ELSE 1 END, ur.is_primary DESC, u.id ASC
+                 LIMIT 1",
+                [$unitId, $unitId, $unitId]
             );
             if ($kepsek) {
-                Notification::send((int)$kepsek['id'], 'Pengajuan Masal Penagihan dari TU', "TU telah mengajukan {$count} tagihan untuk ditindaklanjuti dengan pemanggilan orang tua.", 'warning', '/tagihan/approval');
+                Notification::send(
+                    (int)$kepsek['id'],
+                    'Pengajuan Massal Penagihan dari TU (FR 8001C)',
+                    "TU telah mengajukan {$count} tagihan tertunggak untuk ditindaklanjuti pemanggilan orang tua oleh Kepala Sekolah.",
+                    'warning',
+                    '/tagihan/approval'
+                );
             }
-            $this->setFlash('success', "Berhasil mengajukan {$count} tagihan ke Kepala Sekolah.");
+
+            AuditLog::log('BULK_ESCALATE_TO_KEPSEK', 'bills', $unitId, null, [
+                'count'    => $count,
+                'bill_ids' => $escalatedIds,
+                'skipped'  => $skippedCount,
+                'notes'    => $notes
+            ]);
+
+            $msg = "Berhasil mengajukan {$count} tagihan secara massal ke Kepala Sekolah (FR 8001C).";
+            if ($skippedCount > 0) {
+                $msg .= " ({$skippedCount} baris dilewati karena sudah Lunas / di tahap Yayasan).";
+            }
+            $this->setFlash('success', $msg);
+        } else {
+            $this->setFlash('warning', 'Tidak ada tagihan yang dapat dieskalasikan (pastikan status masih Tertunggak dan belum selesai/dieskalasikan ke Yayasan).');
         }
 
         $this->redirect(Auth::baseUrl() . '/tagihan/manage');
