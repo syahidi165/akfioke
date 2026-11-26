@@ -366,14 +366,13 @@ class NilaiBulananController extends Controller {
         $student = Database::fetch(
             "SELECT s.*, c.name as class_name, c.id as class_id, u.name as unit_name, 
                     u.kop_title, u.kop_subtitle, u.address, u.phone, u.email,
-                    ay.name as academic_year_name, COALESCE(w1.nama, w2.nama) as walas_name 
+                    ay.name as academic_year_name, w1.nama as walas_name 
              FROM students s 
              JOIN units u ON s.unit_id = u.id 
              JOIN class_students cs ON s.id = cs.student_id AND cs.status = 'Aktif' AND cs.academic_year_id = ?
              JOIN classes c ON cs.class_id = c.id 
              JOIN academic_years ay ON cs.academic_year_id = ay.id 
              LEFT JOIN employees w1 ON c.walas_id = w1.id AND w1.is_deleted = 0
-             LEFT JOIN employees w2 ON c.walas_id = w2.user_id AND w2.is_deleted = 0
              WHERE s.id = ?
              ORDER BY cs.id DESC LIMIT 1",
             [$taId, $studentId]
@@ -382,14 +381,13 @@ class NilaiBulananController extends Controller {
             $student = Database::fetch(
                 "SELECT s.*, c.name as class_name, c.id as class_id, u.name as unit_name, 
                         u.kop_title, u.kop_subtitle, u.address, u.phone, u.email,
-                        ay.name as academic_year_name, COALESCE(w1.nama, w2.nama) as walas_name 
+                        ay.name as academic_year_name, w1.nama as walas_name 
                  FROM students s 
                  JOIN units u ON s.unit_id = u.id 
                  JOIN class_students cs ON s.id = cs.student_id AND cs.status = 'Aktif' 
                  JOIN classes c ON cs.class_id = c.id 
                  JOIN academic_years ay ON cs.academic_year_id = ay.id 
                  LEFT JOIN employees w1 ON c.walas_id = w1.id AND w1.is_deleted = 0
-                 LEFT JOIN employees w2 ON c.walas_id = w2.user_id AND w2.is_deleted = 0
                  WHERE s.id = ?
                  ORDER BY cs.academic_year_id DESC, cs.id DESC LIMIT 1",
                 [$studentId]
@@ -531,14 +529,13 @@ class NilaiBulananController extends Controller {
         $student = Database::fetch(
             "SELECT s.*, c.name as class_name, c.id as class_id, u.name as unit_name, 
                     u.kop_title, u.kop_subtitle, u.address, u.phone, u.email,
-                    ay.name as academic_year_name, COALESCE(w1.nama, w2.nama) as walas_name 
+                    ay.name as academic_year_name, w1.nama as walas_name 
              FROM students s 
              JOIN units u ON s.unit_id = u.id 
              JOIN class_students cs ON s.id = cs.student_id AND cs.status = 'Aktif' AND cs.academic_year_id = ?
              JOIN classes c ON cs.class_id = c.id 
              JOIN academic_years ay ON cs.academic_year_id = ay.id 
              LEFT JOIN employees w1 ON c.walas_id = w1.id AND w1.is_deleted = 0
-             LEFT JOIN employees w2 ON c.walas_id = w2.user_id AND w2.is_deleted = 0
              WHERE s.id = ?
              ORDER BY cs.id DESC LIMIT 1",
             [$taId, $studentId]
@@ -547,14 +544,13 @@ class NilaiBulananController extends Controller {
             $student = Database::fetch(
                 "SELECT s.*, c.name as class_name, c.id as class_id, u.name as unit_name, 
                         u.kop_title, u.kop_subtitle, u.address, u.phone, u.email,
-                        ay.name as academic_year_name, COALESCE(w1.nama, w2.nama) as walas_name 
+                        ay.name as academic_year_name, w1.nama as walas_name 
                  FROM students s 
                  JOIN units u ON s.unit_id = u.id 
                  JOIN class_students cs ON s.id = cs.student_id AND cs.status = 'Aktif' 
                  JOIN classes c ON cs.class_id = c.id 
                  JOIN academic_years ay ON cs.academic_year_id = ay.id 
                  LEFT JOIN employees w1 ON c.walas_id = w1.id AND w1.is_deleted = 0
-                 LEFT JOIN employees w2 ON c.walas_id = w2.user_id AND w2.is_deleted = 0
                  WHERE s.id = ?
                  ORDER BY cs.academic_year_id DESC, cs.id DESC LIMIT 1",
                 [$studentId]

@@ -2413,8 +2413,8 @@ class AkfiController extends Controller {
         // 7. Presensi Kehadiran Siswa di Kelas Walas / KBM / Halaqah Tahfidz pada unit rapor ini (student_attendance)
         $isTahfidzTutor = ($positionCode === 'GURU_TAHTA' || str_contains($positionCode, 'TAHFIDZ') || str_contains($emp['level_posisi'] ?? '', 'Tahfidz') || str_contains($emp['position'] ?? '', 'Tahfidz'));
         $tahfidzHalaqahs = Database::fetchAll(
-            "SELECT id, name FROM tahfidz_halaqah WHERE (tutor_employee_id = ? OR tutor_employee_id = ?) AND academic_year_id = ? AND unit_id = ? AND type = 'Siswa'",
-            [$empId, $empUserId, $taId, $unitId]
+            "SELECT id, name FROM tahfidz_halaqah WHERE tutor_employee_id = ? AND academic_year_id = ? AND unit_id = ? AND type = 'Siswa'",
+            [$empId, $taId, $unitId]
         );
 
         $studentAttendance = 0.0;
@@ -2501,8 +2501,8 @@ class AkfiController extends Controller {
         } else {
             // Wali Kelas atau Guru Mapel Umum pada unit rapor ini
             $walasClasses = Database::fetchAll(
-                "SELECT id, name FROM classes WHERE (walas_id = ? OR walas_employee_id = ? OR walas_id = ?) AND academic_year_id = ? AND unit_id = ?",
-                [$empId, $empId, $empUserId, $taId, $unitId]
+                "SELECT id, name FROM classes WHERE walas_id = ? AND academic_year_id = ? AND unit_id = ?",
+                [$empId, $taId, $unitId]
             );
 
             if (!empty($walasClasses)) {

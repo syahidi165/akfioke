@@ -189,21 +189,32 @@ class AbsensiController extends Controller {
         $selectedHalaqahId = 0;
 
         if ($isTahfidzOnly) {
-            $halaqahList = Database::fetchAll(
-                "SELECT * FROM tahfidz_halaqah
-                 WHERE unit_id = ? AND academic_year_id = ? AND type = 'Siswa'
-                   AND (tutor_employee_id = ? OR tutor_employee_id = ?)
-                 ORDER BY name ASC",
-                [$unitId, $taId, $empId, Auth::id()]
-            );
-            $selectedHalaqahId = (int)($_GET['halaqah_id'] ?? ($halaqahList[0]['id'] ?? 0));
+            $halaqahList = ($empId > 0)
+                ? Database::fetchAll(
+                    "SELECT * FROM tahfidz_halaqah
+                     WHERE unit_id = ? AND academic_year_id = ? AND type = 'Siswa'
+                       AND tutor_employee_id = ?
+                     ORDER BY name ASC",
+                    [$unitId, $taId, $empId]
+                )
+                : [];
+            $allowedHalaqahIds = array_map('intval', array_column($halaqahList, 'id'));
+            $reqHalaqahId = (int)($_GET['halaqah_id'] ?? 0);
+            $selectedHalaqahId = ($reqHalaqahId > 0 && in_array($reqHalaqahId, $allowedHalaqahIds, true))
+                ? $reqHalaqahId
+                : (int)($halaqahList[0]['id'] ?? 0);
         } else {
             if ($isWalasOnly) {
                 $classes = Auth::walasClasses($unitId, $taId);
+                $allowedClassIds = array_map('intval', array_column($classes, 'id'));
+                $reqClassId = (int)($_GET['class_id'] ?? 0);
+                $selectedClassId = ($reqClassId > 0 && in_array($reqClassId, $allowedClassIds, true))
+                    ? $reqClassId
+                    : (int)($classes[0]['id'] ?? 0);
             } else {
                 $classes = Database::fetchAll("SELECT * FROM classes WHERE unit_id = ? AND academic_year_id = ? ORDER BY name ASC", [$unitId, $taId]);
+                $selectedClassId = (int)($_GET['class_id'] ?? ($classes[0]['id'] ?? 0));
             }
-            $selectedClassId = (int)($_GET['class_id'] ?? ($classes[0]['id'] ?? 0));
         }
 
         $monthNum = (int)($_GET['month_num'] ?? date('n'));
@@ -332,6 +343,29 @@ class AbsensiController extends Controller {
         $taId = Auth::academicYearId();
         $unitId = Auth::unitId();
         $userId = Auth::id();
+        $activeRole = Auth::activeRoleName();
+
+        if ($activeRole === 'walas') {
+            if ($classId <= 0 || !Auth::isWalasOfClass($classId, $taId)) {
+                $this->setFlash('danger', 'Akses ditolak: Anda belum ditugaskan sebagai Wali Kelas pada rombel tersebut.');
+                $this->redirect(Auth::baseUrl() . '/attendance/students');
+                return;
+            }
+        } elseif ($activeRole === 'guru_tahfidz') {
+            $empId = (int)(Auth::employeeId() ?? 0);
+            $ownedHalaqah = ($empId > 0 && $halaqahId > 0)
+                ? Database::fetch(
+                    "SELECT id FROM tahfidz_halaqah
+                     WHERE id = ? AND tutor_employee_id = ? AND unit_id = ? AND academic_year_id = ? AND type = 'Siswa'",
+                    [$halaqahId, $empId, $unitId, $taId]
+                )
+                : null;
+            if (!$ownedHalaqah) {
+                $this->setFlash('danger', 'Akses ditolak: Anda belum ditugaskan sebagai Tutor pada halaqah tersebut.');
+                $this->redirect(Auth::baseUrl() . '/attendance/students');
+                return;
+            }
+        }
 
         foreach ($attData as $sId => $row) {
             $studentClassId = (int)($row['class_id'] ?? $classId);

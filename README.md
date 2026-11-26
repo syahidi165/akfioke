@@ -1,7 +1,7 @@
 # MASEKO / AKFIOKE — Sistem Manajemen Sekolah Terpadu & Penilaian Kinerja (AKFI)
 ### Yayasan Islam Al Kahfi Batam
 
-> *Terakhir diperbarui: 26 November 2026 (Sinkronisasi codebase hingga Penyeragaman Query Penugasan Walas/Guru & Normalisasi ID, Dashboard Deputi Tunggakan Binaan SPP/Non-SPP, Rapor AKFI Lintas Unit Rata-Rata Live, TTD Digital Form Penagihan, & Eskalasi Massal TU ke KS)*
+> *Terakhir diperbarui: 26 November 2026 (Sinkronisasi codebase hingga Penghapusan Fallback users.id Anti-Bentrok ID pada Query Walas/Tutor/AKFI, Penyeragaman Query Penugasan Walas/Guru & Normalisasi ID, Dashboard Deputi Tunggakan Binaan SPP/Non-SPP, Rapor AKFI Lintas Unit Rata-Rata Live, TTD Digital Form Penagihan, & Eskalasi Massal TU ke KS)*
 
 Aplikasi web enterprise yang dikembangkan khusus untuk **Yayasan Islam Al Kahfi Batam** menggunakan **PHP 8.x Native + MariaDB/MySQL**, dirancang responsif dengan orientasi **Sidebar**, dukungan **Progressive Web App (PWA)**, multi-role switcher, **Delegasi Izin Switch Akun**, filter **Tahun Ajaran & Semester (Opsi B: 1 TA = 2 Semester Juli–Juni)** global, penyimpanan multi-tier (**Hot & Cold Storage NAS**), serta berjalan secara **offline-ready** tanpa ketergantungan CDN eksternal.
 
@@ -84,7 +84,7 @@ Aplikasi web enterprise yang dikembangkan khusus untuk **Yayasan Islam Al Kahfi 
 
 ### 8. Modul Supervisi Kelas & Nilai Bulanan / Ledger
 - **Supervisi Kelas:** Jadwal supervisi oleh Waka Kurikulum $\rightarrow$ penilaian oleh Guru Supervisor mencakup Bagian A (Administrasi), B (Pendahuluan), C (Kegiatan Inti, dengan validasi aturan khusus **Indikator 12**), dan D (Penutup) + cetak PDF instrumen.
-- **Nilai Bulanan & Ledger:** Input nilai manual/impor Excel oleh Guru Mapel, rekap Ledger Nilai Kelas oleh Wali Kelas (ekspor Excel/PDF), serta cetak Rapor Bulanan dan Rapor Gabungan Santri.
+- **Nilai Bulanan & Ledger:** Input nilai manual/impor Excel oleh Guru Mapel, rekap Ledger Nilai Kelas oleh Wali Kelas (ekspor Excel/PDF), serta cetak Rapor Bulanan dan Rapor Gabungan Santri. Pencocokan kepemilikan rombel Wali Kelas (`Auth::walasClasses()`, `Auth::isWalasOfClass()`) dan Halaqah Guru Tahfidz menggunakan pencocokan ketat `employees.id` (tanpa *fallback* `users.id`) serta validasi kepemilikan kelas/halaqah saat tampil dan simpan presensi santri (`AbsensiController`), sehingga guru/walas lintas unit tanpa penugasan kelas tidak tertukar dengan kelas guru lain.
 
 ### 9. Modul Keuangan, Tagihan SPP Multi-Tahap & Buku Cicilan
 - **Input, Format & Sortir Tagihan (`FR 8001A`, `/tagihan/manage`, `/tagihan/template`):** Mendukung urutan kolom biaya baku templat `FR 8001A` (`Buku Paket`, `Gedung`, `Kegiatan Siswa`, `Komite`, `Peningkatan Mutu`, `Seragam`, `SPP`, `Uang Ujian`, `Tunggakan Tahun Lalu`) maupun item kustom dinamis, filter tab/pill **Per Kelas** beserta kolom **Kelas**, urutan alfabetis **A–Z per kelas**, filter **Sembunyikan Lunas**, pencarian siswa by Nama/NIS, indikator status email orang tua, perbaikan sinkronisasi gender (`L/P`) pada templat Excel, serta tombol **Backup Offline (.xlsx)** (`/tagihan/backup-offline`) 3 sheet (Tagihan, Buku Cicilan, Riwayat Pembayaran).

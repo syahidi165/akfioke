@@ -85,9 +85,9 @@ class ProfileController extends Controller {
                 "SELECT c.*, ay.name as academic_year_name, ay.semester
                  FROM classes c
                  JOIN academic_years ay ON c.academic_year_id = ay.id
-                 WHERE (c.walas_id = ? OR c.walas_employee_id = ?)
+                 WHERE c.walas_id = ?
                  ORDER BY ay.id DESC, c.name ASC",
-                [$empId, $empId]
+                [$empId]
             );
         }
 

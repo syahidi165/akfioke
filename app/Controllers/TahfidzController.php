@@ -41,30 +41,33 @@ class TahfidzController extends Controller {
         self::ensureTahsinColumns();
         $unitId = Auth::unitId();
         $taId = Auth::academicYearId();
-        $userId = Auth::id();
 
-        // Cari halaqah yang diampu guru saat ini (unit-scoped & mendukung fallback user_id -> emp_id)
+        // Cari halaqah yang diampu guru saat ini (ketat menggunakan employees.id agar bebas bentrok ID)
         $empId = (int)(Auth::employeeId() ?? 0);
         $activeRole = Auth::activeRoleName();
 
         if ($activeRole === 'guru_tahfidz') {
-            $halaqahList = Database::fetchAll(
-                "SELECT * FROM tahfidz_halaqah
-                 WHERE unit_id = ? AND academic_year_id = ? AND type = 'Siswa'
-                   AND (tutor_employee_id = ? OR tutor_employee_id = ?)
-                 ORDER BY name ASC",
-                [$unitId, $taId, $empId, $userId]
-            );
+            $halaqahList = ($empId > 0)
+                ? Database::fetchAll(
+                    "SELECT * FROM tahfidz_halaqah
+                     WHERE unit_id = ? AND academic_year_id = ? AND type = 'Siswa'
+                       AND tutor_employee_id = ?
+                     ORDER BY name ASC",
+                    [$unitId, $taId, $empId]
+                )
+                : [];
             $currentHalaqah = $halaqahList[0] ?? null;
         } else {
             $halaqahList = Database::fetchAll("SELECT * FROM tahfidz_halaqah WHERE unit_id = ? AND academic_year_id = ? AND type = 'Siswa' ORDER BY name ASC", [$unitId, $taId]);
-            $currentHalaqah = Database::fetch(
-                "SELECT * FROM tahfidz_halaqah
-                 WHERE unit_id = ? AND academic_year_id = ? AND type = 'Siswa'
-                   AND (tutor_employee_id = ? OR tutor_employee_id = ?)
-                 LIMIT 1",
-                [$unitId, $taId, $empId, $userId]
-            ) ?: ($halaqahList[0] ?? null);
+            $currentHalaqah = ($empId > 0)
+                ? (Database::fetch(
+                    "SELECT * FROM tahfidz_halaqah
+                     WHERE unit_id = ? AND academic_year_id = ? AND type = 'Siswa'
+                       AND tutor_employee_id = ?
+                     LIMIT 1",
+                    [$unitId, $taId, $empId]
+                ) ?: ($halaqahList[0] ?? null))
+                : ($halaqahList[0] ?? null);
         }
 
         $students = [];
@@ -280,20 +283,21 @@ class TahfidzController extends Controller {
         $this->requireRole(['guru_tahfidz', 'tutor_siswa', 'koor_tahfidz', 'walas', 'kepala_sekolah']);
         $unitId = Auth::unitId();
         $taId = Auth::academicYearId();
-        $userId = Auth::id();
         $activeRole = Auth::activeRoleName();
 
         // Cari data pegawai guru ini (aktif, tidak terhapus)
         $empId = (int)(Auth::employeeId() ?? 0);
 
-        // Ambil halaqah santri yang diampu guru ini pada unit & tahun ajaran aktif (type = 'Siswa')
-        $myHalaqahs = Database::fetchAll(
-            "SELECT * FROM tahfidz_halaqah
-             WHERE unit_id = ? AND academic_year_id = ? AND type = 'Siswa'
-               AND (tutor_employee_id = ? OR tutor_employee_id = ?)
-             ORDER BY name ASC",
-            [$unitId, $taId, $empId, $userId]
-        );
+        // Ambil halaqah santri yang diampu guru ini pada unit & tahun ajaran aktif (type = 'Siswa', ketat via employees.id)
+        $myHalaqahs = ($empId > 0)
+            ? Database::fetchAll(
+                "SELECT * FROM tahfidz_halaqah
+                 WHERE unit_id = ? AND academic_year_id = ? AND type = 'Siswa'
+                   AND tutor_employee_id = ?
+                 ORDER BY name ASC",
+                [$unitId, $taId, $empId]
+            )
+            : [];
         $myHalaqahIds = array_column($myHalaqahs, 'id');
 
         // Batasi hanya halaqah ustadz bersangkutan jika login sebagai guru_tahfidz atau non-koor/pimpinan
@@ -391,18 +395,20 @@ class TahfidzController extends Controller {
             return;
         }
 
-        // Validasi kepemilikan halaqah untuk guru tahfidz
+        // Validasi kepemilikan halaqah untuk guru tahfidz (ketat via employees.id)
         $isGuruTahfidz = ($activeRole === 'guru_tahfidz' || !Auth::hasAnyRole(['koor_tahfidz', 'kepala_sekolah', 'operator_sekolah', 'operator_yayasan']));
         if ($isGuruTahfidz) {
             $empId = (int)(Auth::employeeId() ?? 0);
 
-            $isMember = Database::fetch(
-                "SELECT 1 FROM tahfidz_halaqah_members hm 
-                 JOIN tahfidz_halaqah h ON hm.halaqah_id = h.id 
-                 WHERE hm.student_id = ? AND h.unit_id = ? AND h.academic_year_id = ? AND h.type = 'Siswa'
-                   AND (h.tutor_employee_id = ? OR h.tutor_employee_id = ?)",
-                [$studentId, $unitId, $taId, $empId, $userId]
-            );
+            $isMember = ($empId > 0)
+                ? Database::fetch(
+                    "SELECT 1 FROM tahfidz_halaqah_members hm 
+                     JOIN tahfidz_halaqah h ON hm.halaqah_id = h.id 
+                     WHERE hm.student_id = ? AND h.unit_id = ? AND h.academic_year_id = ? AND h.type = 'Siswa'
+                       AND h.tutor_employee_id = ?",
+                    [$studentId, $unitId, $taId, $empId]
+                )
+                : null;
 
             if (!$isMember) {
                 $this->setFlash('danger', 'Santri yang diajukan harus berasal dari kelompok halaqah binaan Anda.');
