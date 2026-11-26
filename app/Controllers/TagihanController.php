@@ -2331,10 +2331,12 @@ class TagihanController extends Controller {
 
         $signedFiles = $this->handleSignedUploads($billId, 'kepala_sekolah');
         $setSigned = "";
+        $signedParams = [];
         if (!empty($signedFiles)) {
             $setParts = [];
             foreach ($signedFiles as $col => $val) {
-                $setParts[] = "$col = " . Database::pdo()->quote($val);
+                $setParts[] = "{$col} = ?";
+                $signedParams[] = $val;
             }
             $setParts[] = "signed_uploaded_at = NOW()";
             $setParts[] = "signed_uploaded_by_level = 'kepala_sekolah'";
@@ -2348,7 +2350,7 @@ class TagihanController extends Controller {
                  pipeline_resolved_level = 'kepala_sekolah'
                  {$setSigned}
              WHERE id = ? AND unit_id = ?",
-            [$billId, $unitId]
+            array_merge($signedParams, [$billId, $unitId])
         );
 
         AuditLog::log('MARK_RESOLVED_KEPSEK', 'bills', $billId, null, [
@@ -2368,10 +2370,12 @@ class TagihanController extends Controller {
 
         $signedFiles = $this->handleSignedUploads($billId, 'kepala_sekolah');
         $setSigned = "";
+        $signedParams = [];
         if (!empty($signedFiles)) {
             $setParts = [];
             foreach ($signedFiles as $col => $val) {
-                $setParts[] = "$col = " . Database::pdo()->quote($val);
+                $setParts[] = "{$col} = ?";
+                $signedParams[] = $val;
             }
             $setParts[] = "signed_uploaded_at = NOW()";
             $setParts[] = "signed_uploaded_by_level = 'kepala_sekolah'";
@@ -2384,7 +2388,7 @@ class TagihanController extends Controller {
                  notes = CONCAT(COALESCE(notes, ''), '\n[Eskalasi ke Yayasan/Deputi]: ', ?)
                  {$setSigned}
              WHERE id = ? AND unit_id = ?",
-            [$notes, $billId, $unitId]
+            array_merge([$notes], $signedParams, [$billId, $unitId])
         );
 
         // Notifikasi ke Deputi Direktur Pendidikan
@@ -2551,10 +2555,12 @@ class TagihanController extends Controller {
 
         $signedFiles = $this->handleSignedUploads($billId, 'deputi_pendidikan');
         $setSigned = "";
+        $signedParams = [];
         if (!empty($signedFiles)) {
             $setParts = [];
             foreach ($signedFiles as $col => $val) {
-                $setParts[] = "$col = " . Database::pdo()->quote($val);
+                $setParts[] = "{$col} = ?";
+                $signedParams[] = $val;
             }
             $setParts[] = "signed_uploaded_at = NOW()";
             $setParts[] = "signed_uploaded_by_level = 'deputi_pendidikan'";
@@ -2568,7 +2574,7 @@ class TagihanController extends Controller {
                  pipeline_resolved_level = 'deputi_pendidikan'
                  {$setSigned}
              WHERE id = ?",
-            [$billId]
+            array_merge($signedParams, [$billId])
         );
 
         AuditLog::log('MARK_RESOLVED_DEPUTI', 'bills', $billId, null, [
