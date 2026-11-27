@@ -1920,6 +1920,11 @@ class TagihanController extends Controller {
         $billId = (int)($_POST['bill_id'] ?? 0);
         $role = Auth::activeRoleName();
         $unitId = Auth::unitId();
+        $fallbackRedirect = ($role === 'deputi_pendidikan')
+            ? (Auth::baseUrl() . '/tagihan/eskalasi-deputi')
+            : (($role === 'kepala_sekolah')
+                ? (Auth::baseUrl() . '/tagihan/approval')
+                : (Auth::baseUrl() . '/tagihan/manage'));
 
         $bill = ($role === 'deputi_pendidikan')
             ? Database::fetch("SELECT id, unit_id FROM bills WHERE id = ?", [$billId])
@@ -1927,14 +1932,17 @@ class TagihanController extends Controller {
 
         if (!$bill) {
             $this->setFlash('danger', 'Data tagihan tidak ditemukan atau bukan milik unit Anda.');
-            $this->redirect($_SERVER['HTTP_REFERER'] ?? (Auth::baseUrl() . '/tagihan/manage'));
+            $this->redirect($_SERVER['HTTP_REFERER'] ?? $fallbackRedirect);
             return;
+        }
+        if ($role === 'deputi_pendidikan') {
+            $this->assertUnitOwnership('bills', $billId, 'unit_id');
         }
 
         $signedFiles = $this->handleSignedUploads($billId, $role);
         if (empty($signedFiles)) {
             $this->setFlash('warning', 'Harap pilih file PDF/JPG/PNG untuk FR 8001C atau FR 8001D sebelum menyimpan.');
-            $this->redirect($_SERVER['HTTP_REFERER'] ?? (Auth::baseUrl() . '/tagihan/manage'));
+            $this->redirect($_SERVER['HTTP_REFERER'] ?? $fallbackRedirect);
             return;
         }
 
@@ -1957,7 +1965,7 @@ class TagihanController extends Controller {
         ]);
 
         $this->setFlash('success', 'Dokumen perjanjian/pemanggilan bertanda tangan orang tua berhasil diunggah & tersimpan.');
-        $this->redirect($_SERVER['HTTP_REFERER'] ?? (Auth::baseUrl() . '/tagihan/manage'));
+        $this->redirect($_SERVER['HTTP_REFERER'] ?? $fallbackRedirect);
     }
 
     public function approvalList(): void {

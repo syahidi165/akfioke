@@ -227,9 +227,13 @@ $baseUrl = Auth::baseUrl();
                                             <i class="fa-solid fa-handshake"></i> Kesepakatan
                                         </button>
 
-                                        <!-- Mark Selesai Deputi dengan Opsi Upload Form TTD -->
-                                        <button type="button" class="btn btn-outline btn-sm" style="padding: 4px 8px; font-size: 0.75rem; color: #16a34a; border-color: #16a34a;" onclick="openSelesaiDeputiModal(<?= $b['id'] ?>, '<?= SecurityHelper::escape($b['student_name']) ?>')" title="Tandai Selesai di Deputi & Upload Berkas TTD (Opsional)">
-                                            <i class="fa-solid fa-check"></i> Selesai
+                                        <!-- Upload Berkas TTD Orang Tua FR 8001C / FR 8001D (Penyelesaian dilakukan oleh TU) -->
+                                        <button type="button" class="btn btn-outline btn-sm" style="padding: 4px 8px; font-size: 0.75rem; color: #0284c7; border-color: #0284c7;"
+                                                data-bill-id="<?= (int)$b['id'] ?>"
+                                                data-student-name="<?= SecurityHelper::escape($b['student_name']) ?>"
+                                                onclick="openUploadBerkasDeputiModal(this)"
+                                                title="Upload Berkas Scan TTD Orang Tua (FR 8001C / FR 8001D)">
+                                            <i class="fa-solid fa-cloud-arrow-up"></i> Upload Berkas
                                         </button>
 
                                     </div>
@@ -385,26 +389,26 @@ $baseUrl = Auth::baseUrl();
     </div>
 </div>
 
-<!-- Modal Selesai di Deputi (Opsi Upload Dokumen TTD FR 8001C & D) -->
-<div id="modalSelesaiDeputi" class="modal-backdrop" style="display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.6); z-index: 9999; align-items: center; justify-content: center; backdrop-filter: blur(2px);">
+<!-- Modal Upload Berkas TTD di Deputi (Tanpa Menandai Selesai Tagihan) -->
+<div id="modalUploadBerkasDeputi" class="modal-backdrop" style="display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.6); z-index: 9999; align-items: center; justify-content: center; backdrop-filter: blur(2px);">
     <div style="background: #fff; width: 100%; max-width: 500px; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.15); overflow: hidden; margin: 20px;">
-        <div style="background: #f0fdf4; border-bottom: 1px solid #bbf7d0; padding: 16px 20px; display: flex; justify-content: space-between; align-items: center;">
-            <h4 style="margin: 0; font-size: 1rem; font-weight: 700; color: #15803d; display: flex; align-items: center; gap: 8px;">
-                <i class="fa-solid fa-circle-check"></i> Konfirmasi Selesai Penagihan (Tingkat Yayasan)
+        <div style="background: #f0f9ff; border-bottom: 1px solid #bae6fd; padding: 16px 20px; display: flex; justify-content: space-between; align-items: center;">
+            <h4 style="margin: 0; font-size: 1rem; font-weight: 700; color: #0369a1; display: flex; align-items: center; gap: 8px;">
+                <i class="fa-solid fa-cloud-arrow-up"></i> Upload Berkas TTD Penagihan (Tingkat Yayasan)
             </h4>
-            <button type="button" onclick="closeSelesaiDeputiModal()" style="background: none; border: none; font-size: 1.25rem; cursor: pointer; color: #94a3b8;">&times;</button>
+            <button type="button" onclick="closeUploadBerkasDeputiModal()" style="background: none; border: none; font-size: 1.25rem; cursor: pointer; color: #94a3b8;">&times;</button>
         </div>
-        <form action="<?= $baseUrl ?>/tagihan/mark-selesai-deputi" method="POST" enctype="multipart/form-data">
+        <form action="<?= $baseUrl ?>/tagihan/upload-signed-doc" method="POST" enctype="multipart/form-data">
             <?= CSRF::field() ?>
-            <input type="hidden" name="bill_id" id="selesaiDeputiBillId" value="">
+            <input type="hidden" name="bill_id" id="uploadBerkasDeputiBillId" value="">
             <div style="padding: 20px;">
                 <p style="font-size: 0.875rem; color: #334155; margin-top: 0; line-height: 1.5;">
-                    Tandai kasus penagihan santri <strong id="selesaiDeputiStudentName">-</strong> telah selesai di tingkat Deputi Direktur Pendidikan Yayasan.
+                    Unggah berkas scan dokumen pemanggilan / kesepakatan bertanda tangan orang tua untuk santri <strong id="uploadBerkasDeputiStudentName">-</strong>. Penyelesaian dan pelunasan status tagihan tetap dilakukan oleh <strong>Tata Usaha (TU)</strong>.
                 </p>
 
                 <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 12px; margin-bottom: 14px;">
                     <div style="font-size: 0.8125rem; font-weight: 700; color: #0f172a; margin-bottom: 6px;">
-                        <i class="fa-solid fa-cloud-arrow-up" style="color: #0284c7;"></i> Unggah Dokumen Bertanda Tangan (Opsional)
+                        <i class="fa-solid fa-file-signature" style="color: #0284c7;"></i> Pilih Dokumen Bertanda Tangan
                     </div>
                     <div style="font-size: 0.75rem; color: #64748b; margin-bottom: 12px;">
                         File yang diunggah dapat dilihat dan diunduh kembali sewaktu-waktu oleh pihak sekolah maupun yayasan (Format: PDF/JPG/PNG, max 5MB).
@@ -412,18 +416,18 @@ $baseUrl = Auth::baseUrl();
 
                     <div class="form-group" style="margin-bottom: 10px;">
                         <label class="form-label" style="font-size: 0.8125rem; font-weight: 600;">Form FR 8001C Kop Yayasan (TTD Orang Tua):</label>
-                        <input type="file" name="signed_fr8001c" class="form-control" accept=".pdf,.jpg,.jpeg,.png" style="font-size: 0.8125rem;">
+                        <input type="file" name="signed_fr8001c" id="uploadBerkasDeputiFileC" class="form-control" accept=".pdf,.jpg,.jpeg,.png" style="font-size: 0.8125rem;">
                     </div>
                     <div class="form-group" style="margin-bottom: 0;">
                         <label class="form-label" style="font-size: 0.8125rem; font-weight: 600;">Form FR 8001D (Kesepakatan TTD Orang Tua):</label>
-                        <input type="file" name="signed_fr8001d" class="form-control" accept=".pdf,.jpg,.jpeg,.png" style="font-size: 0.8125rem;">
+                        <input type="file" name="signed_fr8001d" id="uploadBerkasDeputiFileD" class="form-control" accept=".pdf,.jpg,.jpeg,.png" style="font-size: 0.8125rem;">
                     </div>
                 </div>
             </div>
             <div style="background: #f8fafc; border-top: 1px solid #e2e8f0; padding: 12px 20px; display: flex; justify-content: flex-end; gap: 10px;">
-                <button type="button" class="btn btn-outline" onclick="closeSelesaiDeputiModal()">Batal</button>
-                <button type="submit" class="btn btn-primary" style="background: #16a34a; border-color: #16a34a; font-weight: 600;">
-                    <i class="fa-solid fa-check" style="margin-right: 6px;"></i> Tandai Selesai
+                <button type="button" class="btn btn-outline" onclick="closeUploadBerkasDeputiModal()">Batal</button>
+                <button type="submit" class="btn btn-primary" style="background: #0284c7; border-color: #0284c7; font-weight: 600;">
+                    <i class="fa-solid fa-cloud-arrow-up" style="margin-right: 6px;"></i> Upload Berkas
                 </button>
             </div>
         </form>
@@ -470,13 +474,17 @@ $baseUrl = Auth::baseUrl();
 </div>
 
 <script>
-function openSelesaiDeputiModal(billId, studentName) {
-    document.getElementById('selesaiDeputiBillId').value = billId;
-    document.getElementById('selesaiDeputiStudentName').innerText = studentName;
-    document.getElementById('modalSelesaiDeputi').style.display = 'flex';
+function openUploadBerkasDeputiModal(btn) {
+    document.getElementById('uploadBerkasDeputiBillId').value = btn.getAttribute('data-bill-id') || '';
+    document.getElementById('uploadBerkasDeputiStudentName').innerText = btn.getAttribute('data-student-name') || '-';
+    var fileC = document.getElementById('uploadBerkasDeputiFileC');
+    var fileD = document.getElementById('uploadBerkasDeputiFileD');
+    if (fileC) fileC.value = '';
+    if (fileD) fileD.value = '';
+    document.getElementById('modalUploadBerkasDeputi').style.display = 'flex';
 }
-function closeSelesaiDeputiModal() {
-    document.getElementById('modalSelesaiDeputi').style.display = 'none';
+function closeUploadBerkasDeputiModal() {
+    document.getElementById('modalUploadBerkasDeputi').style.display = 'none';
 }
 document.addEventListener('DOMContentLoaded', function() {
     const searchInput = document.getElementById('searchTable');
