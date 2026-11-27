@@ -27,7 +27,7 @@ if (!function_exists('isNavActive')) {
             <?php endif; ?>
             <div class="sidebar-logo-text" style="display: flex; flex-direction: column; min-width: 0; line-height: 1.15; overflow: hidden;">
                 <span class="nav-text" style="font-weight: 800; font-size: 15px; letter-spacing: 0.5px; color: #34D399;"><?= SecurityHelper::escape($appShortName ?? 'MASEKO') ?></span>
-                <span class="nav-text-sub" style="font-size: 9px; color: #A7F3D0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 165px;" title="<?= SecurityHelper::escape($appSubName ?? 'Manajemen Sekolah Berbasis Komputer') ?>"><?= SecurityHelper::escape($appSubName ?? 'Manajemen Sekolah Berbasis Komputer') ?></span>
+                <span class="nav-text-sub" style="font-size: 9.5px; color: #A7F3D0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 225px;" title="<?= SecurityHelper::escape($appSubName ?? 'Manajemen Sekolah Berbasis Komputer') ?>"><?= SecurityHelper::escape($appSubName ?? 'Manajemen Sekolah Berbasis Komputer') ?></span>
             </div>
         </a>
         <button type="button" class="sidebar-close-btn" id="sidebarCloseBtn" title="Tutup Menu">

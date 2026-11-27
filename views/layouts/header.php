@@ -35,7 +35,7 @@ SecurityHelper::sendSecurityHeaders();
     <link rel="stylesheet" href="<?= $baseUrl ?>/public/assets/css/fontawesome.min.css">
     
     <!-- Main App Stylesheet -->
-    <link rel="stylesheet" href="<?= $baseUrl ?>/public/assets/css/app.css?v=1.0.4">
+    <link rel="stylesheet" href="<?= $baseUrl ?>/public/assets/css/app.css?v=1.0.5">
     
     <!-- Local Chart.js for Dashboards -->
     <script src="<?= $baseUrl ?>/public/assets/js/chart.min.js"></script>

@@ -1,7 +1,7 @@
 # MASEKO / AKFIOKE — Sistem Manajemen Sekolah Terpadu & Penilaian Kinerja (AKFI)
 ### Yayasan Islam Al Kahfi Batam
 
-> *Terakhir diperbarui: 26 November 2026 (Sinkronisasi codebase hingga Perbaikan Margin Rapor Gabungan/Deputi & Pembesaran TTD Digital Proporsional Dompdf, Penghapusan Fallback users.id Anti-Bentrok ID pada Query Walas/Tutor/AKFI, Penyeragaman Query Penugasan Walas/Guru & Normalisasi ID, Dashboard Deputi Tunggakan Binaan SPP/Non-SPP, Rapor AKFI Lintas Unit Rata-Rata Live, TTD Digital Form Penagihan, & Eskalasi Massal TU ke KS)*
+> *Terakhir diperbarui: 27 November 2026 (Sinkronisasi codebase hingga Pelebaran Sidebar Responsif 305px & Pembungkusan Teks Menu Bersih, Perbaikan Margin Rapor Gabungan/Deputi & Pembesaran TTD Digital Proporsional Dompdf, Penghapusan Fallback users.id Anti-Bentrok ID pada Query Walas/Tutor/AKFI, Penyeragaman Query Penugasan Walas/Guru & Normalisasi ID, Dashboard Deputi Tunggakan Binaan SPP/Non-SPP, Rapor AKFI Lintas Unit Rata-Rata Live, TTD Digital Form Penagihan, & Eskalasi Massal TU ke KS)*
 
 Aplikasi web enterprise yang dikembangkan khusus untuk **Yayasan Islam Al Kahfi Batam** menggunakan **PHP 8.x Native + MariaDB/MySQL**, dirancang responsif dengan orientasi **Sidebar**, dukungan **Progressive Web App (PWA)**, multi-role switcher, **Delegasi Izin Switch Akun**, filter **Tahun Ajaran & Semester (Opsi B: 1 TA = 2 Semester Juli–Juni)** global, penyimpanan multi-tier (**Hot & Cold Storage NAS**), serta berjalan secara **offline-ready** tanpa ketergantungan CDN eksternal.
 
@@ -11,7 +11,7 @@ Aplikasi web enterprise yang dikembangkan khusus untuk **Yayasan Islam Al Kahfi 
 
 - **Platform:** Native PHP 8.x + MySQL / MariaDB (`PDO` Singleton dengan `ATTR_EMULATE_PREPARES = false`)
 - **Arsitektur:** Custom Model-View-Controller (MVC) ringan & modular (`public/index.php` + `Core\Router`) dengan lapisan layanan (`app/Services/`) dan driver penyimpanan (`core/Storage/`)
-- **UI & Layout:** Modern Responsive Sidebar Layout, Tabler/Bootstrap 5, Chart.js 4.4.4 (Lokal UMD), FontAwesome 6 (Webfonts lokal), PWA (`/manifest.json`, `/sw.js`, `/offline`)
+- **UI & Layout:** Modern Responsive Sidebar Layout (lebar desktop/mobile `305px` anti-terpotong teks menu dengan slim scrollbar dan `app.css?v=1.0.5`), Tabler/Bootstrap 5, Chart.js 4.4.4 (Lokal UMD), FontAwesome 6 (Webfonts lokal), PWA (`/manifest.json`, `/sw.js`, `/offline`)
 - **Library Vendor (Composer Terpasang):**
   - `dompdf/dompdf`: Mesin cetak PDF A4 & Landscape resmi (Rapor Kinerja AKFI, Rapor Deputi Pendidikan, Struktur Kurikulum `FR-9023a`, Kalender Kerja Deputi, Sertifikat Syahadah Tahfidz landscape, Instrumen Supervisi Kelas, Rapor Bulanan/Tahfidz/Gabungan Santri, Surat Tagihan SPP `FR 8001B`/`C`/`D`, Kartu Cicilan, Kartu Login Orang Tua, SK Panitia, PO & Berita Acara Scrap `F30`).
   - `phpoffice/phpspreadsheet`: Generator ekspor & impor data Excel `.xlsx` (Pegawai, Siswa, Alumni, Aset, Tagihan `FR 8001A`, Nilai Bulanan, Absensi, Rekap AKFI Yayasan, Ledger Kelas) dengan proteksi anti-*Formula Injection* dan **Sistem Verifikasi Import Duplikat**.
