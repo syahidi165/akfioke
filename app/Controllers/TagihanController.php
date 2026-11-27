@@ -1980,6 +1980,8 @@ class TagihanController extends Controller {
                     (SELECT c2.name FROM class_students cs2 JOIN classes c2 ON cs2.class_id = c2.id 
                      WHERE cs2.student_id = s.id AND cs2.status = 'Aktif' AND c2.unit_id = b.unit_id 
                      ORDER BY cs2.academic_year_id DESC, cs2.id DESC LIMIT 1) as class_name,
+                    (SELECT COUNT(bi.id) FROM bill_installments bi WHERE bi.bill_id = b.id) as agreement_count,
+                    (SELECT bi.agreement_number FROM bill_installments bi WHERE bi.bill_id = b.id ORDER BY bi.id DESC LIMIT 1) as latest_agreement_number,
                     u.name as unit_name, u.phone as unit_phone, u.bank_name, u.bank_account, u.bank_holder
              FROM bills b 
              JOIN students s ON b.student_id = s.id 
@@ -1988,20 +1990,38 @@ class TagihanController extends Controller {
              ORDER BY FIELD(b.pipeline_stage, 'escalated_kepsek', 'kepsek_summon_sent', 'selesai_kepsek') ASC, class_name ASC, s.nama ASC",
             [$unitId]
         );
-        foreach ($bills as &$bRow) {
-            $bRow['kepsek_name'] = $kepsekInfo['nama'];
-            $bRow['kepsek_phone'] = $kepsekInfo['phone'];
-        }
-        unset($bRow);
 
         $pendingCount = 0;
         $totalNominalPending = 0;
-        foreach ($bills as $b) {
-            if ($b['pipeline_stage'] === 'escalated_kepsek' || $b['pipeline_stage'] === 'kepsek_summon_sent') {
+        $processedCount = 0;
+        foreach ($bills as &$bRow) {
+            $bRow['kepsek_name'] = $kepsekInfo['nama'];
+            $bRow['kepsek_phone'] = $kepsekInfo['phone'];
+
+            $stage = (string)($bRow['pipeline_stage'] ?? '');
+            $isCalled = !empty($bRow['kepsek_schedule_date']) || !empty($bRow['kepsek_summon_sent_at']) || $stage === 'kepsek_summon_sent';
+            $hasKsSignedDoc = (($bRow['signed_uploaded_by_level'] ?? '') === 'kepala_sekolah')
+                && (!empty($bRow['signed_fr8001c_path']) || !empty($bRow['signed_fr8001d_path']));
+            $isEscalatedDeputi = in_array($stage, ['escalated_deputi', 'deputi_summon_sent', 'selesai_deputi'], true);
+            $isProcessed = (($bRow['status'] ?? '') === 'Lunas')
+                || ($stage === 'selesai_kepsek')
+                || $isEscalatedDeputi
+                || ((int)($bRow['agreement_count'] ?? 0) > 0)
+                || $hasKsSignedDoc;
+
+            $bRow['is_called'] = $isCalled;
+            $bRow['is_processed'] = $isProcessed;
+            $bRow['is_escalated_deputi'] = $isEscalatedDeputi;
+            $bRow['has_ks_signed_doc'] = $hasKsSignedDoc;
+
+            if ($isProcessed) {
+                $processedCount++;
+            } else {
                 $pendingCount++;
-                $totalNominalPending += (float)$b['amount'];
+                $totalNominalPending += (float)$bRow['amount'];
             }
         }
+        unset($bRow);
 
         $kepsekEmp = ['nama' => $kepsekInfo['nama'], 'phone' => $kepsekInfo['phone']];
 
@@ -2009,6 +2029,7 @@ class TagihanController extends Controller {
             'pageTitle'           => 'Penagihan Kepala Sekolah & Pemanggilan Orang Tua (FR 8001C/D)',
             'bills'               => $bills,
             'pendingCount'        => $pendingCount,
+            'processedCount'      => $processedCount,
             'totalNominalPending' => $totalNominalPending,
             'kepsekEmp'           => $kepsekEmp,
             'lastImportMeta'      => $this->getUnitLastImportMeta($unitId)
@@ -2868,7 +2889,10 @@ class TagihanController extends Controller {
         $bills = Database::fetchAll(
             "SELECT b.*, s.nama as student_name, s.nis, COALESCE(NULLIF(s.father_name, ''), NULLIF(s.mother_name, ''), 'Wali Santri') as parent_name, s.parent_phone, s.parent_email, 
                     s.address as alamat, s.nik, c.name as class_name, u.name as unit_name, u.phone as unit_phone,
-                    u.bank_name, u.bank_account, u.bank_holder, ks.nama as kepsek_name 
+                    u.bank_name, u.bank_account, u.bank_holder, ks.nama as kepsek_name,
+                    (SELECT COUNT(bi.id) FROM bill_installments bi WHERE bi.bill_id = b.id AND bi.approved_by_level = 'deputi_pendidikan') as deputi_agreement_count,
+                    (SELECT COUNT(bi.id) FROM bill_installments bi WHERE bi.bill_id = b.id) as agreement_count,
+                    (SELECT bi.agreement_number FROM bill_installments bi WHERE bi.bill_id = b.id ORDER BY bi.id DESC LIMIT 1) as latest_agreement_number
              FROM bills b 
              JOIN students s ON b.student_id = s.id 
              JOIN units u ON b.unit_id = u.id 
@@ -2881,12 +2905,29 @@ class TagihanController extends Controller {
 
         $pendingCount = 0;
         $totalNominal = 0;
-        foreach ($bills as $b) {
-            if ($b['pipeline_stage'] === 'escalated_deputi' || $b['pipeline_stage'] === 'deputi_summon_sent') {
+        $processedCount = 0;
+        foreach ($bills as &$bRow) {
+            $stage = (string)($bRow['pipeline_stage'] ?? '');
+            $isCalled = !empty($bRow['deputi_schedule_date']) || !empty($bRow['deputi_summon_sent_at']) || $stage === 'deputi_summon_sent';
+            $hasDeputiSignedDoc = (($bRow['signed_uploaded_by_level'] ?? '') === 'deputi_pendidikan')
+                && (!empty($bRow['signed_fr8001c_path']) || !empty($bRow['signed_fr8001d_path']));
+            $isProcessed = (($bRow['status'] ?? '') === 'Lunas')
+                || ($stage === 'selesai_deputi')
+                || ((int)($bRow['deputi_agreement_count'] ?? 0) > 0)
+                || $hasDeputiSignedDoc;
+
+            $bRow['is_called'] = $isCalled;
+            $bRow['is_processed'] = $isProcessed;
+            $bRow['has_deputi_signed_doc'] = $hasDeputiSignedDoc;
+
+            if ($isProcessed) {
+                $processedCount++;
+            } else {
                 $pendingCount++;
-                $totalNominal += (float)$b['amount'];
+                $totalNominal += (float)$bRow['amount'];
             }
         }
+        unset($bRow);
 
         $importMetaByUnit = [];
         try {
@@ -2919,6 +2960,7 @@ class TagihanController extends Controller {
             'pageTitle'        => 'Eskalasi Penagihan Yayasan & Pemanggilan Deputi (FR 8001C Kop Yayasan)',
             'bills'            => $bills,
             'pendingCount'     => $pendingCount,
+            'processedCount'   => $processedCount,
             'totalNominal'     => $totalNominal,
             'importMetaByUnit' => $importMetaByUnit
         ]);

@@ -84,7 +84,11 @@ $baseUrl = Auth::baseUrl();
             <i class="fa-solid fa-triangle-exclamation" style="color: #be185d;"></i>
             <h3 class="card-title" style="margin: 0; font-size: 1rem; font-weight: 700; color: #831843;">Daftar Tagihan Dieskalasikan oleh Kepala Sekolah Seluruh Unit</h3>
         </div>
-        <div>
+        <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+            <label style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; background: #ffffff; border: 1px solid #f9a8d4; border-radius: 6px; font-size: 0.8125rem; font-weight: 600; color: #831843; cursor: pointer; user-select: none;" title="Secara bawaan siswa yang sudah dipanggil &amp; selesai pertemuan disembunyikan. Centang untuk menampilkannya.">
+                <input type="checkbox" id="toggleShowProcessedDeputi" onchange="applyDeputiFilters()" style="width: 15px; height: 15px; accent-color: #be185d; cursor: pointer;">
+                <span>Tampilkan yang Sudah Pemanggilan &amp; Pertemuan (<span id="processedCountDeputi"><?= (int)($processedCount ?? 0) ?></span>)</span>
+            </label>
             <input type="text" id="searchTable" class="form-control" placeholder="Cari santri / unit..." style="font-size: 0.8125rem; height: 34px; width: 220px;">
         </div>
     </div>
@@ -115,9 +119,14 @@ $baseUrl = Auth::baseUrl();
                         <?php foreach ($bills as $idx => $b): 
                             $stage = $b['pipeline_stage'];
                             $isScheduled = !empty($b['deputi_schedule_date']);
+                            $isProcessed = !empty($b['is_processed']);
+                            $isCalled = !empty($b['is_called']);
                         ?>
-                            <tr class="data-row" data-search="<?= strtolower(SecurityHelper::escape($b['student_name'] . ' ' . $b['nis'] . ' ' . $b['unit_name'] . ' ' . ($b['parent_name'] ?? ''))) ?>" style="border-bottom: 1px solid #f1f5f9;">
-                                <td style="text-align: center; color: #64748b; font-size: 0.8125rem; padding: 10px;"><?= $idx + 1 ?></td>
+                            <tr class="data-row"
+                                data-search="<?= strtolower(SecurityHelper::escape($b['student_name'] . ' ' . $b['nis'] . ' ' . $b['unit_name'] . ' ' . ($b['parent_name'] ?? ''))) ?>"
+                                data-processed="<?= $isProcessed ? '1' : '0' ?>"
+                                style="border-bottom: 1px solid #f1f5f9; <?= $isProcessed ? 'background: #f0fdf4; display: none;' : '' ?>">
+                                <td class="row-no" style="text-align: center; color: #64748b; font-size: 0.8125rem; padding: 10px;"><?= $idx + 1 ?></td>
                                 
                                 <td style="padding: 10px;">
                                     <div style="font-weight: 700; color: #0f172a; font-size: 0.9375rem;">
@@ -147,6 +156,34 @@ $baseUrl = Auth::baseUrl();
                                             <i class="fa-solid fa-clock-rotate-left"></i> Belum ada impor TU
                                         </div>
                                     <?php endif; ?>
+                                    <div style="margin-top: 5px; display: flex; gap: 4px; flex-wrap: wrap; align-items: center;">
+                                        <?php if (($b['status'] ?? '') === 'Lunas'): ?>
+                                            <span class="badge" style="font-size: 10.5px; background: #dcfce7; color: #15803d; border: 1px solid #86efac;">
+                                                <i class="fa-solid fa-circle-check"></i> Sudah Pemanggilan &amp; Pertemuan (Lunas TU)
+                                            </span>
+                                        <?php elseif ($isProcessed): ?>
+                                            <span class="badge" style="font-size: 10.5px; background: #dcfce7; color: #15803d; border: 1px solid #86efac;">
+                                                <i class="fa-solid fa-circle-check"></i> Sudah Pemanggilan &amp; Pertemuan
+                                            </span>
+                                            <?php if ((int)($b['deputi_agreement_count'] ?? 0) > 0): ?>
+                                                <span class="badge" style="font-size: 10px; background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0;">
+                                                    Kesepakatan FR 8001D
+                                                </span>
+                                            <?php elseif (!empty($b['has_deputi_signed_doc'])): ?>
+                                                <span class="badge" style="font-size: 10px; background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd;">
+                                                    Berkas TTD Yayasan
+                                                </span>
+                                            <?php endif; ?>
+                                        <?php elseif ($isCalled): ?>
+                                            <span class="badge" style="font-size: 10.5px; background: #fef3c7; color: #b45309; border: 1px solid #fde68a;">
+                                                <i class="fa-solid fa-envelope-circle-check"></i> Sudah Dipanggil (Menunggu Pertemuan)
+                                            </span>
+                                        <?php else: ?>
+                                            <span class="badge" style="font-size: 10.5px; background: #fdf2f8; color: #be185d; border: 1px solid #fbcfe8;">
+                                                <i class="fa-solid fa-clock"></i> Belum Dipanggil
+                                            </span>
+                                        <?php endif; ?>
+                                    </div>
                                 </td>
 
                                 <td style="padding: 10px; font-family: monospace; font-weight: 600; color: #0369a1; font-size: 0.875rem;">
@@ -240,6 +277,17 @@ $baseUrl = Auth::baseUrl();
                                 </td>
                             </tr>
                         <?php endforeach; ?>
+                        <tr id="emptyFilteredRowDeputi" style="display: none;">
+                            <td colspan="7" style="text-align: center; padding: 36px 20px; color: #64748b; font-size: 0.875rem;">
+                                <i class="fa-solid fa-circle-check" style="font-size: 2rem; margin-bottom: 8px; display: block; color: #10b981; opacity: 0.75;"></i>
+                                Tidak ada kasus eskalasi aktif yang ditampilkan saat ini.
+                                <?php if ((int)($processedCount ?? 0) > 0): ?>
+                                    <div style="margin-top: 4px; font-size: 0.8125rem; color: #475569;">
+                                        Terdapat <strong><?= (int)$processedCount ?></strong> siswa yang sudah dilakukan pemanggilan &amp; pertemuan (otomatis disembunyikan). Centang kotak <strong>Tampilkan yang Sudah Pemanggilan &amp; Pertemuan</strong> di kanan atas tabel bila ingin menampilkannya.
+                                    </div>
+                                <?php endif; ?>
+                            </td>
+                        </tr>
                     <?php endif; ?>
                 </tbody>
             </table>
@@ -486,17 +534,36 @@ function openUploadBerkasDeputiModal(btn) {
 function closeUploadBerkasDeputiModal() {
     document.getElementById('modalUploadBerkasDeputi').style.display = 'none';
 }
+function applyDeputiFilters() {
+    const searchInput = document.getElementById('searchTable');
+    const toggleShow = document.getElementById('toggleShowProcessedDeputi');
+    const emptyRow = document.getElementById('emptyFilteredRowDeputi');
+    const query = searchInput ? (searchInput.value || '').toLowerCase() : '';
+    const showProcessed = toggleShow ? toggleShow.checked : false;
+
+    let visibleNo = 1;
+    document.querySelectorAll('tr.data-row').forEach(function(row) {
+        const search = row.getAttribute('data-search') || '';
+        const isProcessed = row.getAttribute('data-processed') === '1';
+        const visible = search.includes(query) && (showProcessed || !isProcessed);
+        row.style.display = visible ? '' : 'none';
+        if (visible) {
+            const noCell = row.querySelector('.row-no');
+            if (noCell) noCell.innerText = visibleNo++;
+        }
+    });
+
+    if (emptyRow) {
+        emptyRow.style.display = (visibleNo === 1) ? '' : 'none';
+    }
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     const searchInput = document.getElementById('searchTable');
     if (searchInput) {
-        searchInput.addEventListener('input', function() {
-            const query = (this.value || '').toLowerCase();
-            document.querySelectorAll('.data-row').forEach(function(row) {
-                const search = row.getAttribute('data-search') || '';
-                row.style.display = search.includes(query) ? '' : 'none';
-            });
-        });
+        searchInput.addEventListener('input', applyDeputiFilters);
     }
+    applyDeputiFilters();
 });
 
 function openDeputiScheduleModal(billId, studentName, defDate, defTime, defPlace) {

@@ -89,7 +89,11 @@ $baseUrl = Auth::baseUrl();
             <i class="fa-solid fa-clipboard-user" style="color: #0f766e;"></i>
             <h3 class="card-title" style="margin: 0; font-size: 1rem; font-weight: 700; color: #0f172a;">Antrean Tagihan untuk Pemanggilan Resmi Orang Tua</h3>
         </div>
-        <div>
+        <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+            <label style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 0.8125rem; font-weight: 600; color: #334155; cursor: pointer; user-select: none;" title="Secara bawaan siswa yang sudah dipanggil &amp; selesai pertemuan disembunyikan. Centang untuk menampilkannya.">
+                <input type="checkbox" id="toggleShowProcessedKs" onchange="applyApprovalFilters()" style="width: 15px; height: 15px; accent-color: #0f766e; cursor: pointer;">
+                <span>Tampilkan yang Sudah Pemanggilan &amp; Pertemuan (<span id="processedCountKs"><?= (int)($processedCount ?? 0) ?></span>)</span>
+            </label>
             <input type="text" id="searchTable" class="form-control" placeholder="Cari santri / NIS..." style="font-size: 0.8125rem; height: 34px; width: 220px;">
         </div>
     </div>
@@ -130,6 +134,10 @@ $baseUrl = Auth::baseUrl();
                         <?php foreach ($bills as $idx => $b): 
                             $stage = $b['pipeline_stage'];
                             $isScheduled = !empty($b['kepsek_schedule_date']);
+                            $isProcessed = !empty($b['is_processed']);
+                            $isEscalatedDeputi = !empty($b['is_escalated_deputi']);
+                            $isCalled = !empty($b['is_called']);
+                            $rowBg = $isProcessed ? ($isEscalatedDeputi ? '#fdf2f8' : '#f0fdf4') : '#ffffff';
                         ?>
                             <tr class="data-row"
                                 data-search="<?= strtolower(SecurityHelper::escape($b['student_name'] . ' ' . $b['nis'] . ' ' . ($b['parent_name'] ?? ''))) ?>"
@@ -138,7 +146,8 @@ $baseUrl = Auth::baseUrl();
                                 data-non-spp="<?= (float)$b['amount_non_spp'] ?>"
                                 data-total="<?= (float)$b['amount'] ?>"
                                 data-schedule="<?= $isScheduled ? (int)strtotime($b['kepsek_schedule_date']) : 0 ?>"
-                                style="border-bottom: 1px solid #f1f5f9;">
+                                data-processed="<?= $isProcessed ? '1' : '0' ?>"
+                                style="border-bottom: 1px solid #f1f5f9; background: <?= $rowBg ?>; <?= $isProcessed ? 'display: none;' : '' ?>">
                                 <td class="row-no" style="text-align: center; color: #64748b; font-size: 0.8125rem; padding: 10px;"><?= $idx + 1 ?></td>
                                 
                                 <td style="padding: 10px;">
@@ -157,6 +166,38 @@ $baseUrl = Auth::baseUrl();
                                     <div style="font-size: 0.72rem; margin-top: 3px; color: <?= !empty($b['parent_email']) ? '#0369a1' : '#94a3b8' ?>;">
                                         <i class="fa-solid fa-envelope"></i>
                                         <?= !empty($b['parent_email']) ? SecurityHelper::escape($b['parent_email']) : 'Email ortu belum diisi' ?>
+                                    </div>
+                                    <div style="margin-top: 5px; display: flex; gap: 4px; flex-wrap: wrap; align-items: center;">
+                                        <?php if (($b['status'] ?? '') === 'Lunas'): ?>
+                                            <span class="badge" style="font-size: 10.5px; background: #dcfce7; color: #15803d; border: 1px solid #86efac;">
+                                                <i class="fa-solid fa-circle-check"></i> Sudah Pemanggilan &amp; Pertemuan (Lunas TU)
+                                            </span>
+                                        <?php elseif ($isEscalatedDeputi): ?>
+                                            <span class="badge" style="font-size: 10.5px; background: #fce7f3; color: #9d174d; border: 1px solid #f9a8d4;">
+                                                <i class="fa-solid fa-crown"></i> Sudah Pemanggilan &amp; Dieskalasi ke Yayasan
+                                            </span>
+                                        <?php elseif ($isProcessed): ?>
+                                            <span class="badge" style="font-size: 10.5px; background: #dcfce7; color: #15803d; border: 1px solid #86efac;">
+                                                <i class="fa-solid fa-circle-check"></i> Sudah Pemanggilan &amp; Pertemuan
+                                            </span>
+                                            <?php if ((int)($b['agreement_count'] ?? 0) > 0): ?>
+                                                <span class="badge" style="font-size: 10px; background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0;">
+                                                    Kesepakatan FR 8001D
+                                                </span>
+                                            <?php elseif (!empty($b['has_ks_signed_doc'])): ?>
+                                                <span class="badge" style="font-size: 10px; background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd;">
+                                                    Berkas TTD
+                                                </span>
+                                            <?php endif; ?>
+                                        <?php elseif ($isCalled): ?>
+                                            <span class="badge" style="font-size: 10.5px; background: #fef3c7; color: #b45309; border: 1px solid #fde68a;">
+                                                <i class="fa-solid fa-envelope-circle-check"></i> Sudah Dipanggil (Menunggu Pertemuan)
+                                            </span>
+                                        <?php else: ?>
+                                            <span class="badge" style="font-size: 10.5px; background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca;">
+                                                <i class="fa-solid fa-clock"></i> Belum Dipanggil
+                                            </span>
+                                        <?php endif; ?>
                                     </div>
                                 </td>
 
@@ -254,6 +295,17 @@ $baseUrl = Auth::baseUrl();
                                 </td>
                             </tr>
                         <?php endforeach; ?>
+                        <tr id="emptyFilteredRowKs" style="display: none;">
+                            <td colspan="7" style="text-align: center; padding: 36px 20px; color: #64748b; font-size: 0.875rem;">
+                                <i class="fa-solid fa-circle-check" style="font-size: 2rem; margin-bottom: 8px; display: block; color: #10b981; opacity: 0.75;"></i>
+                                Tidak ada antrean tagihan aktif yang ditampilkan saat ini.
+                                <?php if ((int)($processedCount ?? 0) > 0): ?>
+                                    <div style="margin-top: 4px; font-size: 0.8125rem; color: #475569;">
+                                        Terdapat <strong><?= (int)$processedCount ?></strong> siswa yang sudah dilakukan pemanggilan &amp; pertemuan (otomatis disembunyikan). Centang kotak <strong>Tampilkan yang Sudah Pemanggilan &amp; Pertemuan</strong> di kanan atas tabel bila ingin menampilkannya.
+                                    </div>
+                                <?php endif; ?>
+                            </td>
+                        </tr>
                     <?php endif; ?>
                 </tbody>
             </table>
@@ -543,18 +595,37 @@ $baseUrl = Auth::baseUrl();
 </div>
 
 <script>
-// Filter tabel pencarian
+// Filter pencarian + otomatis sembunyikan siswa yang sudah pemanggilan & pertemuan (kecuali dicentang)
+function applyApprovalFilters() {
+    const searchInput = document.getElementById('searchTable');
+    const toggleShow = document.getElementById('toggleShowProcessedKs');
+    const emptyRow = document.getElementById('emptyFilteredRowKs');
+    const query = searchInput ? (searchInput.value || '').toLowerCase() : '';
+    const showProcessed = toggleShow ? toggleShow.checked : false;
+
+    let visibleNo = 1;
+    document.querySelectorAll('#tbodyApprovalKs tr.data-row').forEach(function(row) {
+        const search = row.getAttribute('data-search') || '';
+        const isProcessed = row.getAttribute('data-processed') === '1';
+        const visible = search.includes(query) && (showProcessed || !isProcessed);
+        row.style.display = visible ? '' : 'none';
+        if (visible) {
+            const noCell = row.querySelector('.row-no');
+            if (noCell) noCell.innerText = visibleNo++;
+        }
+    });
+
+    if (emptyRow) {
+        emptyRow.style.display = (visibleNo === 1) ? '' : 'none';
+    }
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     const searchInput = document.getElementById('searchTable');
     if (searchInput) {
-        searchInput.addEventListener('input', function() {
-            const query = (this.value || '').toLowerCase();
-            document.querySelectorAll('.data-row').forEach(function(row) {
-                const search = row.getAttribute('data-search') || '';
-                row.style.display = search.includes(query) ? '' : 'none';
-            });
-        });
+        searchInput.addEventListener('input', applyApprovalFilters);
     }
+    applyApprovalFilters();
 });
 
 // Modal Selesai Kepsek
@@ -657,14 +728,14 @@ function sortApprovalTable(th) {
             : valB.localeCompare(valA, 'id');
     });
 
-    let visibleNo = 1;
     rows.forEach(function(row) {
         tbody.appendChild(row);
-        if (row.style.display !== 'none') {
-            const noCell = row.querySelector('.row-no');
-            if (noCell) noCell.innerText = visibleNo++;
-        }
     });
+    const emptyRow = document.getElementById('emptyFilteredRowKs');
+    if (emptyRow) {
+        tbody.appendChild(emptyRow);
+    }
+    applyApprovalFilters();
 
     document.querySelectorAll('#tableApprovalKs thead th.sortable-th .sort-icon').forEach(function(icon) {
         icon.className = 'fa-solid fa-sort sort-icon';
