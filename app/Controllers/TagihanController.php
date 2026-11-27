@@ -1767,6 +1767,36 @@ class TagihanController extends Controller {
         }
     }
 
+    private static bool $emailTrackingChecked = false;
+
+    /**
+     * Guard idempoten agar kolom pelacakan pengiriman email FR 8001C tersedia meski sebelum run_migration.php dijalankan.
+     */
+    private static function ensureEmailTrackingColumns(): void {
+        if (self::$emailTrackingChecked) {
+            return;
+        }
+        self::$emailTrackingChecked = true;
+        try {
+            $cols = array_column(Database::fetchAll("SHOW COLUMNS FROM bills"), 'Field');
+            $defs = [
+                'kepsek_email_8001c_sent_at' => "DATETIME NULL DEFAULT NULL",
+                'kepsek_email_8001c_sent_to' => "VARCHAR(191) NULL DEFAULT NULL",
+                'kepsek_email_8001c_count'   => "INT NOT NULL DEFAULT 0",
+                'deputi_email_8001c_sent_at' => "DATETIME NULL DEFAULT NULL",
+                'deputi_email_8001c_sent_to' => "VARCHAR(191) NULL DEFAULT NULL",
+                'deputi_email_8001c_count'   => "INT NOT NULL DEFAULT 0",
+            ];
+            foreach ($defs as $col => $def) {
+                if (!in_array($col, $cols, true)) {
+                    Database::execute("ALTER TABLE bills ADD COLUMN `{$col}` {$def}");
+                }
+            }
+        } catch (\Throwable $e) {
+            error_log('Gagal memastikan kolom email tracking bills: ' . $e->getMessage());
+        }
+    }
+
     private function handleSignedUploads(int $billId, string $level): array {
         $paths = [];
         $publicDir = dirname(__DIR__, 2) . '/public/uploads/tagihan/signed';
@@ -1971,6 +2001,7 @@ class TagihanController extends Controller {
     public function approvalList(): void {
         $this->requireRole(['kepala_sekolah', 'deputi_pendidikan']);
         self::ensureSignedColumns();
+        self::ensureEmailTrackingColumns();
         $unitId = Auth::unitId();
         $kepsekInfo = $this->resolveUnitSigner($unitId, 'kepala_sekolah');
 
@@ -1999,7 +2030,8 @@ class TagihanController extends Controller {
             $bRow['kepsek_phone'] = $kepsekInfo['phone'];
 
             $stage = (string)($bRow['pipeline_stage'] ?? '');
-            $isCalled = !empty($bRow['kepsek_schedule_date']) || !empty($bRow['kepsek_summon_sent_at']) || $stage === 'kepsek_summon_sent';
+            $emailSent = !empty($bRow['kepsek_email_8001c_sent_at']) || ((int)($bRow['kepsek_email_8001c_count'] ?? 0) > 0);
+            $isCalled = !empty($bRow['kepsek_schedule_date']) || !empty($bRow['kepsek_summon_sent_at']) || $stage === 'kepsek_summon_sent' || $emailSent;
             $hasKsSignedDoc = (($bRow['signed_uploaded_by_level'] ?? '') === 'kepala_sekolah')
                 && (!empty($bRow['signed_fr8001c_path']) || !empty($bRow['signed_fr8001d_path']));
             $isEscalatedDeputi = in_array($stage, ['escalated_deputi', 'deputi_summon_sent', 'selesai_deputi'], true);
@@ -2009,6 +2041,10 @@ class TagihanController extends Controller {
                 || ((int)($bRow['agreement_count'] ?? 0) > 0)
                 || $hasKsSignedDoc;
 
+            $bRow['email_8001c_sent'] = $emailSent;
+            $bRow['email_8001c_sent_at'] = $bRow['kepsek_email_8001c_sent_at'] ?? null;
+            $bRow['email_8001c_sent_to'] = $bRow['kepsek_email_8001c_sent_to'] ?? '';
+            $bRow['email_8001c_count'] = (int)($bRow['kepsek_email_8001c_count'] ?? 0);
             $bRow['is_called'] = $isCalled;
             $bRow['is_processed'] = $isProcessed;
             $bRow['is_escalated_deputi'] = $isEscalatedDeputi;
@@ -2076,6 +2112,7 @@ class TagihanController extends Controller {
     }
 
     private function sendOfficialBillEmail(int $billId, bool $isDeputi, ?string $customEmail = null, string $extraNote = ''): array {
+        self::ensureEmailTrackingColumns();
         $bill = Database::fetch(
             "SELECT b.*, s.nama as student_name, s.nis,
                     COALESCE(NULLIF(s.father_name, ''), NULLIF(s.mother_name, ''), 'Wali Santri') as parent_name,
@@ -2178,17 +2215,23 @@ class TagihanController extends Controller {
                 Database::execute(
                     "UPDATE bills
                      SET deputi_summon_sent_at = COALESCE(deputi_summon_sent_at, NOW()),
+                         deputi_email_8001c_sent_at = NOW(),
+                         deputi_email_8001c_sent_to = ?,
+                         deputi_email_8001c_count = COALESCE(deputi_email_8001c_count, 0) + 1,
                          pipeline_stage = CASE WHEN pipeline_stage = 'escalated_deputi' THEN 'deputi_summon_sent' ELSE pipeline_stage END
                      WHERE id = ?",
-                    [$billId]
+                    [$targetEmail, $billId]
                 );
             } else {
                 Database::execute(
                     "UPDATE bills
                      SET kepsek_summon_sent_at = COALESCE(kepsek_summon_sent_at, NOW()),
+                         kepsek_email_8001c_sent_at = NOW(),
+                         kepsek_email_8001c_sent_to = ?,
+                         kepsek_email_8001c_count = COALESCE(kepsek_email_8001c_count, 0) + 1,
                          pipeline_stage = CASE WHEN pipeline_stage = 'escalated_kepsek' THEN 'kepsek_summon_sent' ELSE pipeline_stage END
                      WHERE id = ?",
-                    [$billId]
+                    [$targetEmail, $billId]
                 );
             }
         }
@@ -2885,6 +2928,7 @@ class TagihanController extends Controller {
     public function deputiEskalasiList(): void {
         $this->requireRole('deputi_pendidikan');
         self::ensureSignedColumns();
+        self::ensureEmailTrackingColumns();
 
         $bills = Database::fetchAll(
             "SELECT b.*, s.nama as student_name, s.nis, COALESCE(NULLIF(s.father_name, ''), NULLIF(s.mother_name, ''), 'Wali Santri') as parent_name, s.parent_phone, s.parent_email, 
@@ -2908,7 +2952,8 @@ class TagihanController extends Controller {
         $processedCount = 0;
         foreach ($bills as &$bRow) {
             $stage = (string)($bRow['pipeline_stage'] ?? '');
-            $isCalled = !empty($bRow['deputi_schedule_date']) || !empty($bRow['deputi_summon_sent_at']) || $stage === 'deputi_summon_sent';
+            $emailSent = !empty($bRow['deputi_email_8001c_sent_at']) || ((int)($bRow['deputi_email_8001c_count'] ?? 0) > 0);
+            $isCalled = !empty($bRow['deputi_schedule_date']) || !empty($bRow['deputi_summon_sent_at']) || $stage === 'deputi_summon_sent' || $emailSent;
             $hasDeputiSignedDoc = (($bRow['signed_uploaded_by_level'] ?? '') === 'deputi_pendidikan')
                 && (!empty($bRow['signed_fr8001c_path']) || !empty($bRow['signed_fr8001d_path']));
             $isProcessed = (($bRow['status'] ?? '') === 'Lunas')
@@ -2916,6 +2961,10 @@ class TagihanController extends Controller {
                 || ((int)($bRow['deputi_agreement_count'] ?? 0) > 0)
                 || $hasDeputiSignedDoc;
 
+            $bRow['email_8001c_sent'] = $emailSent;
+            $bRow['email_8001c_sent_at'] = $bRow['deputi_email_8001c_sent_at'] ?? null;
+            $bRow['email_8001c_sent_to'] = $bRow['deputi_email_8001c_sent_to'] ?? '';
+            $bRow['email_8001c_count'] = (int)($bRow['deputi_email_8001c_count'] ?? 0);
             $bRow['is_called'] = $isCalled;
             $bRow['is_processed'] = $isProcessed;
             $bRow['has_deputi_signed_doc'] = $hasDeputiSignedDoc;

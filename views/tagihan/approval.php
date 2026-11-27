@@ -198,6 +198,22 @@ $baseUrl = Auth::baseUrl();
                                                 <i class="fa-solid fa-clock"></i> Belum Dipanggil
                                             </span>
                                         <?php endif; ?>
+
+                                        <?php
+                                            $emailSent = !empty($b['email_8001c_sent']);
+                                            $emailSentAtFmt = !empty($b['email_8001c_sent_at']) ? date('d/m/Y H:i', strtotime($b['email_8001c_sent_at'])) . ' WIB' : '';
+                                            $emailSentTo = trim((string)($b['email_8001c_sent_to'] ?? ''));
+                                            $emailCount = (int)($b['email_8001c_count'] ?? 0);
+                                        ?>
+                                        <?php if ($emailSent): ?>
+                                            <span class="badge" style="font-size: 10.5px; background: #ecfdf5; color: #047857; border: 1px solid #6ee7b7;" title="Email FR 8001C terkirim<?= $emailSentTo !== '' ? ' ke ' . SecurityHelper::escape($emailSentTo) : '' ?><?= $emailSentAtFmt !== '' ? ' pada ' . $emailSentAtFmt : '' ?>">
+                                                <i class="fa-solid fa-envelope-circle-check"></i> Email 8001C Terkirim<?= $emailCount > 1 ? ' (' . $emailCount . 'x)' : '' ?><?= $emailSentAtFmt !== '' ? ' &bull; ' . $emailSentAtFmt : '' ?>
+                                            </span>
+                                        <?php else: ?>
+                                            <span class="badge" style="font-size: 10.5px; background: #f8fafc; color: #64748b; border: 1px solid #cbd5e1;" title="Wali murid belum pernah dikirimi email pemanggilan FR 8001C oleh Kepala Sekolah">
+                                                <i class="fa-regular fa-envelope"></i> Email 8001C Belum Dikirim
+                                            </span>
+                                        <?php endif; ?>
                                     </div>
                                 </td>
 
@@ -268,13 +284,18 @@ $baseUrl = Auth::baseUrl();
                                         </a>
 
                                         <!-- Kirim Surat via Email (Lampiran PDF FR 8001C) -->
-                                        <button type="button" class="btn btn-outline btn-sm" style="padding: 4px 8px; font-size: 0.75rem; color: #0369a1; border-color: #0369a1;"
+                                        <button type="button" class="btn btn-outline btn-sm"
+                                                style="padding: 4px 8px; font-size: 0.75rem; <?= $emailSent ? 'background: #f0fdf4; color: #15803d; border-color: #86efac; font-weight: 600;' : 'color: #0369a1; border-color: #0369a1;' ?>"
                                                 data-bill-id="<?= (int)$b['id'] ?>"
                                                 data-student-name="<?= SecurityHelper::escape($b['student_name']) ?>"
                                                 data-parent-email="<?= SecurityHelper::escape($b['parent_email'] ?? '') ?>"
+                                                data-email-sent="<?= $emailSent ? '1' : '0' ?>"
+                                                data-email-sent-at="<?= SecurityHelper::escape($emailSentAtFmt) ?>"
+                                                data-email-sent-to="<?= SecurityHelper::escape($emailSentTo) ?>"
+                                                data-email-count="<?= $emailCount ?>"
                                                 onclick="openEmailKepsekModal(this)"
-                                                title="Kirim Surat Pemanggilan FR 8001C via Email dengan Lampiran PDF">
-                                            <i class="fa-solid fa-paper-plane"></i> Kirim Email 8001C
+                                                title="<?= $emailSent ? 'PERHATIAN: Email FR 8001C sudah dikirim (' . SecurityHelper::escape($emailSentAtFmt) . '). Klik hanya jika perlu mengirim ulang.' : 'Kirim Surat Pemanggilan FR 8001C via Email dengan Lampiran PDF' ?>">
+                                            <i class="fa-solid <?= $emailSent ? 'fa-envelope-circle-check' : 'fa-paper-plane' ?>"></i> <?= $emailSent ? 'Email Terkirim' : 'Kirim Email 8001C' ?>
                                         </button>
 
                                         <!-- Modal Kesepakatan Saat Ortu Datang -->
@@ -571,6 +592,15 @@ $baseUrl = Auth::baseUrl();
                 <div style="font-size: 0.875rem; margin-bottom: 14px; color: #334155;">
                     Santri: <strong id="emailKepsekStudentName">-</strong>
                 </div>
+                <div id="emailKepsekAlreadySentWarn" style="display: none; background: #fffbeb; border: 1px solid #fcd34d; border-left: 4px solid #d97706; border-radius: 6px; padding: 10px 12px; margin-bottom: 12px; font-size: 0.8125rem; color: #92400e; line-height: 1.45;">
+                    <div style="font-weight: 700; margin-bottom: 2px;">
+                        <i class="fa-solid fa-triangle-exclamation"></i> Email Pemanggilan FR 8001C Sudah Pernah Dikirim!
+                    </div>
+                    <div id="emailKepsekAlreadySentDetail"></div>
+                    <div style="margin-top: 4px; font-size: 0.75rem; color: #b45309;">
+                        Hindari pengiriman ulang jika tidak diperlukan agar wali murid tidak menerima penagihan bertubi-tubi.
+                    </div>
+                </div>
                 <div style="background: #f0fdfa; border: 1px solid #99f6e4; border-radius: 6px; padding: 8px 12px; margin-bottom: 12px; font-size: 0.8125rem; color: #0f766e;">
                     <i class="fa-solid fa-file-pdf" style="margin-right: 6px;"></i>
                     Lampiran otomatis: <strong>Surat Pemanggilan Kepala Sekolah (FR 8001C - PDF)</strong>
@@ -586,7 +616,7 @@ $baseUrl = Auth::baseUrl();
             </div>
             <div style="background: #f8fafc; border-top: 1px solid #e2e8f0; padding: 12px 20px; display: flex; justify-content: flex-end; gap: 10px;">
                 <button type="button" class="btn btn-outline" onclick="closeEmailKepsekModal()">Batal</button>
-                <button type="submit" class="btn btn-primary" style="background: #0369a1; border-color: #0369a1; font-weight: 600;">
+                <button type="submit" id="btnSubmitEmailKepsek" class="btn btn-primary" style="background: #0369a1; border-color: #0369a1; font-weight: 600;">
                     <i class="fa-solid fa-paper-plane" style="margin-right: 6px;"></i> Kirim Email FR 8001C (PDF)
                 </button>
             </div>
@@ -691,6 +721,40 @@ function openEmailKepsekModal(btn) {
     document.getElementById('emailKepsekStudentName').innerText = btn.getAttribute('data-student-name') || '-';
     document.getElementById('emailKepsekTargetEmail').value = btn.getAttribute('data-parent-email') || '';
     document.getElementById('emailKepsekNote').value = '';
+
+    const isSent = btn.getAttribute('data-email-sent') === '1';
+    const sentAt = btn.getAttribute('data-email-sent-at') || '';
+    const sentTo = btn.getAttribute('data-email-sent-to') || '';
+    const sentCount = parseInt(btn.getAttribute('data-email-count') || '0', 10);
+    const warnBox = document.getElementById('emailKepsekAlreadySentWarn');
+    const warnDetail = document.getElementById('emailKepsekAlreadySentDetail');
+    const submitBtn = document.getElementById('btnSubmitEmailKepsek');
+
+    if (warnBox && warnDetail) {
+        if (isSent) {
+            let parts = [];
+            if (sentTo) parts.push('Tujuan: ' + sentTo);
+            if (sentAt) parts.push('Waktu: ' + sentAt);
+            if (sentCount > 0) parts.push('Total terkirim: ' + sentCount + 'x');
+            warnDetail.innerText = parts.join(' • ');
+            warnBox.style.display = 'block';
+        } else {
+            warnDetail.innerText = '';
+            warnBox.style.display = 'none';
+        }
+    }
+    if (submitBtn) {
+        if (isSent) {
+            submitBtn.style.background = '#d97706';
+            submitBtn.style.borderColor = '#d97706';
+            submitBtn.innerHTML = '<i class="fa-solid fa-rotate-right" style="margin-right: 6px;"></i> Kirim Ulang Email FR 8001C (PDF)';
+        } else {
+            submitBtn.style.background = '#0369a1';
+            submitBtn.style.borderColor = '#0369a1';
+            submitBtn.innerHTML = '<i class="fa-solid fa-paper-plane" style="margin-right: 6px;"></i> Kirim Email FR 8001C (PDF)';
+        }
+    }
+
     document.getElementById('modalKirimEmailKepsek').style.display = 'flex';
 }
 function closeEmailKepsekModal() {

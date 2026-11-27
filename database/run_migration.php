@@ -259,4 +259,12 @@ try {
     echo "[SKIP] Normalisasi ID Walas/Tahfidz: " . $e->getMessage() . "\n";
 }
 
+// 15. Migrasi Pelacakan Pengiriman Email FR 8001C (Kepala Sekolah & Deputi)
+try {
+    require_once __DIR__ . '/migrate_bills_email_tracking.php';
+    echo "[OK] Migrasi pelacakan email FR 8001C selesai.\n";
+} catch (\Throwable $e) {
+    echo "[SKIP] Migrasi pelacakan email FR 8001C: " . $e->getMessage() . "\n";
+}
+
 echo "=== MIGRASI SELESAI DENGAN SUKSES! ===\n";
